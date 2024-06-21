@@ -72,4 +72,7 @@
     <Build Include="Tables\UriAccess.sql" />
     <Build Include="Tables\AuditLog.sql" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="DataSeed.sql" />
+  </ItemGroup>
 </Project>
