@@ -12,4 +12,5 @@
 ## Completed Tasks
 - Created unit and integration test project scaffolds for each assembly
 - Initial placeholder created
+- Added initial integration tests for service, web API, and web resources
 

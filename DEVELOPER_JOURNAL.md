@@ -9,3 +9,8 @@ This file records each user request processed by the agent. After every request,
 
 Created `scripts/setup_dotnet.sh` to install the .NET SDK for the Codex environment. Updated `README.md` and `docs/developer_guide.md` with instructions about using the script.
 
+
+### 2025-06-08
+**Persona:** QA Engineer
+
+Added initial integration tests across projects. New tests intentionally cover missing functionality and currently fail. Updated test improvement project documentation.
