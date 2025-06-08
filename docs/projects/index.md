@@ -7,6 +7,8 @@ project file must include:
 - A list of **Pending Tasks**.
 - A list of **Current Tasks**.
 - A list of **Completed Tasks**.
+- Project files must be kept current. After every request, update any affected
+  project document so it reflects the most recent changes.
 
 ## Projects
 
