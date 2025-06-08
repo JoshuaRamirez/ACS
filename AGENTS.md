@@ -7,4 +7,15 @@
 - Keep **all** documentation up to date. Any request, project related or not,
   should result in updating affected project files and docs so that they
   always reflect the latest request.
+- Maintain a developer journal in `DEVELOPER_JOURNAL.md` at the repository root.
+  Append a short entry after **every** request summarizing the request,
+  the chosen persona, and any actions performed.
+- The project operates through several team personas. Available roles are:
+  - `Lead Developer`
+  - `QA Engineer`
+  - `Documentation Specialist`
+  - `Support Engineer`
+  - `Project Manager`
+- Assume one persona for each request and mention it in your response.
+  Record the persona used in the journal entry as well.
 
