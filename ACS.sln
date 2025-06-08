@@ -15,7 +15,6 @@ Project("{00D1A9C2-B5F0-4AF3-8072-F6C62B433612}") = "ACS.Database", "ACS.Databas
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ACS.Service.Tests.Unit", "ACS.Service.Tests.Unit\ACS.Service.Tests.Unit.csproj", "{3E67D1E9-6948-487B-AFD5-250E39040AAB}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ACS.Service.Tests.Integration", "ACS.Service.Tests.Integration\ACS.Service.Tests.Integration.csproj", "{F5A4A922-2739-49B3-AD14-AF0FE4A1A044}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ACS.WebApi.Tests.Unit", "ACS.WebApi.Tests.Unit\ACS.WebApi.Tests.Unit.csproj", "{91F472CF-3565-43CA-B82E-BE0B5F926070}"
 EndProject
@@ -57,10 +56,6 @@ Global
 		{3E67D1E9-6948-487B-AFD5-250E39040AAB}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{3E67D1E9-6948-487B-AFD5-250E39040AAB}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{3E67D1E9-6948-487B-AFD5-250E39040AAB}.Release|Any CPU.Build.0 = Release|Any CPU
-		{F5A4A922-2739-49B3-AD14-AF0FE4A1A044}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{F5A4A922-2739-49B3-AD14-AF0FE4A1A044}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{F5A4A922-2739-49B3-AD14-AF0FE4A1A044}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{F5A4A922-2739-49B3-AD14-AF0FE4A1A044}.Release|Any CPU.Build.0 = Release|Any CPU
 		{91F472CF-3565-43CA-B82E-BE0B5F926070}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{91F472CF-3565-43CA-B82E-BE0B5F926070}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{91F472CF-3565-43CA-B82E-BE0B5F926070}.Release|Any CPU.ActiveCfg = Release|Any CPU

@@ -1,7 +1,7 @@
 namespace ACS.WebApi.Tests.Integration;
 
 [TestClass]
-public class UnitTest1
+public class ApiEndpointsTests
 {
     [TestMethod]
     public void Placeholder()
