@@ -9,3 +9,7 @@ This file records each user request processed by the agent. After every request,
 
 Created `scripts/setup_dotnet.sh` to install the .NET SDK for the Codex environment. Updated `README.md` and `docs/developer_guide.md` with instructions about using the script.
 
+### 2025-06-08
+**Persona:** Support Engineer
+
+Answered a question about database setup. Confirmed the presence of a SQL Server database project (`ACS.Database`) with table creation scripts and `DataSeed.sql`. Updated `docs/database_design.md` and project documentation accordingly.

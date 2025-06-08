@@ -12,3 +12,4 @@
 - Created project entry and outline
 - Set up initial documentation folder structure
 - Expanded initial documentation placeholders
+- Documented database project file and seed script locations
