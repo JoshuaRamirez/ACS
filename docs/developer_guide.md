@@ -10,3 +10,6 @@ Follow standard C# conventions and keep business logic within the service layer.
 
 ## Contribution Guide
 Fork the repository, create a new branch, and submit a pull request describing your changes.
+
+## Running Tests
+After installing the .NET SDK, execute `dotnet test` from the repository root to run all unit and integration tests.
