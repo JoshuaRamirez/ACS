@@ -10,3 +10,8 @@ The Web API publishes controllers in the `ACS.WebApi` project. Requests are rout
 
 ## Workflows
 A typical request passes through the API, invokes a handler, performs database operations, and returns a response in JSON format.
+
+## Domain layer
+Domain entities live under `ACS.Service/Entities` and include types such as `User`, `Role`, and `Group`. These entities inherit from an abstract `Entity` base class that tracks parent and child relationships along with a set of `Permission` objects. Methods on the entities allow adding or removing children and managing permissions. Many of these methods delegate to *normalizer* helpers in `ACS.Service/Delegates/Normalizers`, which currently use in-memory lists and are marked internal for future database integration.
+
+The only API controller (`WeatherForecastController`) does not yet interact with these classes. Future controllers would call into the domain layer through normalizers or service helpers to persist entities and check permissions.
