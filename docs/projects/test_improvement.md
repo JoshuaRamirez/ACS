@@ -14,4 +14,5 @@
 - Initial placeholder created
 - Added basic integration tests for the Web API
 - Removed service layer and WeatherForecast endpoint tests per updated requirements
+- Added unit tests exercising normalizers
 

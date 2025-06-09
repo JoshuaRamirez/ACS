@@ -24,3 +24,14 @@ Added real integration tests for the Web API using `WebApplicationFactory` and f
 **Persona:** QA Engineer
 
 Removed failing service layer integration tests and the WeatherForecast endpoint test so integration testing focuses on future API endpoints only. Updated project documentation.
+
+### 2025-06-08
+**Persona:** Lead Developer
+
+Implemented additional normalizers for permission removal and corrected the user-to-role assignment helper. Updated `docs/service_overview.md` to mention ongoing normalizer work.
+
+### 2025-06-09
+**Persona:** Lead Developer
+
+Extended the normalizers to maintain bidirectional references and created unit tests covering permission add/remove and user-role assignment. Updated service overview and project docs.
+

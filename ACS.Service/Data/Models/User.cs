@@ -1,4 +1,4 @@
-﻿using ACS.Service.Data.Models;
+namespace ACS.Service.Data.Models;
 
 public class User
 {
