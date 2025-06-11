@@ -15,23 +15,36 @@ namespace ACS.Service.Delegates.Normalizers
         {
             var schemeType = SchemeTypes.Single(x => x.SchemeName == permission.Scheme.ToString());
             var entity = Entities.Single(x => x.Id == entityId);
+
             var resource = Resources.SingleOrDefault(x => x.Uri == permission.Uri);
             if (resource == null)
             {
                 resource = CreateResourceNormalizer.Execute(permission);
             }
+
             var permissionScheme = PermissionSchemes.SingleOrDefault(x => x.EntityId == entityId && x.SchemeType == schemeType);
             if (permissionScheme == null)
             {
                 permissionScheme = CreatePermissionSchemeNormalizer.Execute(entityId);
+                permissionScheme.SchemeType = schemeType;
+                entity.EntityPermissions.Add(permissionScheme);
             }
-            var uriAccess = UriAccessList.SingleOrDefault(x => x.EntityPermissionId == entityId);
-            if (uriAccess != null)
+            else if (!entity.EntityPermissions.Contains(permissionScheme))
             {
-                throw new InvalidOperationException("The Permission is already added somehow in some way so yea.");
+                entity.EntityPermissions.Add(permissionScheme);
             }
-            uriAccess = CreateUriAccessNormalizer.Execute(permissionScheme, resource, permission);
-            entity.EntityPermissions.Add(permissionScheme);
+
+            var existing = UriAccessList.SingleOrDefault(x =>
+                x.PermissionScheme == permissionScheme &&
+                x.Resource == resource &&
+                x.VerbType.VerbName == permission.HttpVerb.ToString());
+
+            if (existing != null)
+            {
+                throw new InvalidOperationException("Permission already exists for this entity.");
+            }
+
+            CreateUriAccessNormalizer.Execute(permissionScheme, resource, permission);
         }
     }
 }

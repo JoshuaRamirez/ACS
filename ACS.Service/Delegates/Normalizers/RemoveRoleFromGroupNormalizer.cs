@@ -13,6 +13,8 @@ namespace ACS.Service.Delegates.Normalizers
             if (group.Roles.Contains(role))
             {
                 group.Roles.Remove(role);
+                role.Group = null;
+                role.GroupId = 0;
             }
         }
     }

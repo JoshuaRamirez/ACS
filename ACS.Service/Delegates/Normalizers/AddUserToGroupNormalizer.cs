@@ -11,6 +11,8 @@ namespace ACS.Service.Delegates.Normalizers
             var user = Users.Single(x => x.Id == userId);
             var group = Groups.Single(x => x.Id == groupId);
             group.Users.Add(user);
+            user.Group = group;
+            user.GroupId = group.Id;
         }
     }
 }
