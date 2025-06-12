@@ -40,3 +40,8 @@ Extended the normalizers to maintain bidirectional references and created unit t
 **Persona:** Lead Developer
 
 Designed a new API layer using a `UsersController` backed by an in-memory `UserService`. Removed the sample WeatherForecast endpoint, updated documentation, added an integration test, and created a project entry for API layer implementation.
+
+### 2025-06-12
+**Persona:** Documentation Specialist
+
+Responded to a request to describe the full stack sequence of operations. Updated `architecture_overview.md` with a new Request lifecycle section.

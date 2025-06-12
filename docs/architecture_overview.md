@@ -18,3 +18,10 @@ The ACS solution is organized into separate projects to keep concerns isolated. 
 - ASP.NET Core Web API
 - Entity Framework Core 8
 - SQL Server
+
+## Request lifecycle
+The typical sequence when a client interacts with ACS is as follows:
+1. An HTTP request hits an API controller in **ACS.WebApi**.
+2. The controller delegates work to the service layer in **ACS.Service**.
+3. Domain logic runs and Entity Framework Core queries or updates the database.
+4. The service returns results back through the controller as a JSON response.
