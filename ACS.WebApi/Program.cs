@@ -3,6 +3,8 @@ var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
 
 builder.Services.AddControllers();
+builder.Services.AddSingleton<ACS.Service.Services.IUserService,
+    ACS.Service.Services.UserService>();
 
 var app = builder.Build();
 

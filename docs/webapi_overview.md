@@ -3,7 +3,13 @@
 This section describes the HTTP interface provided by the `ACS.WebApi` project.
 
 ## Endpoints
-The default controller exposes a `/WeatherForecast` endpoint that returns sample data. Additional controllers can be added following the same pattern.
+The API layer now provides resource based controllers.
+
+- `GET /api/users` returns the collection of users.
+- `GET /api/users/{id}` returns a single user.
+- `POST /api/users` creates a new user.
+
+Additional controllers for roles and groups will follow the same pattern.
 
 ## Authentication
 Authentication is not enabled in the sample project but can be added using standard ASP.NET Core mechanisms such as JWT bearer tokens.

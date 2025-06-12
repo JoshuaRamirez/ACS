@@ -15,4 +15,5 @@ project file must include:
 1. **Documenting the Solution** - `documenting_solution.md`
 2. **Code Refactoring Plan** - `code_refactoring.md`
 3. **Test Improvement Initiative** - `test_improvement.md`
+4. **API Layer Implementation** - `api_layer_design.md`
 

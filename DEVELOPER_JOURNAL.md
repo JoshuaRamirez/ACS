@@ -35,3 +35,8 @@ Implemented additional normalizers for permission removal and corrected the user
 
 Extended the normalizers to maintain bidirectional references and created unit tests covering permission add/remove and user-role assignment. Updated service overview and project docs.
 
+
+### 2025-06-12
+**Persona:** Lead Developer
+
+Designed a new API layer using a `UsersController` backed by an in-memory `UserService`. Removed the sample WeatherForecast endpoint, updated documentation, added an integration test, and created a project entry for API layer implementation.
