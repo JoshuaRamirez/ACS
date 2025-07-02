@@ -4,6 +4,12 @@ This file records each user request processed by the agent. After every request,
 
 ## Entries
 
+### 2025-07-02
+**Persona:** Lead Developer
+
+Answered user question about normalizer purpose and described architectural style. Updated `service_overview.md` and project docs accordingly.
+
+
 ### 2025-06-08
 **Persona:** Support Engineer
 
