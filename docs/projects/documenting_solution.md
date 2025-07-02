@@ -14,3 +14,4 @@
 - Expanded initial documentation placeholders
 - Documented domain layer overview in `service_overview.md`
 - Documented Codex environment setup instructions
+- Added explanation of normalizer design in `service_overview.md`
