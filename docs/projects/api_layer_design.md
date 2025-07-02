@@ -14,3 +14,4 @@
 - Removed sample WeatherForecast endpoint and files
 - Added project reference between Web API and service layer
 - Implemented placeholder integration test for new API
+- Documented new user endpoints in the user manual

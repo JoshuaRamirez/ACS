@@ -45,3 +45,13 @@ Designed a new API layer using a `UsersController` backed by an in-memory `UserS
 **Persona:** Documentation Specialist
 
 Responded to a request to describe the full stack sequence of operations. Updated `architecture_overview.md` with a new Request lifecycle section.
+
+### 2025-07-02
+**Persona:** Project Manager
+
+Analyzed repository state for the user. Updated `docs/user_manual.md` to describe current user endpoints and logged the change in the API layer project file. Summarized progress across active projects.
+
+### 2025-07-02
+**Persona:** Support Engineer
+
+Added apt-based .NET SDK installation path to `scripts/setup_dotnet.sh` and updated documentation to describe using the script in Codex.
