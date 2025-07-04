@@ -4,6 +4,7 @@ using ACS.Service.Domain;
 using EntityDM = ACS.Service.Data.Models.Entity;
 using RoleDM = ACS.Service.Data.Models.Role;
 using UserDM = ACS.Service.Data.Models.User;
+using GroupDM = ACS.Service.Data.Models.Group;
 
 namespace ACS.Service.Tests.Unit;
 
@@ -74,5 +75,97 @@ public class NormalizersTests
         Assert.IsTrue(roles[0].Users.Contains(users[0]));
         Assert.AreEqual(roles[0], users[0].Role);
         Assert.AreEqual(1, users[0].RoleId);
+    }
+
+    [TestMethod]
+    public void AddAndRemoveUserFromGroup_NormalizersUpdateCollections()
+    {
+        var groups = new List<GroupDM> { new GroupDM { Id = 1, Users = new List<UserDM>() } };
+        var users = new List<UserDM> { new UserDM { Id = 2 } };
+
+        AddUserToGroupNormalizer.Groups = groups;
+        AddUserToGroupNormalizer.Users = users;
+
+        AddUserToGroupNormalizer.Execute(2, 1);
+
+        Assert.IsTrue(groups[0].Users.Contains(users[0]));
+        Assert.AreEqual(groups[0], users[0].Group);
+        Assert.AreEqual(1, users[0].GroupId);
+
+        RemoveUserFromGroupNormalizer.Groups = groups;
+        RemoveUserFromGroupNormalizer.Users = users;
+
+        RemoveUserFromGroupNormalizer.Execute(2, 1);
+
+        Assert.IsFalse(groups[0].Users.Contains(users[0]));
+        Assert.IsNull(users[0].Group);
+        Assert.AreEqual(0, users[0].GroupId);
+    }
+
+    [TestMethod]
+    public void AddAndRemoveRoleFromGroup_NormalizersUpdateCollections()
+    {
+        var groups = new List<GroupDM> { new GroupDM { Id = 1, Roles = new List<RoleDM>() } };
+        var roles = new List<RoleDM> { new RoleDM { Id = 3 } };
+
+        AddRoleToGroupNormalizer.Groups = groups;
+        AddRoleToGroupNormalizer.Roles = roles;
+
+        AddRoleToGroupNormalizer.Execute(3, 1);
+
+        Assert.IsTrue(groups[0].Roles.Contains(roles[0]));
+        Assert.AreEqual(groups[0], roles[0].Group);
+        Assert.AreEqual(1, roles[0].GroupId);
+
+        RemoveRoleFromGroupNormalizer.Groups = groups;
+        RemoveRoleFromGroupNormalizer.Roles = roles;
+
+        RemoveRoleFromGroupNormalizer.Execute(3, 1);
+
+        Assert.IsFalse(groups[0].Roles.Contains(roles[0]));
+        Assert.IsNull(roles[0].Group);
+        Assert.AreEqual(0, roles[0].GroupId);
+    }
+
+    [TestMethod]
+    public void UnAssignUserFromRole_NormalizerClearsBothSides()
+    {
+        var roles = new List<RoleDM> { new RoleDM { Id = 1, Users = new List<UserDM>() } };
+        var users = new List<UserDM> { new UserDM { Id = 2, RoleId = 1, Role = roles[0] } };
+        roles[0].Users.Add(users[0]);
+
+        UnAssignUserFromRoleNormalizer.Roles = roles;
+        UnAssignUserFromRoleNormalizer.Users = users;
+
+        UnAssignUserFromRoleNormalizer.Execute(2, 1);
+
+        Assert.IsFalse(roles[0].Users.Contains(users[0]));
+        Assert.IsNull(users[0].Role);
+        Assert.AreEqual(0, users[0].RoleId);
+    }
+
+    [TestMethod]
+    public void AddAndRemoveGroupFromGroup_NormalizersUpdateCollections()
+    {
+        var groups = new List<GroupDM>
+        {
+            new GroupDM { Id = 1, ChildGroups = new List<GroupDM>() },
+            new GroupDM { Id = 2, ChildGroups = new List<GroupDM>() }
+        };
+
+        AddGroupToGroupNormalizer.Groups = groups;
+        RemoveGroupFromGroupNormalizer.Groups = groups;
+
+        AddGroupToGroupNormalizer.Execute(2, 1);
+
+        Assert.IsTrue(groups[0].ChildGroups.Contains(groups[1]));
+        Assert.AreEqual(groups[0], groups[1].ParentGroup);
+        Assert.AreEqual(1, groups[1].ParentGroupId);
+
+        RemoveGroupFromGroupNormalizer.Execute(2, 1);
+
+        Assert.IsFalse(groups[0].ChildGroups.Contains(groups[1]));
+        Assert.IsNull(groups[1].ParentGroup);
+        Assert.AreEqual(0, groups[1].ParentGroupId);
     }
 }

@@ -11,13 +11,13 @@ public class Role : Entity
     public void AssignUser(User user)
     {
         AddChild(user);
-        //AddUserToGroupNormalizer.Execute(user.Id, this.Id);
+        AssignUserToRoleNormalizer.Execute(user.Id, this.Id);
     }
 
     public void UnAssignUser(User user)
     {
         RemoveChild(user);
-        //UnAssignUserFromRoleNormalizer.Execute(user.Id, this.Id);
+        UnAssignUserFromRoleNormalizer.Execute(user.Id, this.Id);
     }
 
     public void AddToGroup(Group group)

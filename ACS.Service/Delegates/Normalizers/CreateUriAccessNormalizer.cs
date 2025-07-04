@@ -1,4 +1,5 @@
-﻿using ACS.Service.Data.Models;
+﻿using System;
+using ACS.Service.Data.Models;
 using ACS.Service.Domain;
 
 namespace ACS.Service.Delegates.Normalizers
@@ -9,13 +10,16 @@ namespace ACS.Service.Delegates.Normalizers
         public static List<UriAccess>? UriAccessList { get; set; }
         public static UriAccess Execute(PermissionScheme permissionScheme, Resource resource, Permission permission)
         {
+            var verb = permission.HttpVerb.ToString();
+            var verbType = VerbTypes.Single(x => string.Equals(x.VerbName, verb, StringComparison.OrdinalIgnoreCase));
+
             var uriAccess = new UriAccess
             {
                 Deny = permission.Deny,
                 PermissionScheme = permissionScheme,
                 Grant = permission.Grant,
                 Resource = resource,
-                VerbType = VerbTypes.Single(x => x.VerbName == permission.HttpVerb.ToString()) //TODO: Map the enum correctly.
+                VerbType = verbType
             };
 
             UriAccessList?.Add(uriAccess);

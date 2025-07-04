@@ -1,4 +1,5 @@
-﻿using System.Collections.ObjectModel;
+using System.Collections.ObjectModel;
+using ACS.Service.Delegates.Normalizers;
 
 namespace ACS.Service.Domain;
 
@@ -13,7 +14,15 @@ public abstract class Entity
     public void AddPermission(Permission permission)
     {
         Permissions.Add(permission);
-        
+        AddPermissionToEntity.Execute(permission, Id);
+    }
+
+    public void RemovePermission(Permission permission)
+    {
+        if (Permissions.Remove(permission))
+        {
+            RemovePermissionFromEntity.Execute(permission, Id);
+        }
     }
 
     protected void AddChild(Entity child)

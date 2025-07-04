@@ -9,6 +9,9 @@ public class Group
     public string Name { get; set; }
     public int EntityId { get; set; }
     public Entity Entity { get; set; }
+    public int ParentGroupId { get; set; }
+    public Group? ParentGroup { get; set; }
+    public ICollection<Group> ChildGroups { get; set; } = new List<Group>();
     public ICollection<Role> Roles { get; set; }
     public ICollection<User> Users { get; set; }
 }
