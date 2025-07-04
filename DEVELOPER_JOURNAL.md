@@ -61,3 +61,22 @@ Analyzed repository state for the user. Updated `docs/user_manual.md` to describ
 **Persona:** Support Engineer
 
 Added apt-based .NET SDK installation path to `scripts/setup_dotnet.sh` and updated documentation to describe using the script in Codex.
+
+### 2025-07-02
+**Persona:** Lead Developer
+
+Extended the domain layer to invoke normalizers for permission management and group/role membership. Added a new `RemovePermission` method, expanded unit tests for normalizers, and updated service documentation and project files.
+
+### 2025-07-02
+**Persona:** Lead Developer
+
+Expanded domain-normalizer integration with new tests covering domain methods. Updated service overview and project docs to describe the behavior.
+
+### 2025-07-02
+**Persona:** Lead Developer
+
+Implemented normalizers for managing group hierarchies and wired them into the domain layer. Updated domain models with parent group references, expanded unit and integration tests to cover the new behavior, refreshed documentation and project files.
+### 2025-07-02
+**Persona:** Lead Developer
+
+Implemented child-side group operations and cycle prevention in the domain. Added mapping logic for HTTP verbs in `CreateUriAccessNormalizer`, expanded domain integration tests for the new methods, and documented the updates in project files and service overview.

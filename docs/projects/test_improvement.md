@@ -15,4 +15,8 @@
 - Added basic integration tests for the Web API
 - Removed service layer and WeatherForecast endpoint tests per updated requirements
 - Added unit tests exercising normalizers
+- Extended normalizer tests for group and role membership
+- Added tests verifying domain methods trigger normalizers
+- Added normalizer and domain tests for group hierarchy management
+- Added tests for child-side group operations and cycle prevention
 
