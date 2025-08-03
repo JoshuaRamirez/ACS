@@ -80,3 +80,17 @@ Implemented normalizers for managing group hierarchies and wired them into the d
 **Persona:** Lead Developer
 
 Implemented child-side group operations and cycle prevention in the domain. Added mapping logic for HTTP verbs in `CreateUriAccessNormalizer`, expanded domain integration tests for the new methods, and documented the updates in project files and service overview.
+### 2025-08-03
+**Persona:** QA Engineer
+
+Exercised the full test suite, fixed null reference issues in group and membership normalizers, and documented the progress in the test improvement project file.
+
+### 2025-08-03
+**Persona:** Lead Developer
+
+Reworked group and membership normalizers to throw exceptions on missing collections or associations, expanded unit tests to cover the new behavior, and updated project documentation.
+
+### 2025-08-03
+**Persona:** Lead Developer
+
+Addressed review feedback by making normalizers fail when backing collections are unset and extending unit tests to cover null collection scenarios. Updated project docs and verified tests.

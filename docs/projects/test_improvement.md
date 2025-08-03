@@ -19,4 +19,7 @@
 - Added tests verifying domain methods trigger normalizers
 - Added normalizer and domain tests for group hierarchy management
 - Added tests for child-side group operations and cycle prevention
+- Fixed null reference errors in group and membership normalizers so service tests run cleanly
+- Converted group and membership normalizers to throw exceptions when collections or targets are missing
+- Added tests ensuring normalizers throw when their backing collections are null
 

@@ -1,3 +1,4 @@
+using System;
 using ACS.Service.Data.Models;
 using ACS.Service.Delegates.Normalizers;
 using ACS.Service.Domain;
@@ -167,5 +168,114 @@ public class NormalizersTests
         Assert.IsFalse(groups[0].ChildGroups.Contains(groups[1]));
         Assert.IsNull(groups[1].ParentGroup);
         Assert.AreEqual(0, groups[1].ParentGroupId);
+    }
+
+    [TestMethod]
+    public void AddGroupToGroupNormalizer_ThrowsWhenChildMissing()
+    {
+        var groups = new List<GroupDM> { new GroupDM { Id = 1, ChildGroups = new List<GroupDM>() } };
+        AddGroupToGroupNormalizer.Groups = groups;
+        Assert.ThrowsException<InvalidOperationException>(() => AddGroupToGroupNormalizer.Execute(2, 1));
+    }
+
+    [TestMethod]
+    public void AddRoleToGroupNormalizer_ThrowsWhenGroupMissing()
+    {
+        var roles = new List<RoleDM> { new RoleDM { Id = 3 } };
+        AddRoleToGroupNormalizer.Groups = new List<GroupDM>();
+        AddRoleToGroupNormalizer.Roles = roles;
+        Assert.ThrowsException<InvalidOperationException>(() => AddRoleToGroupNormalizer.Execute(3, 1));
+    }
+
+    [TestMethod]
+    public void AddUserToGroupNormalizer_ThrowsWhenUserMissing()
+    {
+        var groups = new List<GroupDM> { new GroupDM { Id = 1, Users = new List<UserDM>() } };
+        AddUserToGroupNormalizer.Groups = groups;
+        AddUserToGroupNormalizer.Users = new List<UserDM>();
+        Assert.ThrowsException<InvalidOperationException>(() => AddUserToGroupNormalizer.Execute(2, 1));
+    }
+
+    [TestMethod]
+    public void RemoveGroupFromGroupNormalizer_ThrowsWhenNotMember()
+    {
+        var groups = new List<GroupDM>
+        {
+            new GroupDM { Id = 1, ChildGroups = new List<GroupDM>() },
+            new GroupDM { Id = 2, ChildGroups = new List<GroupDM>() }
+        };
+
+        RemoveGroupFromGroupNormalizer.Groups = groups;
+        Assert.ThrowsException<InvalidOperationException>(() => RemoveGroupFromGroupNormalizer.Execute(2, 1));
+    }
+
+    [TestMethod]
+    public void RemoveRoleFromGroupNormalizer_ThrowsWhenNotMember()
+    {
+        var groups = new List<GroupDM> { new GroupDM { Id = 1, Roles = new List<RoleDM>() } };
+        var roles = new List<RoleDM> { new RoleDM { Id = 3 } };
+
+        RemoveRoleFromGroupNormalizer.Groups = groups;
+        RemoveRoleFromGroupNormalizer.Roles = roles;
+
+        Assert.ThrowsException<InvalidOperationException>(() => RemoveRoleFromGroupNormalizer.Execute(3, 1));
+    }
+
+    [TestMethod]
+    public void RemoveUserFromGroupNormalizer_ThrowsWhenNotMember()
+    {
+        var groups = new List<GroupDM> { new GroupDM { Id = 1, Users = new List<UserDM>() } };
+        var users = new List<UserDM> { new UserDM { Id = 2 } };
+
+        RemoveUserFromGroupNormalizer.Groups = groups;
+        RemoveUserFromGroupNormalizer.Users = users;
+
+        Assert.ThrowsException<InvalidOperationException>(() => RemoveUserFromGroupNormalizer.Execute(2, 1));
+    }
+
+    [TestMethod]
+    public void AddGroupToGroupNormalizer_ThrowsWhenGroupsNull()
+    {
+        AddGroupToGroupNormalizer.Groups = null!;
+        Assert.ThrowsException<InvalidOperationException>(() => AddGroupToGroupNormalizer.Execute(2, 1));
+    }
+
+    [TestMethod]
+    public void AddRoleToGroupNormalizer_ThrowsWhenRolesNull()
+    {
+        AddRoleToGroupNormalizer.Groups = new List<GroupDM>();
+        AddRoleToGroupNormalizer.Roles = null!;
+        Assert.ThrowsException<InvalidOperationException>(() => AddRoleToGroupNormalizer.Execute(3, 1));
+    }
+
+    [TestMethod]
+    public void AddUserToGroupNormalizer_ThrowsWhenUsersNull()
+    {
+        AddUserToGroupNormalizer.Groups = new List<GroupDM>();
+        AddUserToGroupNormalizer.Users = null!;
+        Assert.ThrowsException<InvalidOperationException>(() => AddUserToGroupNormalizer.Execute(2, 1));
+    }
+
+    [TestMethod]
+    public void RemoveGroupFromGroupNormalizer_ThrowsWhenGroupsNull()
+    {
+        RemoveGroupFromGroupNormalizer.Groups = null!;
+        Assert.ThrowsException<InvalidOperationException>(() => RemoveGroupFromGroupNormalizer.Execute(2, 1));
+    }
+
+    [TestMethod]
+    public void RemoveRoleFromGroupNormalizer_ThrowsWhenRolesNull()
+    {
+        RemoveRoleFromGroupNormalizer.Groups = new List<GroupDM>();
+        RemoveRoleFromGroupNormalizer.Roles = null!;
+        Assert.ThrowsException<InvalidOperationException>(() => RemoveRoleFromGroupNormalizer.Execute(3, 1));
+    }
+
+    [TestMethod]
+    public void RemoveUserFromGroupNormalizer_ThrowsWhenUsersNull()
+    {
+        RemoveUserFromGroupNormalizer.Groups = new List<GroupDM>();
+        RemoveUserFromGroupNormalizer.Users = null!;
+        Assert.ThrowsException<InvalidOperationException>(() => RemoveUserFromGroupNormalizer.Execute(2, 1));
     }
 }
