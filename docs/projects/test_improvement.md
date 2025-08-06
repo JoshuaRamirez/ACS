@@ -22,4 +22,5 @@
 - Fixed null reference errors in group and membership normalizers so service tests run cleanly
 - Converted group and membership normalizers to throw exceptions when collections or targets are missing
 - Added tests ensuring normalizers throw when their backing collections are null
+- Added guard tests for missing parents, groups, roles, and users in normalizers
 

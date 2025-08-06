@@ -7,7 +7,7 @@ using RoleDM = ACS.Service.Data.Models.Role;
 namespace ACS.Service.Tests
 {
     [TestClass]
-    public class GroupTests
+    public class GroupDomainTests
     {
         [TestMethod]
         public void AddGroup_ShouldAddGroupSuccessfully()

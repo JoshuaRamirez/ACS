@@ -94,3 +94,8 @@ Reworked group and membership normalizers to throw exceptions on missing collect
 **Persona:** Lead Developer
 
 Addressed review feedback by making normalizers fail when backing collections are unset and extending unit tests to cover null collection scenarios. Updated project docs and verified tests.
+
+### 2025-08-06
+**Persona:** Lead Developer
+
+Renamed service test file for clarity, added missing guard tests for normalizers, ran the full test suite, and refreshed project documentation.

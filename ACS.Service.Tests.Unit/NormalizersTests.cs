@@ -179,6 +179,14 @@ public class NormalizersTests
     }
 
     [TestMethod]
+    public void AddGroupToGroupNormalizer_ThrowsWhenParentMissing()
+    {
+        var groups = new List<GroupDM> { new GroupDM { Id = 2, ChildGroups = new List<GroupDM>() } };
+        AddGroupToGroupNormalizer.Groups = groups;
+        Assert.ThrowsException<InvalidOperationException>(() => AddGroupToGroupNormalizer.Execute(2, 1));
+    }
+
+    [TestMethod]
     public void AddRoleToGroupNormalizer_ThrowsWhenGroupMissing()
     {
         var roles = new List<RoleDM> { new RoleDM { Id = 3 } };
@@ -188,11 +196,29 @@ public class NormalizersTests
     }
 
     [TestMethod]
+    public void AddRoleToGroupNormalizer_ThrowsWhenRoleMissing()
+    {
+        var groups = new List<GroupDM> { new GroupDM { Id = 1, Roles = new List<RoleDM>() } };
+        AddRoleToGroupNormalizer.Groups = groups;
+        AddRoleToGroupNormalizer.Roles = new List<RoleDM>();
+        Assert.ThrowsException<InvalidOperationException>(() => AddRoleToGroupNormalizer.Execute(3, 1));
+    }
+
+    [TestMethod]
     public void AddUserToGroupNormalizer_ThrowsWhenUserMissing()
     {
         var groups = new List<GroupDM> { new GroupDM { Id = 1, Users = new List<UserDM>() } };
         AddUserToGroupNormalizer.Groups = groups;
         AddUserToGroupNormalizer.Users = new List<UserDM>();
+        Assert.ThrowsException<InvalidOperationException>(() => AddUserToGroupNormalizer.Execute(2, 1));
+    }
+
+    [TestMethod]
+    public void AddUserToGroupNormalizer_ThrowsWhenGroupMissing()
+    {
+        var users = new List<UserDM> { new UserDM { Id = 2 } };
+        AddUserToGroupNormalizer.Groups = new List<GroupDM>();
+        AddUserToGroupNormalizer.Users = users;
         Assert.ThrowsException<InvalidOperationException>(() => AddUserToGroupNormalizer.Execute(2, 1));
     }
 
@@ -210,6 +236,22 @@ public class NormalizersTests
     }
 
     [TestMethod]
+    public void RemoveGroupFromGroupNormalizer_ThrowsWhenParentMissing()
+    {
+        var groups = new List<GroupDM> { new GroupDM { Id = 2, ChildGroups = new List<GroupDM>() } };
+        RemoveGroupFromGroupNormalizer.Groups = groups;
+        Assert.ThrowsException<InvalidOperationException>(() => RemoveGroupFromGroupNormalizer.Execute(2, 1));
+    }
+
+    [TestMethod]
+    public void RemoveGroupFromGroupNormalizer_ThrowsWhenChildMissing()
+    {
+        var groups = new List<GroupDM> { new GroupDM { Id = 1, ChildGroups = new List<GroupDM>() } };
+        RemoveGroupFromGroupNormalizer.Groups = groups;
+        Assert.ThrowsException<InvalidOperationException>(() => RemoveGroupFromGroupNormalizer.Execute(2, 1));
+    }
+
+    [TestMethod]
     public void RemoveRoleFromGroupNormalizer_ThrowsWhenNotMember()
     {
         var groups = new List<GroupDM> { new GroupDM { Id = 1, Roles = new List<RoleDM>() } };
@@ -222,6 +264,24 @@ public class NormalizersTests
     }
 
     [TestMethod]
+    public void RemoveRoleFromGroupNormalizer_ThrowsWhenGroupMissing()
+    {
+        var roles = new List<RoleDM> { new RoleDM { Id = 3 } };
+        RemoveRoleFromGroupNormalizer.Groups = new List<GroupDM>();
+        RemoveRoleFromGroupNormalizer.Roles = roles;
+        Assert.ThrowsException<InvalidOperationException>(() => RemoveRoleFromGroupNormalizer.Execute(3, 1));
+    }
+
+    [TestMethod]
+    public void RemoveRoleFromGroupNormalizer_ThrowsWhenRoleMissing()
+    {
+        var groups = new List<GroupDM> { new GroupDM { Id = 1, Roles = new List<RoleDM>() } };
+        RemoveRoleFromGroupNormalizer.Groups = groups;
+        RemoveRoleFromGroupNormalizer.Roles = new List<RoleDM>();
+        Assert.ThrowsException<InvalidOperationException>(() => RemoveRoleFromGroupNormalizer.Execute(3, 1));
+    }
+
+    [TestMethod]
     public void RemoveUserFromGroupNormalizer_ThrowsWhenNotMember()
     {
         var groups = new List<GroupDM> { new GroupDM { Id = 1, Users = new List<UserDM>() } };
@@ -230,6 +290,24 @@ public class NormalizersTests
         RemoveUserFromGroupNormalizer.Groups = groups;
         RemoveUserFromGroupNormalizer.Users = users;
 
+        Assert.ThrowsException<InvalidOperationException>(() => RemoveUserFromGroupNormalizer.Execute(2, 1));
+    }
+
+    [TestMethod]
+    public void RemoveUserFromGroupNormalizer_ThrowsWhenGroupMissing()
+    {
+        var users = new List<UserDM> { new UserDM { Id = 2 } };
+        RemoveUserFromGroupNormalizer.Groups = new List<GroupDM>();
+        RemoveUserFromGroupNormalizer.Users = users;
+        Assert.ThrowsException<InvalidOperationException>(() => RemoveUserFromGroupNormalizer.Execute(2, 1));
+    }
+
+    [TestMethod]
+    public void RemoveUserFromGroupNormalizer_ThrowsWhenUserMissing()
+    {
+        var groups = new List<GroupDM> { new GroupDM { Id = 1, Users = new List<UserDM>() } };
+        RemoveUserFromGroupNormalizer.Groups = groups;
+        RemoveUserFromGroupNormalizer.Users = new List<UserDM>();
         Assert.ThrowsException<InvalidOperationException>(() => RemoveUserFromGroupNormalizer.Execute(2, 1));
     }
 
