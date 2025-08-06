@@ -7,14 +7,26 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Folder Include="Delegates\Commands\" />
-    <Folder Include="Delegates\Queries\" />
-    <Folder Include="Domain\" />
-    <Folder Include="Data\" />
+    <Compile Remove="Data\**" />
+    <Compile Remove="Delegates\**" />
+    <Compile Remove="Domain\**" />
+    <Content Remove="Data\**" />
+    <Content Remove="Delegates\**" />
+    <Content Remove="Domain\**" />
+    <EmbeddedResource Remove="Data\**" />
+    <EmbeddedResource Remove="Delegates\**" />
+    <EmbeddedResource Remove="Domain\**" />
+    <None Remove="Data\**" />
+    <None Remove="Delegates\**" />
+    <None Remove="Domain\**" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\ACS.Service\ACS.Service.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Controllers\" />
   </ItemGroup>
 
 </Project>
