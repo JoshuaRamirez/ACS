@@ -1,9 +1,13 @@
 using ACS.Service.Domain;
+using ACS.Service.Delegates.Normalizers;
+using GroupDM = ACS.Service.Data.Models.Group;
+using UserDM = ACS.Service.Data.Models.User;
+using RoleDM = ACS.Service.Data.Models.Role;
 
 namespace ACS.Service.Tests
 {
     [TestClass]
-    public class GroupTests
+    public class GroupDomainTests
     {
         [TestMethod]
         public void AddGroup_ShouldAddGroupSuccessfully()
@@ -11,6 +15,11 @@ namespace ACS.Service.Tests
             // Arrange
             var parentGroup = new Group { Id = 1, Name = "ParentGroup" };
             var childGroup = new Group { Id = 2, Name = "ChildGroup" };
+            AddGroupToGroupNormalizer.Groups = new List<GroupDM>
+            {
+                new GroupDM { Id = 1, ChildGroups = new List<GroupDM>() },
+                new GroupDM { Id = 2, ChildGroups = new List<GroupDM>() }
+            };
 
             // Act
             parentGroup.AddGroup(childGroup);
@@ -40,6 +49,12 @@ namespace ACS.Service.Tests
             var parentGroup = new Group { Id = 1, Name = "ParentGroup" };
             var childGroup = new Group { Id = 2, Name = "ChildGroup" };
             var grandChildGroup = new Group { Id = 3, Name = "GrandChildGroup" };
+            AddGroupToGroupNormalizer.Groups = new List<GroupDM>
+            {
+                new GroupDM { Id = 1, ChildGroups = new List<GroupDM>() },
+                new GroupDM { Id = 2, ChildGroups = new List<GroupDM>() },
+                new GroupDM { Id = 3, ChildGroups = new List<GroupDM>() }
+            };
 
             // Act
             parentGroup.AddGroup(childGroup);
@@ -55,6 +70,13 @@ namespace ACS.Service.Tests
             // Arrange
             var parentGroup = new Group { Id = 1, Name = "ParentGroup" };
             var childGroup = new Group { Id = 2, Name = "ChildGroup" };
+            var groups = new List<GroupDM>
+            {
+                new GroupDM { Id = 1, ChildGroups = new List<GroupDM>() },
+                new GroupDM { Id = 2, ChildGroups = new List<GroupDM>() }
+            };
+            AddGroupToGroupNormalizer.Groups = groups;
+            RemoveGroupFromGroupNormalizer.Groups = groups;
 
             parentGroup.AddGroup(childGroup);
 
@@ -71,6 +93,10 @@ namespace ACS.Service.Tests
             // Arrange
             var group = new Group { Id = 1, Name = "Group" };
             var user = new Domain.User { Id = 1, Name = "User" };
+            var groups = new List<GroupDM> { new GroupDM { Id = 1, Users = new List<UserDM>() } };
+            var users = new List<UserDM> { new UserDM { Id = 1 } };
+            AddUserToGroupNormalizer.Groups = groups;
+            AddUserToGroupNormalizer.Users = users;
 
             // Act
             group.AddUser(user);
@@ -86,6 +112,12 @@ namespace ACS.Service.Tests
             // Arrange
             var group = new Group { Id = 1, Name = "Group" };
             var user = new Domain.User { Id = 1, Name = "User" };
+            var groups = new List<GroupDM> { new GroupDM { Id = 1, Users = new List<UserDM>() } };
+            var users = new List<UserDM> { new UserDM { Id = 1 } };
+            AddUserToGroupNormalizer.Groups = groups;
+            AddUserToGroupNormalizer.Users = users;
+            RemoveUserFromGroupNormalizer.Groups = groups;
+            RemoveUserFromGroupNormalizer.Users = users;
 
             group.AddUser(user);
 
@@ -103,6 +135,10 @@ namespace ACS.Service.Tests
             // Arrange
             var group = new Group { Id = 1, Name = "Group" };
             var role = new Role { Id = 1, Name = "Role" };
+            var groups = new List<GroupDM> { new GroupDM { Id = 1, Roles = new List<RoleDM>() } };
+            var roles = new List<RoleDM> { new RoleDM { Id = 1 } };
+            AddRoleToGroupNormalizer.Groups = groups;
+            AddRoleToGroupNormalizer.Roles = roles;
 
             // Act
             group.AddRole(role);
@@ -118,6 +154,12 @@ namespace ACS.Service.Tests
             // Arrange
             var group = new Group { Id = 1, Name = "Group" };
             var role = new Role { Id = 1, Name = "Role" };
+            var groups = new List<GroupDM> { new GroupDM { Id = 1, Roles = new List<RoleDM>() } };
+            var roles = new List<RoleDM> { new RoleDM { Id = 1 } };
+            AddRoleToGroupNormalizer.Groups = groups;
+            AddRoleToGroupNormalizer.Roles = roles;
+            RemoveRoleFromGroupNormalizer.Groups = groups;
+            RemoveRoleFromGroupNormalizer.Roles = roles;
 
             group.AddRole(role);
 
