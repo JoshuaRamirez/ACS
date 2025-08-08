@@ -11,7 +11,7 @@ The API exposes a `UsersController` with the following endpoints:
 - `GET /api/users/{id}` - fetch a specific user and return a `UserResponse`
 - `POST /api/users` - create a new user in memory with a `CreateUserRequest` and return a `UserResponse`
 
-Controllers for roles and groups will be added next. Additional functionality can be included by extending the service layer and API endpoints.
+Controllers for roles and groups will be added next. These endpoints translate between domain models and WebResource DTOs. Additional functionality can be included by extending the service layer and API endpoints.
 
 ## FAQs
 **Q:** How do I set up the database?

@@ -23,6 +23,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\ACS.Service\ACS.Service.csproj" />
+    <ProjectReference Include="..\ACS.WebResources\ACS.WebResources.csproj" />
   </ItemGroup>
 
   <ItemGroup>

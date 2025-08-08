@@ -109,3 +109,8 @@ Created resource classes for users, roles, and groups in the WebResources projec
 **Persona:** Lead Developer
 
 Added request and response models for user APIs, updated related documentation, and logged progress in the project file.
+
+### 2025-08-08
+**Persona:** Lead Developer
+
+Implemented `UsersController` with DTO mapping, created integration tests using the new models, refreshed API documentation, and updated project tracking.
