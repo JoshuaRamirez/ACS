@@ -7,7 +7,7 @@
 - Add controllers and services for roles and groups
 
 ## Current Tasks
-- Designing initial REST endpoints for users
+- None
 
 ## Completed Tasks
 - Created API layer design document
@@ -17,4 +17,6 @@
 - Documented new user endpoints in the user manual
 - Added resource classes for users, roles, and groups
 - Created request and response models for users
+- Implemented `UsersController` with DTO mapping for listing, retrieving, and creating users
+- Updated integration tests for user endpoints
 

@@ -9,6 +9,8 @@ The API layer now provides resource based controllers.
 - `GET /api/users/{id}` returns a `UserResponse` for the specified user.
 - `POST /api/users` accepts a `CreateUserRequest` and returns a `UserResponse`.
 
+These actions map between domain entities and WebResource DTOs via dedicated mapping helpers.
+
 Additional controllers for roles and groups will follow the same pattern.
 
 ## Authentication
