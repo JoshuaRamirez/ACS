@@ -7,9 +7,9 @@ Build the solution using the .NET SDK 8 or later. Start `ACS.WebApi` and issue r
 
 ## Features
 The API exposes a `UsersController` with the following endpoints:
-- `GET /api/users` - list all users
-- `GET /api/users/{id}` - fetch a specific user
-- `POST /api/users` - create a new user in memory
+- `GET /api/users` - list all users and return a `UsersResponse`
+- `GET /api/users/{id}` - fetch a specific user and return a `UserResponse`
+- `POST /api/users` - create a new user in memory with a `CreateUserRequest` and return a `UserResponse`
 
 Controllers for roles and groups will be added next. Additional functionality can be included by extending the service layer and API endpoints.
 
