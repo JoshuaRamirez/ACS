@@ -16,4 +16,5 @@
 - Implemented placeholder integration test for new API
 - Documented new user endpoints in the user manual
 - Added resource classes for users, roles, and groups
+- Created request and response models for users
 
