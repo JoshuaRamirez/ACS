@@ -5,6 +5,8 @@ This document describes the new API layer that replaces the sample `WeatherForec
 The Web API now references the `ACS.Service` project and exposes resource-based controllers.
 Initial implementation focuses on users but the same pattern will be applied to roles and groups.
 
+The WebResources project now includes resource representations for users, roles, and groups.
+
 ## User Endpoints
 - `GET /api/users` - list all users
 - `GET /api/users/{id}` - retrieve a single user

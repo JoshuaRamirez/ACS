@@ -15,3 +15,5 @@
 - Added project reference between Web API and service layer
 - Implemented placeholder integration test for new API
 - Documented new user endpoints in the user manual
+- Added resource classes for users, roles, and groups
+

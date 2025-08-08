@@ -99,3 +99,8 @@ Addressed review feedback by making normalizers fail when backing collections ar
 **Persona:** Lead Developer
 
 Renamed service test file for clarity, added missing guard tests for normalizers, ran the full test suite, and refreshed project documentation.
+
+### 2025-08-08
+**Persona:** Lead Developer
+
+Created resource classes for users, roles, and groups in the WebResources project and updated API layer documentation and project files.
