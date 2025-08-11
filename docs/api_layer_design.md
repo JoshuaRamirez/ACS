@@ -27,4 +27,4 @@ The WebResources project now includes resource representations for users, roles,
 - `GET /api/permissions/{id}` - retrieve a single permission
 - `POST /api/permissions` - create a new permission in memory
 
-The `UserService` class currently stores data in memory. It will later integrate with the database context.
+The Web API now configures `ApplicationDbContext` with a SQL Server `DefaultConnection` string, though the `UserService` still stores data in memory pending full database integration.

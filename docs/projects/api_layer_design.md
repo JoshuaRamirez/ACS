@@ -3,7 +3,7 @@
 **Status:** In Progress
 
 ## Pending Tasks
-- Integrate in-memory services with a real database context
+- None
 
 ## Current Tasks
 - None
@@ -21,4 +21,5 @@
 - Added controllers, services, models, and mappings for roles and groups
 - Added integration tests for roles and groups endpoints
 - Added controller, service, models, mappings, and integration tests for permissions
+- Configured `ApplicationDbContext` with SQL Server using the `DefaultConnection` string
 

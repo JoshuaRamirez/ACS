@@ -16,5 +16,7 @@ The service project defines domain entities such as `User`, `Role`, and `Group`.
 
 The API layer now includes controllers for users, groups, roles, and permissions backed by in-memory services. These endpoints demonstrate how future features can interact with the domain layer through service helpers and normalizers to persist entities and check permissions.
 
+The Web API is configured with an `ApplicationDbContext` using a SQL Server `DefaultConnection` string, preparing the application for a future transition from in-memory storage to a persistent database.
+
 ## Normalizer design
 The normalizer classes act as delegates that mirror domain operations onto in-memory data model collections while maintaining bidirectional references. This centralizes update logic so future persistence layers can reuse the same algorithms when entities are saved to the database.
