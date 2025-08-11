@@ -114,3 +114,13 @@ Added request and response models for user APIs, updated related documentation, 
 **Persona:** Lead Developer
 
 Implemented `UsersController` with DTO mapping, created integration tests using the new models, refreshed API documentation, and updated project tracking.
+
+### 2025-08-08
+**Persona:** Lead Developer
+
+Expanded the API layer with in-memory services and controllers for groups and roles, added mapping helpers, integration tests, and updated documentation and project files.
+
+### 2025-08-08
+**Persona:** Lead Developer
+
+Added permission endpoint with in-memory service, mapping, models, integration tests, and updated documentation and project tracking.
