@@ -3,8 +3,7 @@
 **Status:** In Progress
 
 ## Pending Tasks
-- Integrate `UserService` with a real database context
-- Add controllers and services for roles and groups
+- Integrate in-memory services with a real database context
 
 ## Current Tasks
 - None
@@ -19,4 +18,7 @@
 - Created request and response models for users
 - Implemented `UsersController` with DTO mapping for listing, retrieving, and creating users
 - Updated integration tests for user endpoints
+- Added controllers, services, models, and mappings for roles and groups
+- Added integration tests for roles and groups endpoints
+- Added controller, service, models, mappings, and integration tests for permissions
 

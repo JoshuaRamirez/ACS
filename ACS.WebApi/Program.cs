@@ -5,6 +5,12 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
 builder.Services.AddSingleton<ACS.Service.Services.IUserService,
     ACS.Service.Services.UserService>();
+builder.Services.AddSingleton<ACS.Service.Services.IGroupService,
+    ACS.Service.Services.GroupService>();
+builder.Services.AddSingleton<ACS.Service.Services.IRoleService,
+    ACS.Service.Services.RoleService>();
+builder.Services.AddSingleton<ACS.Service.Services.IPermissionService,
+    ACS.Service.Services.PermissionService>();
 
 var app = builder.Build();
 
