@@ -124,3 +124,8 @@ Expanded the API layer with in-memory services and controllers for groups and ro
 **Persona:** Lead Developer
 
 Added permission endpoint with in-memory service, mapping, models, integration tests, and updated documentation and project tracking.
+
+### 2025-08-11
+**Persona:** Lead Developer
+
+Added SQL Server `ApplicationDbContext` registration and `DefaultConnection` string. Updated related project and documentation files and ran the full test suite.
