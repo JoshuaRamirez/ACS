@@ -11,6 +11,7 @@ public class AccessControlDomainService
     private readonly InMemoryEntityGraph _entityGraph;
     private readonly ApplicationDbContext _dbContext;
     private readonly TenantDatabasePersistenceService _persistenceService;
+    private readonly EventPersistenceService _eventPersistenceService;
     private readonly ILogger<AccessControlDomainService> _logger;
     private readonly Channel<DomainCommand> _commandChannel;
     private readonly ChannelWriter<DomainCommand> _commandWriter;
@@ -22,11 +23,13 @@ public class AccessControlDomainService
         InMemoryEntityGraph entityGraph,
         ApplicationDbContext dbContext,
         TenantDatabasePersistenceService persistenceService,
+        EventPersistenceService eventPersistenceService,
         ILogger<AccessControlDomainService> logger)
     {
         _entityGraph = entityGraph;
         _dbContext = dbContext;
         _persistenceService = persistenceService;
+        _eventPersistenceService = eventPersistenceService;
         _logger = logger;
         _cancellationTokenSource = new CancellationTokenSource();
 
@@ -125,7 +128,7 @@ public class AccessControlDomainService
                 RemoveGroupFromGroupCommand cmd => await ProcessRemoveGroupFromGroup(cmd),
                 AddPermissionToEntityCommand cmd => await ProcessAddPermissionToEntity(cmd),
                 RemovePermissionFromEntityCommand cmd => await ProcessRemovePermissionFromEntity(cmd),
-                CheckPermissionCommand cmd => ProcessCheckPermission(cmd),
+                CheckPermissionCommand cmd => await ProcessCheckPermission(cmd),
                 GetUserCommand cmd => ProcessGetUser(cmd),
                 GetGroupCommand cmd => ProcessGetGroup(cmd),
                 GetRoleCommand cmd => ProcessGetRole(cmd),
@@ -172,6 +175,9 @@ public class AccessControlDomainService
         // Persist to database
         await _persistenceService.PersistAddUserToGroupAsync(command.UserId, command.GroupId);
 
+        // Log audit event
+        await _eventPersistenceService.LogAddUserToGroupAsync(command.UserId, command.GroupId);
+
         _logger.LogInformation("Added user {UserId} to group {GroupId}", command.UserId, command.GroupId);
         
         return true;
@@ -191,6 +197,9 @@ public class AccessControlDomainService
 
         // Persist to database
         await _persistenceService.PersistRemoveUserFromGroupAsync(command.UserId, command.GroupId);
+
+        // Log audit event
+        await _eventPersistenceService.LogRemoveUserFromGroupAsync(command.UserId, command.GroupId);
 
         _logger.LogInformation("Removed user {UserId} from group {GroupId}", command.UserId, command.GroupId);
         
@@ -215,6 +224,9 @@ public class AccessControlDomainService
         // Persist to database
         await _persistenceService.PersistAssignUserToRoleAsync(command.UserId, command.RoleId);
 
+        // Log audit event
+        await _eventPersistenceService.LogAssignUserToRoleAsync(command.UserId, command.RoleId);
+
         _logger.LogInformation("Assigned user {UserId} to role {RoleId}", command.UserId, command.RoleId);
         
         return true;
@@ -233,6 +245,9 @@ public class AccessControlDomainService
 
         // Persist to database
         await _persistenceService.PersistUnAssignUserFromRoleAsync(command.UserId, command.RoleId);
+
+        // Log audit event
+        await _eventPersistenceService.LogUnAssignUserFromRoleAsync(command.UserId, command.RoleId);
 
         _logger.LogInformation("Unassigned user {UserId} from role {RoleId}", command.UserId, command.RoleId);
         
@@ -257,6 +272,9 @@ public class AccessControlDomainService
         // Persist to database
         await _persistenceService.PersistAddRoleToGroupAsync(command.GroupId, command.RoleId);
 
+        // Log audit event
+        await _eventPersistenceService.LogAddRoleToGroupAsync(command.GroupId, command.RoleId);
+
         _logger.LogInformation("Added role {RoleId} to group {GroupId}", command.RoleId, command.GroupId);
         
         return true;
@@ -275,6 +293,9 @@ public class AccessControlDomainService
 
         // Persist to database
         await _persistenceService.PersistRemoveRoleFromGroupAsync(command.GroupId, command.RoleId);
+
+        // Log audit event
+        await _eventPersistenceService.LogRemoveRoleFromGroupAsync(command.GroupId, command.RoleId);
 
         _logger.LogInformation("Removed role {RoleId} from group {GroupId}", command.RoleId, command.GroupId);
         
@@ -305,6 +326,9 @@ public class AccessControlDomainService
         // Persist to database
         await _persistenceService.PersistAddGroupToGroupAsync(command.ParentGroupId, command.ChildGroupId);
 
+        // Log audit event
+        await _eventPersistenceService.LogAddGroupToGroupAsync(command.ParentGroupId, command.ChildGroupId);
+
         _logger.LogInformation("Added group {ChildGroupId} to group {ParentGroupId}", command.ChildGroupId, command.ParentGroupId);
         
         return true;
@@ -323,6 +347,9 @@ public class AccessControlDomainService
 
         // Persist to database
         await _persistenceService.PersistRemoveGroupFromGroupAsync(command.ParentGroupId, command.ChildGroupId);
+
+        // Log audit event
+        await _eventPersistenceService.LogRemoveGroupFromGroupAsync(command.ParentGroupId, command.ChildGroupId);
 
         _logger.LogInformation("Removed group {ChildGroupId} from group {ParentGroupId}", command.ChildGroupId, command.ParentGroupId);
         
@@ -357,6 +384,9 @@ public class AccessControlDomainService
         // Persist to database
         await _persistenceService.PersistAddPermissionToEntityAsync(command.EntityId, command.Permission);
 
+        // Log audit event
+        await _eventPersistenceService.LogAddPermissionToEntityAsync(command.EntityId, command.Permission);
+
         _logger.LogInformation("Added permission {Uri}:{HttpVerb} to entity {EntityId}", 
             command.Permission.Uri, command.Permission.HttpVerb, command.EntityId);
         
@@ -387,6 +417,9 @@ public class AccessControlDomainService
         // Persist to database
         await _persistenceService.PersistRemovePermissionFromEntityAsync(command.EntityId, command.Permission);
 
+        // Log audit event
+        await _eventPersistenceService.LogRemovePermissionFromEntityAsync(command.EntityId, command.Permission);
+
         _logger.LogInformation("Removed permission {Uri}:{HttpVerb} from entity {EntityId}", 
             command.Permission.Uri, command.Permission.HttpVerb, command.EntityId);
         
@@ -397,7 +430,7 @@ public class AccessControlDomainService
 
     #region Query Operations
 
-    private bool ProcessCheckPermission(CheckPermissionCommand command)
+    private async Task<bool> ProcessCheckPermission(CheckPermissionCommand command)
     {
         Entity? entity = null;
 
@@ -413,6 +446,9 @@ public class AccessControlDomainService
             return false;
 
         var hasPermission = entity.HasPermission(command.Uri, command.HttpVerb);
+        
+        // Log audit event for permission checks (important for security auditing)
+        await _eventPersistenceService.LogPermissionCheckAsync(command.EntityId, command.Uri, command.HttpVerb, hasPermission);
         
         _logger.LogDebug("Permission check for entity {EntityId} on {Uri}:{HttpVerb} = {HasPermission}", 
             command.EntityId, command.Uri, command.HttpVerb, hasPermission);

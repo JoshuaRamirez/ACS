@@ -44,6 +44,7 @@ builder.Services.AddSingleton<TenantConfiguration>(provider =>
 // Domain services
 builder.Services.AddSingleton<InMemoryEntityGraph>();
 builder.Services.AddSingleton<TenantDatabasePersistenceService>();
+builder.Services.AddSingleton<EventPersistenceService>();
 builder.Services.AddSingleton<AccessControlDomainService>();
 
 // Background services
