@@ -28,6 +28,7 @@
   <ItemGroup>
     <ProjectReference Include="..\ACS.Core\ACS.Core.csproj" />
     <ProjectReference Include="..\ACS.Service\ACS.Service.csproj" />
+    <ProjectReference Include="..\ACS.Infrastructure\ACS.Infrastructure.csproj" />
   </ItemGroup>
 
   <ItemGroup>

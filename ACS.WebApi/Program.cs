@@ -1,20 +1,68 @@
+using ACS.Infrastructure;
+using ACS.WebApi.Middleware;
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
-
 builder.Services.AddControllers();
-builder.Services.AddSingleton<ACS.Service.Services.IUserService,
-    ACS.Service.Services.UserService>();
+
+// Register tenant process infrastructure
+builder.Services.AddSingleton<TenantProcessDiscoveryService>();
+
+// Add logging
+builder.Services.AddLogging();
+
+// Add CORS for development
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowAll", builder =>
+        builder.AllowAnyOrigin()
+               .AllowAnyMethod()
+               .AllowAnyHeader());
+});
 
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
+if (app.Environment.IsDevelopment())
+{
+    app.UseCors("AllowAll");
+}
 
 app.UseHttpsRedirection();
+
+// Add tenant process resolution middleware BEFORE authorization
+app.UseMiddleware<TenantProcessResolutionMiddleware>();
 
 app.UseAuthorization();
 
 app.MapControllers();
+
+// Add health check endpoint
+app.MapGet("/health", () => Results.Ok(new { Status = "Healthy", Timestamp = DateTime.UtcNow }));
+
+// Add tenant process status endpoint
+app.MapGet("/tenants/{tenantId}/status", async (string tenantId, TenantProcessDiscoveryService processDiscovery) =>
+{
+    try
+    {
+        var processInfo = await processDiscovery.GetOrStartTenantProcessAsync(tenantId);
+        
+        return Results.Ok(new 
+        { 
+            TenantId = tenantId,
+            ProcessId = processInfo.ProcessId,
+            GrpcEndpoint = processInfo.GrpcEndpoint,
+            Status = processInfo.IsHealthy ? "Healthy" : "Unhealthy",
+            StartTime = processInfo.StartTime,
+            LastHealthCheck = processInfo.LastHealthCheck
+        });
+    }
+    catch (Exception ex)
+    {
+        return Results.Problem($"Error getting tenant process status: {ex.Message}");
+    }
+});
 
 app.Run();
 
