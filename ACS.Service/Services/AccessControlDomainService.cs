@@ -10,6 +10,7 @@ public class AccessControlDomainService
 {
     private readonly InMemoryEntityGraph _entityGraph;
     private readonly ApplicationDbContext _dbContext;
+    private readonly TenantDatabasePersistenceService _persistenceService;
     private readonly ILogger<AccessControlDomainService> _logger;
     private readonly Channel<DomainCommand> _commandChannel;
     private readonly ChannelWriter<DomainCommand> _commandWriter;
@@ -20,10 +21,12 @@ public class AccessControlDomainService
     public AccessControlDomainService(
         InMemoryEntityGraph entityGraph,
         ApplicationDbContext dbContext,
+        TenantDatabasePersistenceService persistenceService,
         ILogger<AccessControlDomainService> logger)
     {
         _entityGraph = entityGraph;
         _dbContext = dbContext;
+        _persistenceService = persistenceService;
         _logger = logger;
         _cancellationTokenSource = new CancellationTokenSource();
 
@@ -163,8 +166,12 @@ public class AccessControlDomainService
         user.Parents.Add(group);
         group.Children.Add(user);
 
-        // Execute normalizer for database persistence
-        // Note: Normalizer will handle database updates
+        // Execute normalizer for database model synchronization
+        ACS.Service.Delegates.Normalizers.AddUserToGroupNormalizer.Execute(command.UserId, command.GroupId);
+
+        // Persist to database
+        await _persistenceService.PersistAddUserToGroupAsync(command.UserId, command.GroupId);
+
         _logger.LogInformation("Added user {UserId} to group {GroupId}", command.UserId, command.GroupId);
         
         return true;
@@ -178,6 +185,12 @@ public class AccessControlDomainService
         // Remove relationship in domain
         user.Parents.Remove(group);
         group.Children.Remove(user);
+
+        // Execute normalizer for database model synchronization
+        ACS.Service.Delegates.Normalizers.RemoveUserFromGroupNormalizer.Execute(command.UserId, command.GroupId);
+
+        // Persist to database
+        await _persistenceService.PersistRemoveUserFromGroupAsync(command.UserId, command.GroupId);
 
         _logger.LogInformation("Removed user {UserId} from group {GroupId}", command.UserId, command.GroupId);
         
@@ -196,6 +209,12 @@ public class AccessControlDomainService
         user.Parents.Add(role);
         role.Children.Add(user);
 
+        // Execute normalizer for database model synchronization
+        ACS.Service.Delegates.Normalizers.AssignUserToRoleNormalizer.Execute(command.UserId, command.RoleId);
+
+        // Persist to database
+        await _persistenceService.PersistAssignUserToRoleAsync(command.UserId, command.RoleId);
+
         _logger.LogInformation("Assigned user {UserId} to role {RoleId}", command.UserId, command.RoleId);
         
         return true;
@@ -208,6 +227,12 @@ public class AccessControlDomainService
 
         user.Parents.Remove(role);
         role.Children.Remove(user);
+
+        // Execute normalizer for database model synchronization
+        ACS.Service.Delegates.Normalizers.UnAssignUserFromRoleNormalizer.Execute(command.UserId, command.RoleId);
+
+        // Persist to database
+        await _persistenceService.PersistUnAssignUserFromRoleAsync(command.UserId, command.RoleId);
 
         _logger.LogInformation("Unassigned user {UserId} from role {RoleId}", command.UserId, command.RoleId);
         
@@ -226,6 +251,12 @@ public class AccessControlDomainService
         group.Children.Add(role);
         role.Parents.Add(group);
 
+        // Execute normalizer for database model synchronization
+        ACS.Service.Delegates.Normalizers.AddRoleToGroupNormalizer.Execute(command.GroupId, command.RoleId);
+
+        // Persist to database
+        await _persistenceService.PersistAddRoleToGroupAsync(command.GroupId, command.RoleId);
+
         _logger.LogInformation("Added role {RoleId} to group {GroupId}", command.RoleId, command.GroupId);
         
         return true;
@@ -238,6 +269,12 @@ public class AccessControlDomainService
 
         group.Children.Remove(role);
         role.Parents.Remove(group);
+
+        // Execute normalizer for database model synchronization
+        ACS.Service.Delegates.Normalizers.RemoveRoleFromGroupNormalizer.Execute(command.GroupId, command.RoleId);
+
+        // Persist to database
+        await _persistenceService.PersistRemoveRoleFromGroupAsync(command.GroupId, command.RoleId);
 
         _logger.LogInformation("Removed role {RoleId} from group {GroupId}", command.RoleId, command.GroupId);
         
@@ -262,6 +299,12 @@ public class AccessControlDomainService
         parentGroup.Children.Add(childGroup);
         childGroup.Parents.Add(parentGroup);
 
+        // Execute normalizer for database model synchronization
+        ACS.Service.Delegates.Normalizers.AddGroupToGroupNormalizer.Execute(command.ParentGroupId, command.ChildGroupId);
+
+        // Persist to database
+        await _persistenceService.PersistAddGroupToGroupAsync(command.ParentGroupId, command.ChildGroupId);
+
         _logger.LogInformation("Added group {ChildGroupId} to group {ParentGroupId}", command.ChildGroupId, command.ParentGroupId);
         
         return true;
@@ -274,6 +317,12 @@ public class AccessControlDomainService
 
         parentGroup.Children.Remove(childGroup);
         childGroup.Parents.Remove(parentGroup);
+
+        // Execute normalizer for database model synchronization
+        ACS.Service.Delegates.Normalizers.RemoveGroupFromGroupNormalizer.Execute(command.ParentGroupId, command.ChildGroupId);
+
+        // Persist to database
+        await _persistenceService.PersistRemoveGroupFromGroupAsync(command.ParentGroupId, command.ChildGroupId);
 
         _logger.LogInformation("Removed group {ChildGroupId} from group {ParentGroupId}", command.ChildGroupId, command.ParentGroupId);
         
@@ -299,7 +348,14 @@ public class AccessControlDomainService
         if (entity == null)
             throw new InvalidOperationException($"Entity {command.EntityId} not found");
 
-        entity.AddPermission(command.Permission);
+        // Add to domain entity
+        entity.Permissions.Add(command.Permission);
+
+        // Execute normalizer for database model synchronization
+        ACS.Service.Delegates.Normalizers.AddPermissionToEntity.Execute(command.Permission, command.EntityId);
+
+        // Persist to database
+        await _persistenceService.PersistAddPermissionToEntityAsync(command.EntityId, command.Permission);
 
         _logger.LogInformation("Added permission {Uri}:{HttpVerb} to entity {EntityId}", 
             command.Permission.Uri, command.Permission.HttpVerb, command.EntityId);
@@ -322,7 +378,14 @@ public class AccessControlDomainService
         if (entity == null)
             throw new InvalidOperationException($"Entity {command.EntityId} not found");
 
-        entity.RemovePermission(command.Permission);
+        // Remove from domain entity
+        entity.Permissions.Remove(command.Permission);
+
+        // Execute normalizer for database model synchronization
+        ACS.Service.Delegates.Normalizers.RemovePermissionFromEntity.Execute(command.Permission, command.EntityId);
+
+        // Persist to database
+        await _persistenceService.PersistRemovePermissionFromEntityAsync(command.EntityId, command.Permission);
 
         _logger.LogInformation("Removed permission {Uri}:{HttpVerb} from entity {EntityId}", 
             command.Permission.Uri, command.Permission.HttpVerb, command.EntityId);

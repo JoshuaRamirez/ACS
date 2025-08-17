@@ -1,9 +1,11 @@
 using ACS.Infrastructure;
 using ACS.Service.Data;
 using ACS.Service.Infrastructure;
+using ACS.Service.Services;
+using ACS.VerticalHost.Services;
 using Microsoft.EntityFrameworkCore;
 
-var builder = Host.CreateApplicationBuilder(args);
+var builder = WebApplication.CreateBuilder(args);
 
 // Get tenant ID from command line arguments or environment
 var tenantId = args.Length > 0 ? args[0] : Environment.GetEnvironmentVariable("TENANT_ID");
@@ -26,15 +28,25 @@ if (args.Length > 1 && args[1].StartsWith("--grpc-port"))
     }
 }
 
-// Configure for high-performance single-tenant processing
-builder.Services.Configure<ConsoleLifetimeOptions>(options =>
-    options.SuppressStatusMessages = true);
+// Configure Kestrel to listen on the specified gRPC port
+builder.WebHost.ConfigureKestrel(options =>
+{
+    options.ListenAnyIP(grpcPort, listenOptions =>
+    {
+        listenOptions.Protocols = Microsoft.AspNetCore.Server.Kestrel.Core.HttpProtocols.Http2;
+    });
+});
 
 // Single-tenant service infrastructure
 builder.Services.AddSingleton<TenantConfiguration>(provider => 
     new TenantConfiguration { TenantId = tenantId });
 
+// Domain services
 builder.Services.AddSingleton<InMemoryEntityGraph>();
+builder.Services.AddSingleton<TenantDatabasePersistenceService>();
+builder.Services.AddSingleton<AccessControlDomainService>();
+
+// Background services
 builder.Services.AddSingleton<TenantRingBuffer>();
 builder.Services.AddHostedService<TenantAccessControlHostedService>();
 
@@ -49,10 +61,26 @@ builder.Services.AddGrpc(options =>
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseSqlServer(GetTenantConnectionString(tenantId)));
 
-var host = builder.Build();
+// Build and configure the application
+var app = builder.Build();
+
+// Configure gRPC endpoint
+app.MapGrpcService<VerticalGrpcService>();
+
+// Initialize domain services
+using (var scope = app.Services.CreateScope())
+{
+    var entityGraph = scope.ServiceProvider.GetRequiredService<InMemoryEntityGraph>();
+    var domainService = scope.ServiceProvider.GetRequiredService<AccessControlDomainService>();
+    
+    // Load entity graph and hydrate normalizers
+    await domainService.LoadEntityGraphAsync();
+    
+    Console.WriteLine($"Entity graph loaded for tenant: {tenantId}");
+}
 
 Console.WriteLine($"Starting VerticalHost for tenant: {tenantId} on gRPC port: {grpcPort}");
-await host.RunAsync();
+await app.RunAsync();
 
 static string GetTenantConnectionString(string tenantId)
 {
