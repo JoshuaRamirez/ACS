@@ -7,9 +7,9 @@ public abstract class Entity
 {
     public int Id { get; set; }
     public string Name { get; set; }
-    protected List<Entity> Children { get; set; } = new List<Entity>();
-    protected List<Entity> Parents { get; set; } = new List<Entity>();
-    protected List<Permission> Permissions { get; set; } = new List<Permission>();
+    public List<Entity> Children { get; set; } = new List<Entity>();
+    public List<Entity> Parents { get; set; } = new List<Entity>();
+    public List<Permission> Permissions { get; set; } = new List<Permission>();
 
     public void AddPermission(Permission permission)
     {
