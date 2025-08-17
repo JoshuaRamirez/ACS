@@ -13,4 +13,8 @@
     <PackageReference Include="Grpc.Tools" Version="2.66.0" PrivateAssets="All" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Protobuf Include="Protos\vertical.proto" GrpcServices="Both" />
+  </ItemGroup>
+
 </Project>

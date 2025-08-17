@@ -1,0 +1,55 @@
+syntax = "proto3";
+
+package acs.vertical.v1;
+
+import "google/protobuf/any.proto";
+import "google/protobuf/timestamp.proto";
+
+option csharp_namespace = "ACS.Core.Vertical.V1";
+
+service VerticalService {
+  rpc SubmitCommand(CommandRequest) returns (CommandResponse);
+  rpc ExecuteQuery(QueryRequest) returns (QueryResponse);
+  rpc GetTenantHealth(TenantHealthRequest) returns (TenantHealthResponse);
+}
+
+message CommandRequest {
+  string tenant_id = 1;
+  string command_id = 2;
+  string command_type = 3;
+  google.protobuf.Any command_data = 4;
+  google.protobuf.Timestamp timestamp = 5;
+}
+
+message CommandResponse {
+  string command_id = 1;
+  bool success = 2;
+  google.protobuf.Any result_data = 3;
+  string error_message = 4;
+  int64 processing_time_ms = 5;
+}
+
+message QueryRequest {
+  string tenant_id = 1;
+  string query_id = 2;
+  string query_type = 3;
+  google.protobuf.Any query_data = 4;
+}
+
+message QueryResponse {
+  string query_id = 1;
+  bool success = 2;
+  google.protobuf.Any result_data = 3;
+  string error_message = 4;
+}
+
+message TenantHealthRequest {
+  string tenant_id = 1;
+}
+
+message TenantHealthResponse {
+  string tenant_id = 1;
+  bool is_healthy = 2;
+  int64 commands_processed = 3;
+  int64 memory_usage_bytes = 4;
+}
