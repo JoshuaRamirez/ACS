@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using ACS.WebApi.DTOs;
 using ACS.WebApi.Services;
+using ACS.Service.Infrastructure;
 
 namespace ACS.WebApi.Controllers;
 
@@ -23,20 +24,30 @@ public class GroupsController : ControllerBase
     /// Get all groups for the current tenant
     /// </summary>
     [HttpGet]
-    public Task<ActionResult<ApiResponse<GroupListResponse>>> GetGroups([FromQuery] PagedRequest request)
+    public async Task<ActionResult<ApiResponse<GroupListResponse>>> GetGroups([FromQuery] PagedRequest request)
     {
         try
         {
-            // For now, return a placeholder since we don't have a GetGroups gRPC method yet
-            var groups = new List<GroupResponse>();
-            var response = new GroupListResponse(groups, 0, request.Page, request.PageSize);
+            var getGroupsCommand = new GetGroupsCommand(
+                Guid.NewGuid().ToString(),
+                DateTime.UtcNow,
+                "current-user", // TODO: Get from authentication context
+                request.Page,
+                request.PageSize);
+
+            var result = await _grpcClientService.GetGroupsAsync(getGroupsCommand);
             
-            return Task.FromResult<ActionResult<ApiResponse<GroupListResponse>>>(Ok(new ApiResponse<GroupListResponse>(true, response)));
+            if (result.Success && result.Data != null)
+            {
+                return Ok(result);
+            }
+            
+            return StatusCode(500, new ApiResponse<GroupListResponse>(false, null, result.Message ?? "Error retrieving groups"));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error retrieving groups");
-            return Task.FromResult<ActionResult<ApiResponse<GroupListResponse>>>(StatusCode(500, new ApiResponse<GroupListResponse>(false, null, "Error retrieving groups")));
+            return StatusCode(500, new ApiResponse<GroupListResponse>(false, null, "Error retrieving groups"));
         }
     }
 
@@ -44,17 +55,34 @@ public class GroupsController : ControllerBase
     /// Get a specific group by ID
     /// </summary>
     [HttpGet("{id:int}")]
-    public Task<ActionResult<ApiResponse<GroupResponse>>> GetGroup(int id)
+    public async Task<ActionResult<ApiResponse<GroupResponse>>> GetGroup(int id)
     {
         try
         {
-            // For now, return a placeholder since we don't have a GetGroup gRPC method yet
-            return Task.FromResult<ActionResult<ApiResponse<GroupResponse>>>(NotFound(new ApiResponse<GroupResponse>(false, null, $"Group {id} not found")));
+            var getGroupCommand = new GetGroupCommand(
+                Guid.NewGuid().ToString(),
+                DateTime.UtcNow,
+                "current-user", // TODO: Get from authentication context
+                id);
+
+            var result = await _grpcClientService.GetGroupAsync(getGroupCommand);
+            
+            if (result.Success && result.Data != null)
+            {
+                return Ok(result);
+            }
+            
+            if (result.Message?.Contains("not found") == true)
+            {
+                return NotFound(new ApiResponse<GroupResponse>(false, null, $"Group {id} not found"));
+            }
+            
+            return StatusCode(500, new ApiResponse<GroupResponse>(false, null, result.Message ?? "Error retrieving group"));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error retrieving group {GroupId}", id);
-            return Task.FromResult<ActionResult<ApiResponse<GroupResponse>>>(StatusCode(500, new ApiResponse<GroupResponse>(false, null, "Error retrieving group")));
+            return StatusCode(500, new ApiResponse<GroupResponse>(false, null, "Error retrieving group"));
         }
     }
 
@@ -62,22 +90,35 @@ public class GroupsController : ControllerBase
     /// Create a new group
     /// </summary>
     [HttpPost]
-    public Task<ActionResult<ApiResponse<GroupResponse>>> CreateGroup([FromBody] CreateGroupRequest request)
+    public async Task<ActionResult<ApiResponse<GroupResponse>>> CreateGroup([FromBody] CreateGroupRequest request)
     {
         try
         {
             if (string.IsNullOrWhiteSpace(request.Name))
             {
-                return Task.FromResult<ActionResult<ApiResponse<GroupResponse>>>(BadRequest(new ApiResponse<GroupResponse>(false, null, "Group name is required")));
+                return BadRequest(new ApiResponse<GroupResponse>(false, null, "Group name is required"));
             }
 
-            // For now, return a placeholder since we don't have a CreateGroup gRPC method yet
-            return Task.FromResult<ActionResult<ApiResponse<GroupResponse>>>(StatusCode(501, new ApiResponse<GroupResponse>(false, null, "CreateGroup not implemented yet")));
+            var createGroupCommand = new CreateGroupCommand(
+                Guid.NewGuid().ToString(),
+                DateTime.UtcNow,
+                "current-user", // TODO: Get from authentication context
+                request.Name,
+                request.ParentGroupId);
+
+            var result = await _grpcClientService.CreateGroupAsync(createGroupCommand);
+            
+            if (result.Success && result.Data != null)
+            {
+                return CreatedAtAction(nameof(GetGroup), new { id = result.Data.Id }, result);
+            }
+            
+            return StatusCode(500, new ApiResponse<GroupResponse>(false, null, result.Message ?? "Error creating group"));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error creating group");
-            return Task.FromResult<ActionResult<ApiResponse<GroupResponse>>>(StatusCode(500, new ApiResponse<GroupResponse>(false, null, "Error creating group")));
+            return StatusCode(500, new ApiResponse<GroupResponse>(false, null, "Error creating group"));
         }
     }
 
@@ -85,22 +126,40 @@ public class GroupsController : ControllerBase
     /// Update an existing group
     /// </summary>
     [HttpPut("{id:int}")]
-    public Task<ActionResult<ApiResponse<GroupResponse>>> UpdateGroup(int id, [FromBody] UpdateGroupRequest request)
+    public async Task<ActionResult<ApiResponse<GroupResponse>>> UpdateGroup(int id, [FromBody] UpdateGroupRequest request)
     {
         try
         {
             if (string.IsNullOrWhiteSpace(request.Name))
             {
-                return Task.FromResult<ActionResult<ApiResponse<GroupResponse>>>(BadRequest(new ApiResponse<GroupResponse>(false, null, "Group name is required")));
+                return BadRequest(new ApiResponse<GroupResponse>(false, null, "Group name is required"));
             }
 
-            // For now, return a placeholder since we don't have an UpdateGroup gRPC method yet
-            return Task.FromResult<ActionResult<ApiResponse<GroupResponse>>>(StatusCode(501, new ApiResponse<GroupResponse>(false, null, "UpdateGroup not implemented yet")));
+            var updateGroupCommand = new UpdateGroupCommand(
+                Guid.NewGuid().ToString(),
+                DateTime.UtcNow,
+                "current-user", // TODO: Get from authentication context
+                id,
+                request.Name);
+
+            var result = await _grpcClientService.UpdateGroupAsync(updateGroupCommand);
+            
+            if (result.Success && result.Data != null)
+            {
+                return Ok(result);
+            }
+            
+            if (result.Message?.Contains("not found") == true)
+            {
+                return NotFound(new ApiResponse<GroupResponse>(false, null, $"Group {id} not found"));
+            }
+            
+            return StatusCode(500, new ApiResponse<GroupResponse>(false, null, result.Message ?? "Error updating group"));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error updating group {GroupId}", id);
-            return Task.FromResult<ActionResult<ApiResponse<GroupResponse>>>(StatusCode(500, new ApiResponse<GroupResponse>(false, null, "Error updating group")));
+            return StatusCode(500, new ApiResponse<GroupResponse>(false, null, "Error updating group"));
         }
     }
 
@@ -108,17 +167,34 @@ public class GroupsController : ControllerBase
     /// Delete a group
     /// </summary>
     [HttpDelete("{id:int}")]
-    public Task<ActionResult<ApiResponse<bool>>> DeleteGroup(int id)
+    public async Task<ActionResult<ApiResponse<bool>>> DeleteGroup(int id)
     {
         try
         {
-            // For now, return a placeholder since we don't have a DeleteGroup gRPC method yet
-            return Task.FromResult<ActionResult<ApiResponse<bool>>>(StatusCode(501, new ApiResponse<bool>(false, false, "DeleteGroup not implemented yet")));
+            var deleteGroupCommand = new DeleteGroupCommand(
+                Guid.NewGuid().ToString(),
+                DateTime.UtcNow,
+                "current-user", // TODO: Get from authentication context
+                id);
+
+            var result = await _grpcClientService.DeleteGroupAsync(deleteGroupCommand);
+            
+            if (result.Success)
+            {
+                return Ok(result);
+            }
+            
+            if (result.Message?.Contains("not found") == true)
+            {
+                return NotFound(new ApiResponse<bool>(false, false, $"Group {id} not found"));
+            }
+            
+            return StatusCode(500, new ApiResponse<bool>(false, false, result.Message ?? "Error deleting group"));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error deleting group {GroupId}", id);
-            return Task.FromResult<ActionResult<ApiResponse<bool>>>(StatusCode(500, new ApiResponse<bool>(false, false, "Error deleting group")));
+            return StatusCode(500, new ApiResponse<bool>(false, false, "Error deleting group"));
         }
     }
 

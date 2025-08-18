@@ -156,7 +156,17 @@ public class TenantGrpcClientService
             if (response.Success && response.ResultData.Length > 0)
             {
                 var users = ProtoSerializer.Deserialize<List<User>>(response.ResultData);
-                var userResponses = users.Select(u => new UserResponse(u.Id, u.Name, u.Parents.FirstOrDefault()?.Id, u.Children.FirstOrDefault()?.Id)).ToList();
+                var userResponses = users.Select(u => new UserResponse(
+                    u.Id, 
+                    u.Name, 
+                    u.Parents.FirstOrDefault()?.Id, 
+                    null, // GroupName - we'll need to fetch this separately if needed
+                    null, // RoleId - we'll need to fetch this separately if needed  
+                    null, // RoleName
+                    new List<PermissionResponse>(), // Permissions - we'll need to fetch these separately if needed
+                    DateTime.UtcNow, // CreatedAt - placeholder
+                    null // UpdatedAt
+                )).ToList();
                 var result = new UserListResponse(userResponses, users.Count, command.Page, command.PageSize);
                 
                 return new ApiResponse<UserListResponse>(true, result);
@@ -176,7 +186,17 @@ public class TenantGrpcClientService
             if (response.Success && response.ResultData.Length > 0)
             {
                 var user = ProtoSerializer.Deserialize<User>(response.ResultData);
-                var result = new UserResponse(user.Id, user.Name, user.Parents.FirstOrDefault()?.Id, user.Children.FirstOrDefault()?.Id);
+                var result = new UserResponse(
+                    user.Id,
+                    user.Name,
+                    user.Parents.FirstOrDefault()?.Id,
+                    null, // GroupName
+                    null, // RoleId
+                    null, // RoleName
+                    new List<PermissionResponse>(), // Permissions
+                    DateTime.UtcNow, // CreatedAt - placeholder
+                    null // UpdatedAt
+                );
                 
                 return new ApiResponse<UserResponse>(true, result);
             }
@@ -224,6 +244,217 @@ public class TenantGrpcClientService
     }
 
     public async Task<ApiResponse<bool>> DeleteUserAsync(Service.Infrastructure.DeleteUserCommand command)
+    {
+        return await ExecuteWithRetry(async (client) =>
+        {
+            var commandRequest = CreateCommandRequest(command);
+            var response = await client.ExecuteCommandAsync(commandRequest);
+            
+            return new ApiResponse<bool>(response.Success, response.Success, response.ErrorMessage);
+        });
+    }
+
+    // Group operations
+    public async Task<ApiResponse<GroupListResponse>> GetGroupsAsync(Service.Infrastructure.GetGroupsCommand command)
+    {
+        return await ExecuteWithRetry(async (client) =>
+        {
+            var commandRequest = CreateCommandRequest(command);
+            var response = await client.ExecuteCommandAsync(commandRequest);
+            
+            if (response.Success && response.ResultData.Length > 0)
+            {
+                var groups = ProtoSerializer.Deserialize<List<Group>>(response.ResultData);
+                var groupResponses = groups.Select(g => new GroupResponse(g.Id, g.Name, g.Parents.FirstOrDefault()?.Id)).ToList();
+                var result = new GroupListResponse(groupResponses, groups.Count, command.Page, command.PageSize);
+                
+                return new ApiResponse<GroupListResponse>(true, result);
+            }
+            
+            return new ApiResponse<GroupListResponse>(false, null, response.ErrorMessage ?? "Failed to retrieve groups");
+        });
+    }
+
+    public async Task<ApiResponse<GroupResponse>> GetGroupAsync(Service.Infrastructure.GetGroupCommand command)
+    {
+        return await ExecuteWithRetry(async (client) =>
+        {
+            var commandRequest = CreateCommandRequest(command);
+            var response = await client.ExecuteCommandAsync(commandRequest);
+            
+            if (response.Success && response.ResultData.Length > 0)
+            {
+                var group = ProtoSerializer.Deserialize<Group>(response.ResultData);
+                var result = new GroupResponse(group.Id, group.Name, group.Parents.FirstOrDefault()?.Id);
+                
+                return new ApiResponse<GroupResponse>(true, result);
+            }
+            
+            return new ApiResponse<GroupResponse>(false, null, response.ErrorMessage ?? "Group not found");
+        });
+    }
+
+    public async Task<ApiResponse<GroupResponse>> CreateGroupAsync(Service.Infrastructure.CreateGroupCommand command)
+    {
+        return await ExecuteWithRetry(async (client) =>
+        {
+            var commandRequest = CreateCommandRequest(command);
+            var response = await client.ExecuteCommandAsync(commandRequest);
+            
+            if (response.Success && response.ResultData.Length > 0)
+            {
+                var group = ProtoSerializer.Deserialize<Group>(response.ResultData);
+                var result = new GroupResponse(group.Id, group.Name, group.Parents.FirstOrDefault()?.Id);
+                
+                return new ApiResponse<GroupResponse>(true, result);
+            }
+            
+            return new ApiResponse<GroupResponse>(false, null, response.ErrorMessage ?? "Failed to create group");
+        });
+    }
+
+    public async Task<ApiResponse<GroupResponse>> UpdateGroupAsync(Service.Infrastructure.UpdateGroupCommand command)
+    {
+        return await ExecuteWithRetry(async (client) =>
+        {
+            var commandRequest = CreateCommandRequest(command);
+            var response = await client.ExecuteCommandAsync(commandRequest);
+            
+            if (response.Success && response.ResultData.Length > 0)
+            {
+                var group = ProtoSerializer.Deserialize<Group>(response.ResultData);
+                var result = new GroupResponse(group.Id, group.Name, group.Parents.FirstOrDefault()?.Id);
+                
+                return new ApiResponse<GroupResponse>(true, result);
+            }
+            
+            return new ApiResponse<GroupResponse>(false, null, response.ErrorMessage ?? "Failed to update group");
+        });
+    }
+
+    public async Task<ApiResponse<bool>> DeleteGroupAsync(Service.Infrastructure.DeleteGroupCommand command)
+    {
+        return await ExecuteWithRetry(async (client) =>
+        {
+            var commandRequest = CreateCommandRequest(command);
+            var response = await client.ExecuteCommandAsync(commandRequest);
+            
+            return new ApiResponse<bool>(response.Success, response.Success, response.ErrorMessage);
+        });
+    }
+
+    // Role operations
+    public async Task<ApiResponse<RoleListResponse>> GetRolesAsync(Service.Infrastructure.GetRolesCommand command)
+    {
+        return await ExecuteWithRetry(async (client) =>
+        {
+            var commandRequest = CreateCommandRequest(command);
+            var response = await client.ExecuteCommandAsync(commandRequest);
+            
+            if (response.Success && response.ResultData.Length > 0)
+            {
+                var roles = ProtoSerializer.Deserialize<List<Role>>(response.ResultData);
+                var roleResponses = roles.Select(r => new RoleResponse(r.Id, r.Name, r.Parents.FirstOrDefault()?.Id)).ToList();
+                var result = new RoleListResponse(roleResponses, roles.Count, command.Page, command.PageSize);
+                
+                return new ApiResponse<RoleListResponse>(true, result);
+            }
+            
+            return new ApiResponse<RoleListResponse>(false, null, response.ErrorMessage ?? "Failed to retrieve roles");
+        });
+    }
+
+    public async Task<ApiResponse<RoleResponse>> GetRoleAsync(Service.Infrastructure.GetRoleCommand command)
+    {
+        return await ExecuteWithRetry(async (client) =>
+        {
+            var commandRequest = CreateCommandRequest(command);
+            var response = await client.ExecuteCommandAsync(commandRequest);
+            
+            if (response.Success && response.ResultData.Length > 0)
+            {
+                var role = ProtoSerializer.Deserialize<Role>(response.ResultData);
+                var result = new RoleResponse(role.Id, role.Name, role.Parents.FirstOrDefault()?.Id);
+                
+                return new ApiResponse<RoleResponse>(true, result);
+            }
+            
+            return new ApiResponse<RoleResponse>(false, null, response.ErrorMessage ?? "Role not found");
+        });
+    }
+
+    public async Task<ApiResponse<RoleResponse>> CreateRoleAsync(Service.Infrastructure.CreateRoleCommand command)
+    {
+        return await ExecuteWithRetry(async (client) =>
+        {
+            var commandRequest = CreateCommandRequest(command);
+            var response = await client.ExecuteCommandAsync(commandRequest);
+            
+            if (response.Success && response.ResultData.Length > 0)
+            {
+                var role = ProtoSerializer.Deserialize<Role>(response.ResultData);
+                var result = new RoleResponse(role.Id, role.Name, role.Parents.FirstOrDefault()?.Id);
+                
+                return new ApiResponse<RoleResponse>(true, result);
+            }
+            
+            return new ApiResponse<RoleResponse>(false, null, response.ErrorMessage ?? "Failed to create role");
+        });
+    }
+
+    public async Task<ApiResponse<RoleResponse>> UpdateRoleAsync(Service.Infrastructure.UpdateRoleCommand command)
+    {
+        return await ExecuteWithRetry(async (client) =>
+        {
+            var commandRequest = CreateCommandRequest(command);
+            var response = await client.ExecuteCommandAsync(commandRequest);
+            
+            if (response.Success && response.ResultData.Length > 0)
+            {
+                var role = ProtoSerializer.Deserialize<Role>(response.ResultData);
+                var result = new RoleResponse(role.Id, role.Name, role.Parents.FirstOrDefault()?.Id);
+                
+                return new ApiResponse<RoleResponse>(true, result);
+            }
+            
+            return new ApiResponse<RoleResponse>(false, null, response.ErrorMessage ?? "Failed to update role");
+        });
+    }
+
+    public async Task<ApiResponse<bool>> DeleteRoleAsync(Service.Infrastructure.DeleteRoleCommand command)
+    {
+        return await ExecuteWithRetry(async (client) =>
+        {
+            var commandRequest = CreateCommandRequest(command);
+            var response = await client.ExecuteCommandAsync(commandRequest);
+            
+            return new ApiResponse<bool>(response.Success, response.Success, response.ErrorMessage);
+        });
+    }
+
+    // Permission operations
+    public async Task<ApiResponse<PermissionListResponse>> GetEntityPermissionsAsync(Service.Infrastructure.GetEntityPermissionsCommand command)
+    {
+        return await ExecuteWithRetry(async (client) =>
+        {
+            var commandRequest = CreateCommandRequest(command);
+            var response = await client.ExecuteCommandAsync(commandRequest);
+            
+            if (response.Success && response.ResultData.Length > 0)
+            {
+                var permissions = ProtoSerializer.Deserialize<List<Permission>>(response.ResultData);
+                var permissionResponses = permissions.Select(p => new PermissionResponse(
+                    command.EntityId, p.Uri, p.HttpVerb.ToString(), p.Grant, p.Deny, p.Scheme.ToString())).ToList();
+                var result = new PermissionListResponse(permissionResponses, permissions.Count, command.Page, command.PageSize);
+                
+                return new ApiResponse<PermissionListResponse>(true, result);
+            }
+            
+            return new ApiResponse<PermissionListResponse>(false, null, response.ErrorMessage ?? "Failed to retrieve permissions");
+        });
+    }
+
+    public async Task<ApiResponse<bool>> RemovePermissionAsync(Service.Infrastructure.RemovePermissionCommand command)
     {
         return await ExecuteWithRetry(async (client) =>
         {
