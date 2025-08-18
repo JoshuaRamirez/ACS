@@ -182,6 +182,19 @@ public class CommandTranslationService
                 }
             },
             
+            Infrastructure.CheckPermissionCommand cmd => new Services.CheckPermissionCommand
+            {
+                EntityId = cmd.EntityId,
+                Uri = cmd.Uri,
+                HttpVerb = System.Enum.Parse<HttpVerb>(cmd.HttpVerb, true)
+            },
+            
+            Infrastructure.AddRoleToGroupCommand cmd => new Services.AddRoleToGroupCommand
+            {
+                GroupId = cmd.GroupId,
+                RoleId = cmd.RoleId
+            },
+            
             _ => throw new NotSupportedException($"Web command type {webCommand.GetType().Name} is not supported for translation")
         };
     }
@@ -191,6 +204,7 @@ public class CommandTranslationService
         return webCommand switch
         {
             Infrastructure.EvaluatePermissionCommand => true,
+            Infrastructure.CheckPermissionCommand => true,
             Infrastructure.GetUsersCommand => true,
             Infrastructure.GetUserCommand => true,
             Infrastructure.GetGroupsCommand => true,
@@ -219,6 +233,7 @@ public class CommandTranslationService
             Infrastructure.UpdateRoleCommand => true,
             Infrastructure.DeleteRoleCommand => true,
             Infrastructure.AssignUserToRoleCommand => true,
+            Infrastructure.AddRoleToGroupCommand => true,
             Infrastructure.GrantPermissionCommand => true,
             Infrastructure.DenyPermissionCommand => true,
             Infrastructure.RemovePermissionCommand => true,
@@ -234,9 +249,11 @@ public class CommandTranslationService
             Infrastructure.RemoveUserFromGroupCommand cmd => $"Remove user {cmd.TargetUserId} from group {cmd.GroupId}",
             Infrastructure.AssignUserToRoleCommand cmd => $"Assign user {cmd.TargetUserId} to role {cmd.RoleId}",
             Infrastructure.AddGroupToGroupCommand cmd => $"Add group {cmd.ChildGroupId} to group {cmd.ParentGroupId}",
+            Infrastructure.AddRoleToGroupCommand cmd => $"Add role {cmd.RoleId} to group {cmd.GroupId}",
             Infrastructure.GrantPermissionCommand cmd => $"Grant permission {cmd.Uri}:{cmd.Verb} to entity {cmd.EntityId}",
             Infrastructure.DenyPermissionCommand cmd => $"Deny permission {cmd.Uri}:{cmd.Verb} to entity {cmd.EntityId}",
             Infrastructure.EvaluatePermissionCommand cmd => $"Check permission {cmd.Uri}:{cmd.Verb} for user {cmd.TargetUserId}",
+            Infrastructure.CheckPermissionCommand cmd => $"Check permission {cmd.Uri}:{cmd.HttpVerb} for entity {cmd.EntityId}",
             _ => webCommand.GetType().Name
         };
     }

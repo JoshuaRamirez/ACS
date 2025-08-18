@@ -15,6 +15,7 @@ builder.Services.AddSingleton<TenantProcessDiscoveryService>();
 
 // Register tenant context and gRPC client services
 builder.Services.AddScoped<ITenantContextService, TenantContextService>();
+builder.Services.AddSingleton<CircuitBreakerService>();
 builder.Services.AddScoped<TenantGrpcClientService>();
 
 // Add logging

@@ -40,3 +40,28 @@ public record HealthCheckResponse(
     public HealthCheckResponse(string status, Dictionary<string, object> details) 
         : this(status, details, DateTime.UtcNow) { }
 };
+
+public record TenantHealthResponse(
+    string TenantId,
+    bool IsHealthy,
+    DateTime CheckTime,
+    long UptimeSeconds,
+    int ActiveConnections,
+    long CommandsProcessed,
+    string? Message = null
+);
+
+public record HealthStatusResponse(
+    string Component,
+    bool IsHealthy,
+    DateTime CheckTime,
+    string? Message = null,
+    Dictionary<string, object>? Details = null
+);
+
+public record DetailedHealthResponse(
+    bool OverallHealthy,
+    DateTime CheckTime,
+    HealthStatusResponse WebApiHealth,
+    List<TenantHealthResponse> TenantHealths
+);

@@ -15,13 +15,16 @@ public class TenantGrpcClientService
 {
     private readonly ILogger<TenantGrpcClientService> _logger;
     private readonly ITenantContextService _tenantContextService;
+    private readonly CircuitBreakerService _circuitBreaker;
 
     public TenantGrpcClientService(
         ILogger<TenantGrpcClientService> logger,
-        ITenantContextService tenantContextService)
+        ITenantContextService tenantContextService,
+        CircuitBreakerService circuitBreaker)
     {
         _logger = logger;
         _tenantContextService = tenantContextService;
+        _circuitBreaker = circuitBreaker;
     }
 
     public async Task<ApiResponse<T>> ExecuteCommandAsync<T>(Func<VerticalService.VerticalServiceClient, Task<T>> operation)
@@ -38,30 +41,41 @@ public class TenantGrpcClientService
                 return new ApiResponse<T>(false, default, $"Tenant process not available for tenant {tenantId}");
             }
 
-            var client = new VerticalService.VerticalServiceClient(channel);
-            
-            // Execute with retry logic
-            const int maxRetries = 3;
-            for (int attempt = 1; attempt <= maxRetries; attempt++)
+            // Use circuit breaker pattern for resilience
+            var result = await _circuitBreaker.ExecuteAsync(tenantId, async () =>
             {
-                try
+                var client = new VerticalService.VerticalServiceClient(channel);
+                
+                // Execute with retry logic inside circuit breaker
+                const int maxRetries = 3;
+                for (int attempt = 1; attempt <= maxRetries; attempt++)
                 {
-                    var result = await operation(client);
-                    _logger.LogDebug("Successfully executed gRPC command for tenant {TenantId} on attempt {Attempt}", tenantId, attempt);
-                    return new ApiResponse<T>(true, result);
+                    try
+                    {
+                        var commandResult = await operation(client);
+                        _logger.LogDebug("Successfully executed gRPC command for tenant {TenantId} on attempt {Attempt}", tenantId, attempt);
+                        return commandResult;
+                    }
+                    catch (RpcException rpcEx) when (attempt < maxRetries)
+                    {
+                        _logger.LogWarning(rpcEx, "gRPC call failed for tenant {TenantId} on attempt {Attempt}/{MaxRetries}: {Status}", 
+                            tenantId, attempt, maxRetries, rpcEx.Status);
+                        
+                        // Wait before retry
+                        await Task.Delay(TimeSpan.FromMilliseconds(100 * attempt));
+                    }
                 }
-                catch (RpcException rpcEx) when (attempt < maxRetries)
-                {
-                    _logger.LogWarning(rpcEx, "gRPC call failed for tenant {TenantId} on attempt {Attempt}/{MaxRetries}: {Status}", 
-                        tenantId, attempt, maxRetries, rpcEx.Status);
-                    
-                    // Wait before retry
-                    await Task.Delay(TimeSpan.FromMilliseconds(100 * attempt));
-                }
-            }
+                
+                // If we get here, all retries failed
+                throw new RpcException(new Status(StatusCode.Unavailable, "gRPC service temporarily unavailable after retries"));
+            });
             
-            // If we get here, all retries failed
-            return new ApiResponse<T>(false, default, "gRPC service temporarily unavailable");
+            return new ApiResponse<T>(true, result);
+        }
+        catch (CircuitBreakerOpenException cbEx)
+        {
+            _logger.LogWarning(cbEx, "Circuit breaker is open for tenant {TenantId}", tenantId);
+            return new ApiResponse<T>(false, default, "Service temporarily unavailable - circuit breaker open", new List<string> { cbEx.Message });
         }
         catch (RpcException rpcEx)
         {
