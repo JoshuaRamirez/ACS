@@ -1,4 +1,4 @@
-﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
 
 namespace ACS.Service.Data.Models;
 
@@ -9,5 +9,5 @@ public class Resource
 
     [Required]
     [MaxLength(255)]
-    public string Uri { get; set; }
+    public string Uri { get; set; } = string.Empty;
 }

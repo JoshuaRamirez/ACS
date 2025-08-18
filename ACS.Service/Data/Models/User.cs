@@ -3,11 +3,11 @@ namespace ACS.Service.Data.Models;
 public class User
 {
     public int Id { get; set; }
-    public string Name { get; set; }
+    public string Name { get; set; } = string.Empty;
     public int EntityId { get; set; }
-    public Entity Entity { get; set; }
+    public Entity Entity { get; set; } = null!;
     public int RoleId { get; set; }
-    public Role Role { get; set; }
+    public Role Role { get; set; } = null!;
     public int GroupId { get; set; }
-    public Group Group { get; set; }
+    public Group Group { get; set; } = null!;
 }

@@ -11,22 +11,22 @@ namespace ACS.Service.Data.Models
 
         [Required]
         [MaxLength(50)]
-        public string EntityType { get; set; }
+        public string EntityType { get; set; } = string.Empty;
 
         public int EntityId { get; set; }
 
         [Required]
         [MaxLength(10)]
-        public string ChangeType { get; set; }
+        public string ChangeType { get; set; } = string.Empty;
 
         [Required]
         [MaxLength(100)]
-        public string ChangedBy { get; set; }
+        public string ChangedBy { get; set; } = "System";
 
         [Required]
         public DateTime ChangeDate { get; set; } = DateTime.Now;
 
         [Required]
-        public string ChangeDetails { get; set; }
+        public string ChangeDetails { get; set; } = string.Empty;
     }
 }

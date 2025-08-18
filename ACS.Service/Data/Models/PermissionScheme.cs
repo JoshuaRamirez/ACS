@@ -1,4 +1,4 @@
-﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
 namespace ACS.Service.Data.Models;
@@ -11,6 +11,6 @@ public class PermissionScheme
     [ForeignKey("Entity")]
     public int? EntityId { get; set; }
     public int? SchemeTypeId { get; set; }
-    public SchemeType SchemeType { get; set; }
-    public Entity Entity { get; set; }
+    public SchemeType SchemeType { get; set; } = null!;
+    public Entity Entity { get; set; } = null!;
 }

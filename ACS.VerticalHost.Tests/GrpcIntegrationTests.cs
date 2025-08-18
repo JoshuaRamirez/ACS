@@ -22,7 +22,7 @@ public class GrpcIntegrationTests
     }
 
     [TestMethod]
-    public async Task ProtoSerializer_CanSerializeAndDeserialize()
+    public void ProtoSerializer_CanSerializeAndDeserialize()
     {
         // Arrange
         var testData = new TestCommand { Value = 42, Name = "Test" };
@@ -35,8 +35,8 @@ public class GrpcIntegrationTests
         Assert.IsNotNull(serialized);
         Assert.IsTrue(serialized.Length > 0);
         Assert.IsNotNull(deserialized);
-        Assert.AreEqual(testData.Value, deserialized.Value);
-        Assert.AreEqual(testData.Name, deserialized.Name);
+        Assert.AreEqual(testData.Value, deserialized?.Value);
+        Assert.AreEqual(testData.Name, deserialized?.Name);
     }
 
     private class TestCommand

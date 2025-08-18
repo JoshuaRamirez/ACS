@@ -253,7 +253,7 @@ public class TenantProcessManager : IDisposable
         return await StartTenantProcessAsync(tenantId);
     }
 
-    public async Task<Dictionary<string, bool>> GetProcessStatusAsync()
+    public Task<Dictionary<string, bool>> GetProcessStatusAsync()
     {
         var status = new Dictionary<string, bool>();
         
@@ -265,7 +265,7 @@ public class TenantProcessManager : IDisposable
             }
         }
 
-        return status;
+        return Task.FromResult(status);
     }
 
     public void Dispose()

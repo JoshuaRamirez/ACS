@@ -6,11 +6,11 @@ namespace ACS.Service.Delegates.Normalizers
 {
     internal static class AddPermissionToEntity
     {
-        public static List<PermissionScheme> PermissionSchemes { get; set; }
-        public static List<Entity> Entities { get; set; }
-        public static List<Resource> Resources { get; set; }
-        public static List<UriAccess> UriAccessList { get; set; }
-        public static List<SchemeType> SchemeTypes { get; set; }
+        public static List<PermissionScheme> PermissionSchemes { get; set; } = null!;
+        public static List<Entity> Entities { get; set; } = null!;
+        public static List<Resource> Resources { get; set; } = null!;
+        public static List<UriAccess> UriAccessList { get; set; } = null!;
+        public static List<SchemeType> SchemeTypes { get; set; } = null!;
         public static void Execute(Permission permission, int entityId)
         {
             var schemeType = SchemeTypes.Single(x => x.SchemeName == permission.Scheme.ToString());

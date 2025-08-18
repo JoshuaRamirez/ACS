@@ -1,4 +1,4 @@
-﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
 
 namespace ACS.Service.Data.Models;
 
@@ -9,5 +9,5 @@ public class VerbType
 
     [Required]
     [MaxLength(10)]
-    public string VerbName { get; set; }
+    public string VerbName { get; set; } = string.Empty;
 }

@@ -6,7 +6,7 @@ namespace ACS.Service.Delegates.Normalizers
 {
     internal static class CreateUriAccessNormalizer
     {
-        public static List<VerbType> VerbTypes { get; set; }
+        public static List<VerbType> VerbTypes { get; set; } = null!;
         public static List<UriAccess>? UriAccessList { get; set; }
         public static UriAccess Execute(PermissionScheme permissionScheme, Resource resource, Permission permission)
         {

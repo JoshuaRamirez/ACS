@@ -470,16 +470,14 @@ public class TenantDatabasePersistenceService
             // Set navigation properties if IDs are provided
             if (groupId.HasValue && groupId.Value > 0)
             {
-                user.Group = await _dbContext.Groups.FindAsync(groupId.Value);
-                if (user.Group == null)
-                    throw new InvalidOperationException($"Group {groupId.Value} not found");
+                var group = await _dbContext.Groups.FindAsync(groupId.Value);
+                user.Group = group ?? throw new InvalidOperationException($"Group {groupId.Value} not found");
             }
 
             if (roleId.HasValue && roleId.Value > 0)
             {
-                user.Role = await _dbContext.Roles.FindAsync(roleId.Value);
-                if (user.Role == null)
-                    throw new InvalidOperationException($"Role {roleId.Value} not found");
+                var role = await _dbContext.Roles.FindAsync(roleId.Value);
+                user.Role = role ?? throw new InvalidOperationException($"Role {roleId.Value} not found");
             }
 
             _dbContext.Users.Add(user);
@@ -508,9 +506,8 @@ public class TenantDatabasePersistenceService
             // Set navigation property if parent ID is provided
             if (parentGroupId.HasValue && parentGroupId.Value > 0)
             {
-                group.ParentGroup = await _dbContext.Groups.FindAsync(parentGroupId.Value);
-                if (group.ParentGroup == null)
-                    throw new InvalidOperationException($"Parent group {parentGroupId.Value} not found");
+                var parentGroup = await _dbContext.Groups.FindAsync(parentGroupId.Value);
+                group.ParentGroup = parentGroup ?? throw new InvalidOperationException($"Parent group {parentGroupId.Value} not found");
                 
                 // Check for circular references
                 if (await WouldCreateCircularReferenceAsync(groupId, parentGroupId.Value))
@@ -543,9 +540,8 @@ public class TenantDatabasePersistenceService
             // Set navigation property if group ID is provided
             if (groupId.HasValue && groupId.Value > 0)
             {
-                role.Group = await _dbContext.Groups.FindAsync(groupId.Value);
-                if (role.Group == null)
-                    throw new InvalidOperationException($"Group {groupId.Value} not found");
+                var group = await _dbContext.Groups.FindAsync(groupId.Value);
+                role.Group = group ?? throw new InvalidOperationException($"Group {groupId.Value} not found");
             }
 
             _dbContext.Roles.Add(role);

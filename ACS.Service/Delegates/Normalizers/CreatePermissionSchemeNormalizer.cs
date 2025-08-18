@@ -5,7 +5,7 @@ namespace ACS.Service.Delegates.Normalizers
 {
     internal static class CreatePermissionSchemeNormalizer
     {
-        public static List<PermissionScheme> PermissionSchemes { get; set; }
+        public static List<PermissionScheme> PermissionSchemes { get; set; } = null!;
         public static PermissionScheme Execute(int entityId)
         {
             var entityPermission = new PermissionScheme();

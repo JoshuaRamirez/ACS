@@ -9,7 +9,7 @@ namespace ACS.Service.Data
         {
         }
 
-        public static ApplicationDbContext Instance { get; set; }
+        public static ApplicationDbContext Instance { get; set; } = null!;
 
         public DbSet<Entity> Entities { get; set; }
         public DbSet<User> Users { get; set; }
