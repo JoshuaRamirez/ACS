@@ -1,37 +1,76 @@
-using System;
-using System.Linq;
-using ACS.Service.Domain;
+using ACS.Service.Data;
+using ACS.Service.Data.Models;
+using Microsoft.EntityFrameworkCore;
 
 namespace ACS.Service.Delegates.Normalizers
 {
-    internal static class AddGroupToGroupNormalizer
+    public static class AddGroupToGroupNormalizer
     {
-        // These now reference the same Domain objects as the entity graph
-        public static List<Group> Groups { get; set; } = null!;
-        
-        public static void Execute(int childGroupId, int parentGroupId)
+        public static async Task ExecuteAsync(ApplicationDbContext dbContext, int childGroupId, int parentGroupId, string createdBy)
         {
-            if (Groups is null)
+            // Verify both groups exist
+            var childExists = await dbContext.Groups.AnyAsync(g => g.Id == childGroupId);
+            if (!childExists)
             {
-                throw new InvalidOperationException("Groups collection has not been initialized.");
+                throw new InvalidOperationException($"Child group {childGroupId} not found.");
             }
 
-            var parent = Groups.SingleOrDefault(x => x.Id == parentGroupId)
-                ?? throw new InvalidOperationException($"Parent group {parentGroupId} not found.");
-
-            var child = Groups.SingleOrDefault(x => x.Id == childGroupId)
-                ?? throw new InvalidOperationException($"Child group {childGroupId} not found.");
-
-            // Update the domain object collections directly
-            if (!parent.Children.Contains(child))
+            var parentExists = await dbContext.Groups.AnyAsync(g => g.Id == parentGroupId);
+            if (!parentExists)
             {
-                parent.Children.Add(child);
+                throw new InvalidOperationException($"Parent group {parentGroupId} not found.");
+            }
+
+            // Check for self-reference
+            if (childGroupId == parentGroupId)
+            {
+                throw new InvalidOperationException("Cannot add group to itself.");
+            }
+
+            // Check if relationship already exists
+            var existingRelation = await dbContext.GroupHierarchies
+                .FirstOrDefaultAsync(gh => gh.ChildGroupId == childGroupId && gh.ParentGroupId == parentGroupId);
+            
+            if (existingRelation != null)
+            {
+                return; // Relationship already exists, nothing to do
+            }
+
+            // TODO: Add cycle detection logic here
+            // This would involve checking if adding this relationship would create a cycle
+
+            // Create the new relationship
+            var groupHierarchy = new GroupHierarchy
+            {
+                ChildGroupId = childGroupId,
+                ParentGroupId = parentGroupId,
+                CreatedBy = createdBy,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            dbContext.GroupHierarchies.Add(groupHierarchy);
+            
+            // Update the UpdatedAt timestamp for both groups
+            var childGroup = await dbContext.Groups.FindAsync(childGroupId);
+            var parentGroup = await dbContext.Groups.FindAsync(parentGroupId);
+            
+            if (childGroup != null)
+            {
+                childGroup.UpdatedAt = DateTime.UtcNow;
+                dbContext.Groups.Update(childGroup);
             }
             
-            if (!child.Parents.Contains(parent))
+            if (parentGroup != null)
             {
-                child.Parents.Add(parent);
+                parentGroup.UpdatedAt = DateTime.UtcNow;
+                dbContext.Groups.Update(parentGroup);
             }
+        }
+        
+        // Legacy method for compatibility - remove after domain layer is updated
+        public static void Execute(int childGroupId, int parentGroupId)
+        {
+            throw new NotSupportedException("Legacy normalizer method is no longer supported. Use ExecuteAsync instead.");
         }
     }
 }

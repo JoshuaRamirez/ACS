@@ -16,25 +16,29 @@ public class Group : Entity
     public void AddUser(User user)
     {
         AddChild(user);
-        AddUserToGroupNormalizer.Execute(user.Id, this.Id);
+        // Note: Persistence should now be handled through proper service layer
+        // AddUserToGroupNormalizer.Execute(user.Id, this.Id);
     }
 
     public void RemoveUser(User user)
     {
         RemoveChild(user);
-        RemoveUserFromGroupNormalizer.Execute(user.Id, this.Id);
+        // Note: Persistence should now be handled through proper service layer
+        // RemoveUserFromGroupNormalizer.Execute(user.Id, this.Id);
     }
 
     public void AddRole(Role role)
     {
         AddChild(role);
-        AddRoleToGroupNormalizer.Execute(role.Id, this.Id);
+        // Note: Persistence should now be handled through proper service layer
+        // AddRoleToGroupNormalizer.Execute(role.Id, this.Id);
     }
 
     public void RemoveRole(Role role)
     {
         RemoveChild(role);
-        RemoveRoleFromGroupNormalizer.Execute(role.Id, this.Id);
+        // Note: Persistence should now be handled through proper service layer
+        // RemoveRoleFromGroupNormalizer.Execute(role.Id, this.Id);
     }
 
     public void AddGroup(Group group)
@@ -44,13 +48,15 @@ public class Group : Entity
             throw new InvalidOperationException("Cannot add group to itself or create a cyclical hierarchy.");
         }
         AddChild(group);
-        AddGroupToGroupNormalizer.Execute(group.Id, this.Id);
+        // Note: Persistence should now be handled through proper service layer
+        // AddGroupToGroupNormalizer.Execute(group.Id, this.Id);
     }
 
     public void RemoveGroup(Group group)
     {
         RemoveChild(group);
-        RemoveGroupFromGroupNormalizer.Execute(group.Id, this.Id);
+        // Note: Persistence should now be handled through proper service layer
+        // RemoveGroupFromGroupNormalizer.Execute(group.Id, this.Id);
     }
 
     public void AddToGroup(Group parent)

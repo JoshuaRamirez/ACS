@@ -31,7 +31,7 @@ public class TenantProcessIntegrationTests
             
         // Register infrastructure services
         services.AddSingleton<TenantConfiguration>(new TenantConfiguration { TenantId = _testTenantId });
-        services.AddSingleton<InMemoryEntityGraph>();
+        services.AddScoped<InMemoryEntityGraph>();
         services.AddSingleton<TenantDatabasePersistenceService>();
         services.AddSingleton<EventPersistenceService>();
         services.AddSingleton<AccessControlDomainService>();

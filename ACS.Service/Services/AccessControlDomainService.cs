@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using ACS.Service.Infrastructure;
 using ACS.Service.Domain;
 using ACS.Service.Data;
+using ACS.Service.Caching;
 using System.Threading.Channels;
 using Polly;
 using Polly.Retry;
@@ -10,7 +11,7 @@ using System.Diagnostics;
 
 namespace ACS.Service.Services;
 
-public class AccessControlDomainService
+public class AccessControlDomainService : IDisposable
 {
     private static readonly ActivitySource ActivitySource = new("ACS.DomainService");
     
@@ -18,12 +19,17 @@ public class AccessControlDomainService
     private readonly ApplicationDbContext _dbContext;
     private readonly TenantDatabasePersistenceService _persistenceService;
     private readonly EventPersistenceService _eventPersistenceService;
+    private readonly DeadLetterQueueService _deadLetterQueue;
+    private readonly ErrorRecoveryService _errorRecovery;
+    private readonly HealthMonitoringService _healthMonitoring;
+    private readonly IEntityCache _cache;
     private readonly ILogger<AccessControlDomainService> _logger;
     private readonly Channel<DomainCommand> _commandChannel;
     private readonly ChannelWriter<DomainCommand> _commandWriter;
     private readonly ChannelReader<DomainCommand> _commandReader;
     private readonly CancellationTokenSource _cancellationTokenSource;
-    private readonly Task _processingTask;
+    private readonly Task? _processingTask;
+    private readonly bool _startBackgroundProcessing;
     
     // Thread-safe ID generation
     private int _nextUserId = 0;
@@ -38,13 +44,23 @@ public class AccessControlDomainService
         ApplicationDbContext dbContext,
         TenantDatabasePersistenceService persistenceService,
         EventPersistenceService eventPersistenceService,
-        ILogger<AccessControlDomainService> logger)
+        DeadLetterQueueService deadLetterQueue,
+        ErrorRecoveryService errorRecovery,
+        HealthMonitoringService healthMonitoring,
+        IEntityCache cache,
+        ILogger<AccessControlDomainService> logger,
+        bool startBackgroundProcessing = true)
     {
         _entityGraph = entityGraph;
         _dbContext = dbContext;
         _persistenceService = persistenceService;
         _eventPersistenceService = eventPersistenceService;
+        _deadLetterQueue = deadLetterQueue;
+        _errorRecovery = errorRecovery;
+        _healthMonitoring = healthMonitoring;
+        _cache = cache;
         _logger = logger;
+        _startBackgroundProcessing = startBackgroundProcessing;
         _cancellationTokenSource = new CancellationTokenSource();
 
         // Create single-threaded channel for command processing
@@ -74,16 +90,30 @@ public class AccessControlDomainService
                         retryCount, timeSpan.TotalMilliseconds);
                 });
 
-        // Start background processing task
-        _processingTask = Task.Run(ProcessCommandsAsync, _cancellationTokenSource.Token);
-        
-        _logger.LogInformation("AccessControlDomainService initialized with single-threaded command processing and retry policy");
+        // Start background processing task only if enabled
+        if (_startBackgroundProcessing)
+        {
+            _processingTask = Task.Run(ProcessCommandsAsync, _cancellationTokenSource.Token);
+            _logger.LogInformation("AccessControlDomainService initialized with single-threaded command processing and retry policy");
+        }
+        else
+        {
+            _logger.LogInformation("AccessControlDomainService initialized in synchronous mode for testing");
+        }
     }
 
     public async Task<TResult> ExecuteCommandAsync<TResult>(DomainCommand<TResult> command)
     {
         var completionSource = new TaskCompletionSource<TResult>();
         command.CompletionSource = completionSource;
+        command.CompletionSourceObject = completionSource; // Fix: Set this after creating the completion source
+        
+        if (!_startBackgroundProcessing)
+        {
+            // Execute synchronously for testing
+            await ProcessSingleCommand(command);
+            return await completionSource.Task;
+        }
 
         await _commandWriter.WriteAsync(command, _cancellationTokenSource.Token);
         
@@ -96,6 +126,14 @@ public class AccessControlDomainService
     {
         var completionSource = new TaskCompletionSource<bool>();
         command.VoidCompletionSource = completionSource;
+        
+        if (!_startBackgroundProcessing)
+        {
+            // Execute synchronously for testing
+            await ProcessSingleCommand(command);
+            await completionSource.Task;
+            return;
+        }
 
         await _commandWriter.WriteAsync(command, _cancellationTokenSource.Token);
         
@@ -119,6 +157,34 @@ public class AccessControlDomainService
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, "Error processing command {CommandType}", command.GetType().Name);
+                    
+                    // Check if this error type should be retried
+                    bool shouldRetry = ex switch
+                    {
+                        ArgumentNullException => false,      // Null arguments (more specific)
+                        ArgumentException => false,          // Invalid parameters (more general)
+                        NotSupportedException => false,      // Unsupported operations
+                        _ => true                           // Retry database/infrastructure errors (including InvalidOperationException)
+                    };
+                    
+                    // Enqueue failed command to dead letter queue for retry only if it should be retried
+                    if (shouldRetry)
+                    {
+                        try
+                        {
+                            await _deadLetterQueue.EnqueueFailedCommandAsync(command, ex);
+                            _logger.LogInformation("Enqueued failed command {CommandType} to dead letter queue for retry", command.GetType().Name);
+                        }
+                        catch (Exception dlqEx)
+                        {
+                            _logger.LogError(dlqEx, "Failed to enqueue command {CommandType} to dead letter queue", command.GetType().Name);
+                        }
+                    }
+                    else
+                    {
+                        _logger.LogWarning("Command {CommandType} failed with non-retryable error: {ErrorType}. Will not retry.", 
+                            command.GetType().Name, ex.GetType().Name);
+                    }
                     
                     // Complete command with error
                     if (command.VoidCompletionSource != null)
@@ -148,7 +214,7 @@ public class AccessControlDomainService
         
         try
         {
-            // Execute the command using pattern matching
+            // Execute the command using pattern matching (error recovery applied at persistence level)
             object? result = command switch
             {
                 // CREATE Commands - Phase 2 requirement
@@ -213,6 +279,9 @@ public class AccessControlDomainService
                 activity?.SetTag("command.slow", true);
             }
             
+            // Record successful operation for health monitoring
+            _healthMonitoring.RecordSuccess("domain_command", duration);
+            
             _logger.LogDebug("Completed command {CommandType} in {Duration}ms", 
                 command.GetType().Name, duration.TotalMilliseconds);
         }
@@ -227,7 +296,22 @@ public class AccessControlDomainService
             activity?.SetTag("error.type", ex.GetType().Name);
             activity?.SetTag("error.message", ex.Message);
             
-            _logger.LogError(ex, "Failed to process command {CommandType}", command.GetType().Name);
+            // Check if this is a critical error that should not be retried
+            bool shouldRetry = ex switch
+            {
+                ArgumentNullException => false,      // Null arguments (more specific)
+                ArgumentException => false,          // Invalid parameters (more general)
+                NotSupportedException => false,      // Unsupported operations
+                _ => true                           // Retry database/infrastructure errors (including InvalidOperationException)
+            };
+            
+            activity?.SetTag("error.should_retry", shouldRetry);
+            
+            // Record failed operation for health monitoring
+            _healthMonitoring.RecordFailure("domain_command", ex, duration);
+            
+            _logger.LogError(ex, "Failed to process command {CommandType}. ShouldRetry: {ShouldRetry}", 
+                command.GetType().Name, shouldRetry);
             throw;
         }
     }
@@ -243,14 +327,22 @@ public class AccessControlDomainService
         user.Parents.Add(group);
         group.Children.Add(user);
 
-        // Execute normalizer for database model synchronization
-        ACS.Service.Delegates.Normalizers.AddUserToGroupNormalizer.Execute(command.UserId, command.GroupId);
+        // Normalizer will be executed by persistence service
 
-        // Persist to database
-        await _persistenceService.PersistAddUserToGroupAsync(command.UserId, command.GroupId);
+        // Persist to database with error recovery
+        await _errorRecovery.ExecuteWithRecoveryAsync(
+            "database",
+            async ct => await _persistenceService.PersistAddUserToGroupAsync(command.UserId, command.GroupId),
+            maxRetries: 3,
+            cancellationToken: _cancellationTokenSource.Token);
 
         // Log audit event
         await _eventPersistenceService.LogAddUserToGroupAsync(command.UserId, command.GroupId);
+        
+        // Invalidate caches for affected entities
+        await _cache.InvalidateUserAsync(command.UserId);
+        await _cache.InvalidateGroupAsync(command.GroupId);
+        await _cache.InvalidateUserGroupsAsync(command.UserId);
 
         _logger.LogInformation("Added user {UserId} to group {GroupId}", command.UserId, command.GroupId);
         
@@ -266,14 +358,18 @@ public class AccessControlDomainService
         user.Parents.Remove(group);
         group.Children.Remove(user);
 
-        // Execute normalizer for database model synchronization
-        ACS.Service.Delegates.Normalizers.RemoveUserFromGroupNormalizer.Execute(command.UserId, command.GroupId);
+        // Normalizer will be executed by persistence service
 
         // Persist to database
         await _persistenceService.PersistRemoveUserFromGroupAsync(command.UserId, command.GroupId);
 
         // Log audit event
         await _eventPersistenceService.LogRemoveUserFromGroupAsync(command.UserId, command.GroupId);
+        
+        // Invalidate caches for affected entities
+        await _cache.InvalidateUserAsync(command.UserId);
+        await _cache.InvalidateGroupAsync(command.GroupId);
+        await _cache.InvalidateUserGroupsAsync(command.UserId);
 
         _logger.LogInformation("Removed user {UserId} from group {GroupId}", command.UserId, command.GroupId);
         
@@ -292,14 +388,18 @@ public class AccessControlDomainService
         user.Parents.Add(role);
         role.Children.Add(user);
 
-        // Execute normalizer for database model synchronization
-        ACS.Service.Delegates.Normalizers.AssignUserToRoleNormalizer.Execute(command.UserId, command.RoleId);
+        // Normalizer will be executed by persistence service
 
         // Persist to database
         await _persistenceService.PersistAssignUserToRoleAsync(command.UserId, command.RoleId);
 
         // Log audit event
         await _eventPersistenceService.LogAssignUserToRoleAsync(command.UserId, command.RoleId);
+        
+        // Invalidate caches for affected entities
+        await _cache.InvalidateUserAsync(command.UserId);
+        await _cache.InvalidateRoleAsync(command.RoleId);
+        await _cache.InvalidateUserRolesAsync(command.UserId);
 
         _logger.LogInformation("Assigned user {UserId} to role {RoleId}", command.UserId, command.RoleId);
         
@@ -314,14 +414,18 @@ public class AccessControlDomainService
         user.Parents.Remove(role);
         role.Children.Remove(user);
 
-        // Execute normalizer for database model synchronization
-        ACS.Service.Delegates.Normalizers.UnAssignUserFromRoleNormalizer.Execute(command.UserId, command.RoleId);
+        // Normalizer will be executed by persistence service
 
         // Persist to database
         await _persistenceService.PersistUnAssignUserFromRoleAsync(command.UserId, command.RoleId);
 
         // Log audit event
         await _eventPersistenceService.LogUnAssignUserFromRoleAsync(command.UserId, command.RoleId);
+        
+        // Invalidate caches for affected entities
+        await _cache.InvalidateUserAsync(command.UserId);
+        await _cache.InvalidateRoleAsync(command.RoleId);
+        await _cache.InvalidateUserRolesAsync(command.UserId);
 
         _logger.LogInformation("Unassigned user {UserId} from role {RoleId}", command.UserId, command.RoleId);
         
@@ -340,8 +444,7 @@ public class AccessControlDomainService
         group.Children.Add(role);
         role.Parents.Add(group);
 
-        // Execute normalizer for database model synchronization
-        ACS.Service.Delegates.Normalizers.AddRoleToGroupNormalizer.Execute(command.GroupId, command.RoleId);
+        // Normalizer will be executed by persistence service
 
         // Persist to database
         await _persistenceService.PersistAddRoleToGroupAsync(command.GroupId, command.RoleId);
@@ -363,7 +466,8 @@ public class AccessControlDomainService
         role.Parents.Remove(group);
 
         // Execute normalizer for database model synchronization
-        ACS.Service.Delegates.Normalizers.RemoveRoleFromGroupNormalizer.Execute(command.GroupId, command.RoleId);
+        // TODO: Update RemoveRoleFromGroupNormalizer to use async pattern
+        // await ACS.Service.Delegates.Normalizers.RemoveRoleFromGroupNormalizer.ExecuteAsync(_dbContext, command.RoleId, command.GroupId);
 
         // Persist to database
         await _persistenceService.PersistRemoveRoleFromGroupAsync(command.GroupId, command.RoleId);
@@ -394,8 +498,7 @@ public class AccessControlDomainService
         parentGroup.Children.Add(childGroup);
         childGroup.Parents.Add(parentGroup);
 
-        // Execute normalizer for database model synchronization
-        ACS.Service.Delegates.Normalizers.AddGroupToGroupNormalizer.Execute(command.ParentGroupId, command.ChildGroupId);
+        // Normalizer will be executed by persistence service
 
         // Persist to database
         await _persistenceService.PersistAddGroupToGroupAsync(command.ParentGroupId, command.ChildGroupId);
@@ -417,7 +520,8 @@ public class AccessControlDomainService
         childGroup.Parents.Remove(parentGroup);
 
         // Execute normalizer for database model synchronization
-        ACS.Service.Delegates.Normalizers.RemoveGroupFromGroupNormalizer.Execute(command.ParentGroupId, command.ChildGroupId);
+        // TODO: Update RemoveGroupFromGroupNormalizer to use async pattern
+        // await ACS.Service.Delegates.Normalizers.RemoveGroupFromGroupNormalizer.ExecuteAsync(_dbContext, command.ParentGroupId, command.ChildGroupId);
 
         // Persist to database
         await _persistenceService.PersistRemoveGroupFromGroupAsync(command.ParentGroupId, command.ChildGroupId);
@@ -453,13 +557,17 @@ public class AccessControlDomainService
         entity.Permissions.Add(command.Permission);
 
         // Execute normalizer for database model synchronization
-        ACS.Service.Delegates.Normalizers.AddPermissionToEntity.Execute(command.Permission, command.EntityId);
+        // TODO: Update AddPermissionToEntity normalizer to use async pattern
+        // ACS.Service.Delegates.Normalizers.AddPermissionToEntity.Execute(command.Permission, command.EntityId);
 
         // Persist to database
         await _persistenceService.PersistAddPermissionToEntityAsync(command.EntityId, command.Permission);
 
         // Log audit event
         await _eventPersistenceService.LogAddPermissionToEntityAsync(command.EntityId, command.Permission);
+        
+        // Invalidate permission cache for the entity
+        await _cache.InvalidateEntityPermissionsAsync(command.EntityId);
 
         _logger.LogInformation("Added permission {Uri}:{HttpVerb} to entity {EntityId}", 
             command.Permission.Uri, command.Permission.HttpVerb, command.EntityId);
@@ -486,13 +594,17 @@ public class AccessControlDomainService
         entity.Permissions.Remove(command.Permission);
 
         // Execute normalizer for database model synchronization
-        ACS.Service.Delegates.Normalizers.RemovePermissionFromEntity.Execute(command.Permission, command.EntityId);
+        // TODO: Update RemovePermissionFromEntity normalizer to use async pattern
+        // ACS.Service.Delegates.Normalizers.RemovePermissionFromEntity.Execute(command.Permission, command.EntityId);
 
         // Persist to database
         await _persistenceService.PersistRemovePermissionFromEntityAsync(command.EntityId, command.Permission);
 
         // Log audit event
         await _eventPersistenceService.LogRemovePermissionFromEntityAsync(command.EntityId, command.Permission);
+        
+        // Invalidate permission cache for the entity
+        await _cache.InvalidateEntityPermissionsAsync(command.EntityId);
 
         _logger.LogInformation("Removed permission {Uri}:{HttpVerb} from entity {EntityId}", 
             command.Permission.Uri, command.Permission.HttpVerb, command.EntityId);
@@ -532,17 +644,59 @@ public class AccessControlDomainService
 
     private User ProcessGetUser(GetUserCommand command)
     {
-        return _entityGraph.GetUser(command.UserId);
+        // Try cache first
+        var cachedUser = _cache.GetUserAsync(command.UserId).GetAwaiter().GetResult();
+        if (cachedUser != null)
+        {
+            _logger.LogTrace("User {UserId} retrieved from cache", command.UserId);
+            return cachedUser;
+        }
+        
+        // Fallback to entity graph
+        var user = _entityGraph.GetUser(command.UserId);
+        
+        // Cache the result
+        _cache.SetUserAsync(user).GetAwaiter().GetResult();
+        
+        return user;
     }
 
     private Group ProcessGetGroup(GetGroupCommand command)
     {
-        return _entityGraph.GetGroup(command.GroupId);
+        // Try cache first
+        var cachedGroup = _cache.GetGroupAsync(command.GroupId).GetAwaiter().GetResult();
+        if (cachedGroup != null)
+        {
+            _logger.LogTrace("Group {GroupId} retrieved from cache", command.GroupId);
+            return cachedGroup;
+        }
+        
+        // Fallback to entity graph
+        var group = _entityGraph.GetGroup(command.GroupId);
+        
+        // Cache the result
+        _cache.SetGroupAsync(group).GetAwaiter().GetResult();
+        
+        return group;
     }
 
     private Role ProcessGetRole(GetRoleCommand command)
     {
-        return _entityGraph.GetRole(command.RoleId);
+        // Try cache first
+        var cachedRole = _cache.GetRoleAsync(command.RoleId).GetAwaiter().GetResult();
+        if (cachedRole != null)
+        {
+            _logger.LogTrace("Role {RoleId} retrieved from cache", command.RoleId);
+            return cachedRole;
+        }
+        
+        // Fallback to entity graph
+        var role = _entityGraph.GetRole(command.RoleId);
+        
+        // Cache the result
+        _cache.SetRoleAsync(role).GetAwaiter().GetResult();
+        
+        return role;
     }
 
     #endregion
@@ -610,6 +764,8 @@ public class AccessControlDomainService
             var group = _entityGraph.GetGroup(command.GroupId.Value);
             user.Parents.Add(group);
             group.Children.Add(user);
+            // Invalidate group cache due to child change
+            await _cache.InvalidateGroupAsync(command.GroupId.Value);
         }
 
         // Handle optional role assignment
@@ -618,6 +774,8 @@ public class AccessControlDomainService
             var role = _entityGraph.GetRole(command.RoleId.Value);
             user.Parents.Add(role);
             role.Children.Add(user);
+            // Invalidate role cache due to child change
+            await _cache.InvalidateRoleAsync(command.RoleId.Value);
         }
 
         // Persist to database with retry logic
@@ -637,6 +795,9 @@ public class AccessControlDomainService
 
         // Refresh normalizer collections to include new user (optimized)
         RefreshNormalizerCollectionsForUsers();
+        
+        // Cache the new user
+        await _cache.SetUserAsync(user);
 
         _logger.LogInformation("Created user {UserId} with name '{UserName}'", user.Id, user.Name);
         
@@ -674,6 +835,8 @@ public class AccessControlDomainService
             
             group.Parents.Add(parentGroup);
             parentGroup.Children.Add(group);
+            // Invalidate parent group cache due to child change
+            await _cache.InvalidateGroupAsync(command.ParentGroupId.Value);
         }
 
         // Persist to database
@@ -684,6 +847,9 @@ public class AccessControlDomainService
 
         // Refresh normalizer collections to include new group (optimized)
         RefreshNormalizerCollectionsForGroups();
+        
+        // Cache the new group
+        await _cache.SetGroupAsync(group);
 
         _logger.LogInformation("Created group {GroupId} with name '{GroupName}'", group.Id, group.Name);
         
@@ -714,6 +880,8 @@ public class AccessControlDomainService
             var group = _entityGraph.GetGroup(command.GroupId.Value);
             role.Parents.Add(group);
             group.Children.Add(role);
+            // Invalidate group cache due to child change
+            await _cache.InvalidateGroupAsync(command.GroupId.Value);
         }
 
         // Persist to database
@@ -724,6 +892,9 @@ public class AccessControlDomainService
 
         // Refresh normalizer collections to include new role (optimized)
         RefreshNormalizerCollectionsForRoles();
+        
+        // Cache the new role
+        await _cache.SetRoleAsync(role);
 
         _logger.LogInformation("Created role {RoleId} with name '{RoleName}'", role.Id, role.Name);
         
@@ -749,6 +920,10 @@ public class AccessControlDomainService
 
         // Log audit event
         await _eventPersistenceService.LogUpdateUserAsync(command.UserId, command.Name);
+        
+        // Invalidate and update cache
+        await _cache.InvalidateUserAsync(command.UserId);
+        await _cache.SetUserAsync(user);
 
         _logger.LogInformation("Updated user {UserId} with name '{UserName}'", command.UserId, command.Name);
         return user;
@@ -769,6 +944,10 @@ public class AccessControlDomainService
 
         // Log audit event
         await _eventPersistenceService.LogUpdateGroupAsync(command.GroupId, command.Name);
+        
+        // Invalidate and update cache
+        await _cache.InvalidateGroupAsync(command.GroupId);
+        await _cache.SetGroupAsync(group);
 
         _logger.LogInformation("Updated group {GroupId} with name '{GroupName}'", command.GroupId, command.Name);
         return group;
@@ -789,6 +968,10 @@ public class AccessControlDomainService
 
         // Log audit event
         await _eventPersistenceService.LogUpdateRoleAsync(command.RoleId, command.Name);
+        
+        // Invalidate and update cache
+        await _cache.InvalidateRoleAsync(command.RoleId);
+        await _cache.SetRoleAsync(role);
 
         _logger.LogInformation("Updated role {RoleId} with name '{RoleName}'", command.RoleId, command.Name);
         return role;
@@ -828,6 +1011,9 @@ public class AccessControlDomainService
 
         // Log audit event
         await _eventPersistenceService.LogDeleteUserAsync(command.UserId);
+        
+        // Invalidate cache
+        await _cache.InvalidateUserAsync(command.UserId);
 
         _logger.LogInformation("Deleted user {UserId}", command.UserId);
         return true;
@@ -863,6 +1049,9 @@ public class AccessControlDomainService
 
         // Log audit event
         await _eventPersistenceService.LogDeleteGroupAsync(command.GroupId);
+        
+        // Invalidate cache
+        await _cache.InvalidateGroupAsync(command.GroupId);
 
         _logger.LogInformation("Deleted group {GroupId}", command.GroupId);
         return true;
@@ -898,6 +1087,9 @@ public class AccessControlDomainService
 
         // Log audit event
         await _eventPersistenceService.LogDeleteRoleAsync(command.RoleId);
+        
+        // Invalidate cache
+        await _cache.InvalidateRoleAsync(command.RoleId);
 
         _logger.LogInformation("Deleted role {RoleId}", command.RoleId);
         return true;
@@ -986,6 +1178,9 @@ public class AccessControlDomainService
         _nextGroupId = _entityGraph.Groups.Keys.Any() ? _entityGraph.Groups.Keys.Max() : 0;
         _nextRoleId = _entityGraph.Roles.Keys.Any() ? _entityGraph.Roles.Keys.Max() : 0;
         
+        // Warm up the cache with frequently accessed entities
+        await _cache.WarmupAsync();
+        
         _logger.LogInformation("Entity graph loaded and normalizer references hydrated. Next IDs: User={UserId}, Group={GroupId}, Role={RoleId}", 
             _nextUserId + 1, _nextGroupId + 1, _nextRoleId + 1);
     }
@@ -1036,45 +1231,9 @@ public class AccessControlDomainService
             rolesList = _entityGraph.Roles.Values.ToList();
         }
 
-        // Update normalizers only for changed collections
-        if (refreshUsers && usersList != null)
-        {
-            // User-Group normalizers
-            ACS.Service.Delegates.Normalizers.AddUserToGroupNormalizer.Users = usersList;
-            ACS.Service.Delegates.Normalizers.RemoveUserFromGroupNormalizer.Users = usersList;
-            
-            // User-Role normalizers
-            ACS.Service.Delegates.Normalizers.AssignUserToRoleNormalizer.Users = usersList;
-            ACS.Service.Delegates.Normalizers.UnAssignUserFromRoleNormalizer.Users = usersList;
-        }
-        
-        if (refreshGroups && groupsList != null)
-        {
-            // User-Group normalizers
-            ACS.Service.Delegates.Normalizers.AddUserToGroupNormalizer.Groups = groupsList;
-            ACS.Service.Delegates.Normalizers.RemoveUserFromGroupNormalizer.Groups = groupsList;
-            
-            // Group-Role normalizers
-            ACS.Service.Delegates.Normalizers.AddRoleToGroupNormalizer.Groups = groupsList;
-            ACS.Service.Delegates.Normalizers.RemoveRoleFromGroupNormalizer.Groups = groupsList;
-            
-            // Group-Group normalizers
-            ACS.Service.Delegates.Normalizers.AddGroupToGroupNormalizer.Groups = groupsList;
-            ACS.Service.Delegates.Normalizers.RemoveGroupFromGroupNormalizer.Groups = groupsList;
-        }
-        
-        if (refreshRoles && rolesList != null)
-        {
-            // User-Role normalizers
-            ACS.Service.Delegates.Normalizers.AssignUserToRoleNormalizer.Roles = rolesList;
-            ACS.Service.Delegates.Normalizers.UnAssignUserFromRoleNormalizer.Roles = rolesList;
-            
-            // Group-Role normalizers
-            ACS.Service.Delegates.Normalizers.AddRoleToGroupNormalizer.Roles = rolesList;
-            ACS.Service.Delegates.Normalizers.RemoveRoleFromGroupNormalizer.Roles = rolesList;
-        }
-
-        _logger.LogDebug("Normalizer collections refreshed - Users: {RefreshUsers}, Groups: {RefreshGroups}, Roles: {RefreshRoles}", 
+        // Note: Normalizers now use database persistence directly via DbContext
+        // The static collection pattern has been replaced with async database operations
+        _logger.LogDebug("Entity collections refreshed - Users: {RefreshUsers}, Groups: {RefreshGroups}, Roles: {RefreshRoles}", 
             refreshUsers, refreshGroups, refreshRoles);
     }
 
@@ -1083,13 +1242,16 @@ public class AccessControlDomainService
         _cancellationTokenSource.Cancel();
         _commandWriter.Complete();
         
-        try
+        if (_processingTask != null)
         {
-            _processingTask.Wait(TimeSpan.FromSeconds(5));
-        }
-        catch (AggregateException ex) when (ex.InnerExceptions.All(e => e is OperationCanceledException))
-        {
-            // Expected cancellation
+            try
+            {
+                _processingTask.Wait(TimeSpan.FromSeconds(5));
+            }
+            catch (AggregateException ex) when (ex.InnerExceptions.All(e => e is OperationCanceledException))
+            {
+                // Expected cancellation
+            }
         }
         
         _cancellationTokenSource.Dispose();

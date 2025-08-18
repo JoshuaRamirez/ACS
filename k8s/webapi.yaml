@@ -1,0 +1,198 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: acs-webapi
+  namespace: acs-system
+  labels:
+    app.kubernetes.io/name: acs
+    app.kubernetes.io/component: webapi
+    app.kubernetes.io/version: "1.0.0"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: acs
+      app.kubernetes.io/component: webapi
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: acs
+        app.kubernetes.io/component: webapi
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "5000"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+      - name: webapi
+        image: acs/webapi:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 5000
+          name: http
+        - containerPort: 5001
+          name: https
+        env:
+        - name: ASPNETCORE_ENVIRONMENT
+          valueFrom:
+            configMapKeyRef:
+              name: acs-config
+              key: ASPNETCORE_ENVIRONMENT
+        - name: ASPNETCORE_URLS
+          value: "https://+:5001;http://+:5000"
+        - name: ConnectionStrings__DefaultConnection
+          value: "Server=sqlserver;Database=ACSDatabase;User Id=sa;Password=$(DB_PASSWORD);TrustServerCertificate=true"
+        - name: ConnectionStrings__Redis
+          value: "redis:6379"
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: acs-secrets
+              key: DB_PASSWORD
+        - name: JwtSettings__SecretKey
+          valueFrom:
+            secretKeyRef:
+              name: acs-secrets
+              key: JWT_SECRET
+        - name: JwtSettings__Issuer
+          valueFrom:
+            configMapKeyRef:
+              name: acs-config
+              key: JwtSettings__Issuer
+        - name: JwtSettings__Audience
+          valueFrom:
+            configMapKeyRef:
+              name: acs-config
+              key: JwtSettings__Audience
+        - name: JwtSettings__ExpiryMinutes
+          valueFrom:
+            configMapKeyRef:
+              name: acs-config
+              key: JwtSettings__ExpiryMinutes
+        - name: RateLimit__Enabled
+          valueFrom:
+            configMapKeyRef:
+              name: acs-config
+              key: RateLimit__Enabled
+        - name: OpenTelemetry__ServiceName
+          value: "ACS-WebApi"
+        - name: OpenTelemetry__Endpoint
+          valueFrom:
+            configMapKeyRef:
+              name: acs-config
+              key: OpenTelemetry__Endpoint
+        volumeMounts:
+        - name: acs-keys
+          mountPath: /app/keys
+          readOnly: true
+        - name: tmp
+          mountPath: /tmp
+        resources:
+          requests:
+            cpu: 200m
+            memory: 256Mi
+          limits:
+            cpu: 1000m
+            memory: 1Gi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 5000
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 5000
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 5000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 10
+      volumes:
+      - name: acs-keys
+        persistentVolumeClaim:
+          claimName: acs-keys
+      - name: tmp
+        emptyDir: {}
+      initContainers:
+      - name: wait-for-db
+        image: busybox:1.35
+        command: 
+        - sh
+        - -c
+        - |
+          echo "Waiting for SQL Server..."
+          until nc -z sqlserver 1433; do
+            echo "SQL Server is unavailable - sleeping"
+            sleep 2
+          done
+          echo "SQL Server is ready!"
+      - name: wait-for-redis
+        image: busybox:1.35
+        command:
+        - sh
+        - -c
+        - |
+          echo "Waiting for Redis..."
+          until nc -z redis 6379; do
+            echo "Redis is unavailable - sleeping"
+            sleep 2
+          done
+          echo "Redis is ready!"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: acs-webapi
+  namespace: acs-system
+  labels:
+    app.kubernetes.io/name: acs
+    app.kubernetes.io/component: webapi
+spec:
+  type: ClusterIP
+  ports:
+  - port: 5000
+    targetPort: 5000
+    name: http
+  - port: 5001
+    targetPort: 5001
+    name: https
+  selector:
+    app.kubernetes.io/name: acs
+    app.kubernetes.io/component: webapi
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: acs-webapi-ingress
+  namespace: acs-system
+  labels:
+    app.kubernetes.io/name: acs
+    app.kubernetes.io/component: webapi
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  tls:
+  - hosts:
+    - api.acs.example.com
+    secretName: acs-webapi-tls
+  rules:
+  - host: api.acs.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: acs-webapi
+            port:
+              number: 5001

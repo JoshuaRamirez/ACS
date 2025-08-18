@@ -11,11 +11,17 @@
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
     <PackageReference Include="MSTest" Version="3.6.4" />
     <PackageReference Include="Grpc.Net.Client" Version="2.66.0" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="8.0.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="8.0.0" />
+    <PackageReference Include="Moq" Version="4.20.70" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\ACS.Core\ACS.Core.csproj" />
     <ProjectReference Include="..\ACS.VerticalHost\ACS.VerticalHost.csproj" />
+    <ProjectReference Include="..\ACS.WebApi\ACS.WebApi.csproj" />
+    <ProjectReference Include="..\ACS.Service\ACS.Service.csproj" />
+    <ProjectReference Include="..\ACS.Infrastructure\ACS.Infrastructure.csproj" />
   </ItemGroup>
 
   <ItemGroup>

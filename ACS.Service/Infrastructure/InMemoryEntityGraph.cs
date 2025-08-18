@@ -11,10 +11,10 @@ public class InMemoryEntityGraph
     private readonly ILogger<InMemoryEntityGraph> _logger;
 
     // Master collections of all domain objects
-    public Dictionary<int, User> Users { get; private set; } = new();
-    public Dictionary<int, Group> Groups { get; private set; } = new();
-    public Dictionary<int, Role> Roles { get; private set; } = new();
-    public Dictionary<int, Permission> Permissions { get; private set; } = new();
+    public virtual Dictionary<int, User> Users { get; private set; } = new();
+    public virtual Dictionary<int, Group> Groups { get; private set; } = new();
+    public virtual Dictionary<int, Role> Roles { get; private set; } = new();
+    public virtual Dictionary<int, Permission> Permissions { get; private set; } = new();
 
     // Performance metrics
     public DateTime LastLoadTime { get; private set; }
@@ -39,7 +39,7 @@ public class InMemoryEntityGraph
         _logger = logger;
     }
 
-    public async Task LoadFromDatabaseAsync(CancellationToken cancellationToken = default)
+    public virtual async Task LoadFromDatabaseAsync(CancellationToken cancellationToken = default)
     {
         var overallStartTime = DateTime.UtcNow;
         _logger.LogInformation("Starting optimized entity graph load from database");
@@ -248,10 +248,9 @@ public class InMemoryEntityGraph
 
     private async Task BuildUserGroupRelationships()
     {
-        // Load from User table where GroupId is not null
-        var userGroupMappings = await _dbContext.Users
-            .Where(u => u.GroupId > 0)
-            .Select(u => new { UserId = u.Id, GroupId = u.GroupId })
+        // Load from UserGroup junction table
+        var userGroupMappings = await _dbContext.UserGroups
+            .Select(ug => new { UserId = ug.UserId, GroupId = ug.GroupId })
             .AsNoTracking()
             .ToListAsync();
 
@@ -271,10 +270,9 @@ public class InMemoryEntityGraph
 
     private async Task BuildUserRoleRelationships()
     {
-        // Load from User table where RoleId is not null
-        var userRoleMappings = await _dbContext.Users
-            .Where(u => u.RoleId > 0)
-            .Select(u => new { UserId = u.Id, RoleId = u.RoleId })
+        // Load from UserRole junction table
+        var userRoleMappings = await _dbContext.UserRoles
+            .Select(ur => new { UserId = ur.UserId, RoleId = ur.RoleId })
             .AsNoTracking()
             .ToListAsync();
 
@@ -293,10 +291,9 @@ public class InMemoryEntityGraph
 
     private async Task BuildGroupRoleRelationships()
     {
-        // Load from Role table where GroupId is not null
-        var groupRoleMappings = await _dbContext.Roles
-            .Where(r => r.GroupId > 0)
-            .Select(r => new { RoleId = r.Id, GroupId = r.GroupId })
+        // Load from GroupRole junction table
+        var groupRoleMappings = await _dbContext.GroupRoles
+            .Select(gr => new { GroupId = gr.GroupId, RoleId = gr.RoleId })
             .AsNoTracking()
             .ToListAsync();
 
@@ -315,10 +312,9 @@ public class InMemoryEntityGraph
 
     private async Task BuildGroupHierarchyRelationships()
     {
-        // Load group hierarchy from ParentGroup relationships
-        var groupHierarchyMappings = await _dbContext.Groups
-            .Where(g => g.ParentGroupId > 0)
-            .Select(g => new { ChildGroupId = g.Id, ParentGroupId = g.ParentGroupId })
+        // Load group hierarchy from GroupHierarchy junction table
+        var groupHierarchyMappings = await _dbContext.GroupHierarchies
+            .Select(gh => new { ChildGroupId = gh.ChildGroupId, ParentGroupId = gh.ParentGroupId })
             .AsNoTracking()
             .ToListAsync();
 
@@ -653,25 +649,24 @@ public class InMemoryEntityGraph
 
     private async Task BuildUserGroupRelationshipsOptimized(CancellationToken cancellationToken)
     {
-        var mappings = await _dbContext.Users
-            .Where(u => u.GroupId > 0)
+        var mappings = await _dbContext.UserGroups
             .AsNoTracking()
-            .Select(u => new { u.Id, u.GroupId })
+            .Select(ug => new { UserId = ug.UserId, GroupId = ug.GroupId })
             .ToListAsync(cancellationToken);
 
         foreach (var mapping in mappings)
         {
-            if (Users.TryGetValue(mapping.Id, out var user) && 
+            if (Users.TryGetValue(mapping.UserId, out var user) && 
                 Groups.TryGetValue(mapping.GroupId, out var group))
             {
                 user.Parents.Add(group);
                 group.Children.Add(user);
                 
                 // Build index
-                if (!_userGroupIndex.TryGetValue(mapping.Id, out var userGroups))
+                if (!_userGroupIndex.TryGetValue(mapping.UserId, out var userGroups))
                 {
                     userGroups = new List<int>();
-                    _userGroupIndex[mapping.Id] = userGroups;
+                    _userGroupIndex[mapping.UserId] = userGroups;
                 }
                 userGroups.Add(mapping.GroupId);
             }
@@ -682,25 +677,24 @@ public class InMemoryEntityGraph
 
     private async Task BuildUserRoleRelationshipsOptimized(CancellationToken cancellationToken)
     {
-        var mappings = await _dbContext.Users
-            .Where(u => u.RoleId > 0)
+        var mappings = await _dbContext.UserRoles
             .AsNoTracking()
-            .Select(u => new { u.Id, u.RoleId })
+            .Select(ur => new { UserId = ur.UserId, RoleId = ur.RoleId })
             .ToListAsync(cancellationToken);
 
         foreach (var mapping in mappings)
         {
-            if (Users.TryGetValue(mapping.Id, out var user) && 
+            if (Users.TryGetValue(mapping.UserId, out var user) && 
                 Roles.TryGetValue(mapping.RoleId, out var role))
             {
                 user.Parents.Add(role);
                 role.Children.Add(user);
                 
                 // Build index
-                if (!_userRoleIndex.TryGetValue(mapping.Id, out var userRoles))
+                if (!_userRoleIndex.TryGetValue(mapping.UserId, out var userRoles))
                 {
                     userRoles = new List<int>();
-                    _userRoleIndex[mapping.Id] = userRoles;
+                    _userRoleIndex[mapping.UserId] = userRoles;
                 }
                 userRoles.Add(mapping.RoleId);
             }
@@ -711,16 +705,15 @@ public class InMemoryEntityGraph
 
     private async Task BuildGroupRoleRelationshipsOptimized(CancellationToken cancellationToken)
     {
-        var mappings = await _dbContext.Roles
-            .Where(r => r.GroupId > 0)
+        var mappings = await _dbContext.GroupRoles
             .AsNoTracking()
-            .Select(r => new { r.Id, r.GroupId })
+            .Select(gr => new { GroupId = gr.GroupId, RoleId = gr.RoleId })
             .ToListAsync(cancellationToken);
 
         foreach (var mapping in mappings)
         {
             if (Groups.TryGetValue(mapping.GroupId, out var group) && 
-                Roles.TryGetValue(mapping.Id, out var role))
+                Roles.TryGetValue(mapping.RoleId, out var role))
             {
                 group.Children.Add(role);
                 role.Parents.Add(group);
@@ -731,7 +724,7 @@ public class InMemoryEntityGraph
                     groupRoles = new List<int>();
                     _groupRoleIndex[mapping.GroupId] = groupRoles;
                 }
-                groupRoles.Add(mapping.Id);
+                groupRoles.Add(mapping.RoleId);
             }
         }
         
@@ -740,27 +733,26 @@ public class InMemoryEntityGraph
 
     private async Task BuildGroupHierarchyRelationshipsOptimized(CancellationToken cancellationToken)
     {
-        var mappings = await _dbContext.Groups
-            .Where(g => g.ParentGroupId > 0)
+        var mappings = await _dbContext.GroupHierarchies
             .AsNoTracking()
-            .Select(g => new { ChildId = g.Id, ParentId = g.ParentGroupId })
+            .Select(gh => new { ChildGroupId = gh.ChildGroupId, ParentGroupId = gh.ParentGroupId })
             .ToListAsync(cancellationToken);
 
         foreach (var mapping in mappings)
         {
-            if (Groups.TryGetValue(mapping.ChildId, out var childGroup) && 
-                Groups.TryGetValue(mapping.ParentId, out var parentGroup))
+            if (Groups.TryGetValue(mapping.ChildGroupId, out var childGroup) && 
+                Groups.TryGetValue(mapping.ParentGroupId, out var parentGroup))
             {
                 childGroup.Parents.Add(parentGroup);
                 parentGroup.Children.Add(childGroup);
                 
                 // Build index
-                if (!_groupHierarchyIndex.TryGetValue(mapping.ParentId, out var childGroups))
+                if (!_groupHierarchyIndex.TryGetValue(mapping.ParentGroupId, out var childGroups))
                 {
                     childGroups = new List<int>();
-                    _groupHierarchyIndex[mapping.ParentId] = childGroups;
+                    _groupHierarchyIndex[mapping.ParentGroupId] = childGroups;
                 }
-                childGroups.Add(mapping.ChildId);
+                childGroups.Add(mapping.ChildGroupId);
             }
         }
         

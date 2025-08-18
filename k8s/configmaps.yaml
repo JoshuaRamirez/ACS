@@ -1,0 +1,138 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: acs-config
+  namespace: acs-system
+  labels:
+    app.kubernetes.io/name: acs
+    app.kubernetes.io/component: config
+data:
+  ASPNETCORE_ENVIRONMENT: "Production"
+  TenantProcesses__BasePort: "6000"
+  TenantProcesses__ProcessTimeout: "30000"
+  TenantProcesses__MaxRetries: "3"
+  RateLimit__Enabled: "true"
+  RateLimit__DefaultPolicy__RequestLimit: "100"
+  RateLimit__DefaultPolicy__WindowSizeSeconds: "60"
+  OpenTelemetry__ServiceName: "ACS"
+  OpenTelemetry__Endpoint: "http://otel-collector:4317"
+  JwtSettings__Issuer: "ACS-K8s"
+  JwtSettings__Audience: "ACS-API"
+  JwtSettings__ExpiryMinutes: "60"
+  Encryption__KeyRotationDays: "90"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: acs-prometheus-config
+  namespace: acs-system
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+
+    scrape_configs:
+      - job_name: 'acs-webapi'
+        kubernetes_sd_configs:
+        - role: endpoints
+          namespaces:
+            names:
+            - acs-system
+        relabel_configs:
+        - source_labels: [__meta_kubernetes_service_name]
+          action: keep
+          regex: acs-webapi
+        - source_labels: [__meta_kubernetes_endpoint_port_name]
+          action: keep
+          regex: http
+
+      - job_name: 'acs-tenants'
+        kubernetes_sd_configs:
+        - role: endpoints
+          namespaces:
+            names:
+            - acs-system
+        relabel_configs:
+        - source_labels: [__meta_kubernetes_service_name]
+          action: keep
+          regex: acs-tenant.*
+        - source_labels: [__meta_kubernetes_endpoint_port_name]
+          action: keep
+          regex: http
+
+      - job_name: 'kubernetes-pods'
+        kubernetes_sd_configs:
+        - role: pod
+          namespaces:
+            names:
+            - acs-system
+        relabel_configs:
+        - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+          action: keep
+          regex: true
+        - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+          action: replace
+          target_label: __metrics_path__
+          regex: (.+)
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: acs-otel-config
+  namespace: acs-system
+data:
+  otel-collector-config.yaml: |
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+      prometheus:
+        config:
+          scrape_configs:
+          - job_name: 'acs-metrics'
+            kubernetes_sd_configs:
+            - role: pod
+              namespaces:
+                names:
+                - acs-system
+            relabel_configs:
+            - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+              action: keep
+              regex: true
+
+    processors:
+      batch:
+      resource:
+        attributes:
+        - key: k8s.cluster.name
+          value: "acs-cluster"
+          action: insert
+
+    exporters:
+      prometheus:
+        endpoint: "0.0.0.0:8888"
+      logging:
+        loglevel: info
+      jaeger:
+        endpoint: jaeger-collector:14250
+        tls:
+          insecure: true
+
+    service:
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [batch, resource]
+          exporters: [jaeger, logging]
+        metrics:
+          receivers: [otlp, prometheus]
+          processors: [batch, resource]
+          exporters: [prometheus, logging]
+        logs:
+          receivers: [otlp]
+          processors: [batch, resource]
+          exporters: [logging]

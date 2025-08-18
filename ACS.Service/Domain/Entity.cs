@@ -1,6 +1,3 @@
-using System.Collections.ObjectModel;
-using ACS.Service.Delegates.Normalizers;
-
 namespace ACS.Service.Domain;
 
 public abstract class Entity
@@ -14,14 +11,16 @@ public abstract class Entity
     public void AddPermission(Permission permission)
     {
         Permissions.Add(permission);
-        AddPermissionToEntity.Execute(permission, Id);
+        // Note: Persistence should now be handled through proper service layer
+        // AddPermissionToEntity.Execute(permission, Id);
     }
 
     public void RemovePermission(Permission permission)
     {
         if (Permissions.Remove(permission))
         {
-            RemovePermissionFromEntity.Execute(permission, Id);
+            // Note: Persistence should now be handled through proper service layer
+            // RemovePermissionFromEntity.Execute(permission, Id);
         }
     }
 
@@ -37,62 +36,13 @@ public abstract class Entity
         child.Parents.Remove(this);
     }
 
-    private List<Permission> AggregatePermissions()
-    {
-        var aggregatedPermissions = new List<Permission>();
-        var queue = new Queue<Entity>();
-        queue.Enqueue(this);
-
-        while (queue.Count > 0)
-        {
-            var currentEntity = queue.Dequeue();
-            aggregatedPermissions.AddRange(currentEntity.Permissions);
-
-            foreach (var child in currentEntity.Children)
-            {
-                queue.Enqueue(child);
-            }
-        }
-
-        return ResolvePermissionConflicts(aggregatedPermissions);
-    }
-
-    private List<Permission> ResolvePermissionConflicts(List<Permission> permissions)
-    {
-        var resolvedPermissions = new Dictionary<string, Permission>();
-
-        foreach (var permission in permissions)
-        {
-            var key = $"{permission.Uri}:{permission.HttpVerb}";
-
-            if (!resolvedPermissions.ContainsKey(key))
-            {
-                resolvedPermissions[key] = permission;
-            }
-            else
-            {
-                var existingPermission = resolvedPermissions[key];
-
-                if (permission.Deny)
-                {
-                    existingPermission.Deny = true;
-                    existingPermission.Grant = false;
-                }
-                else if (permission.Grant && !existingPermission.Deny)
-                {
-                    existingPermission.Grant = true;
-                }
-            }
-        }
-
-        return resolvedPermissions.Values.ToList();
-    }
-
+    // Note: Permission evaluation is now handled by IPermissionEvaluationService
+    // This method is deprecated and should not be used for production logic
+    [Obsolete("Use IPermissionEvaluationService.HasPermissionAsync instead")]
     public bool HasPermission(string uri, HttpVerb httpVerb)
     {
-        var permissions = AggregatePermissions();
-        var permission = permissions.FirstOrDefault(p => p.Uri == uri && p.HttpVerb == httpVerb);
-
+        // Simple in-memory check for compatibility
+        var permission = Permissions.FirstOrDefault(p => p.Uri == uri && p.HttpVerb == httpVerb);
         return permission != null && permission.Grant && !permission.Deny;
     }
 }

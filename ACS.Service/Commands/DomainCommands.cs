@@ -12,11 +12,6 @@ public abstract class DomainCommand
 public abstract class DomainCommand<TResult> : DomainCommand
 {
     public TaskCompletionSource<TResult>? CompletionSource { get; set; }
-    
-    public DomainCommand()
-    {
-        CompletionSourceObject = CompletionSource;
-    }
 }
 
 // User-Group Commands

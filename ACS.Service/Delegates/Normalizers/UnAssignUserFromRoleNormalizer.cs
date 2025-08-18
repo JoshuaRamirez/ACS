@@ -1,37 +1,45 @@
-using ACS.Service.Domain;
+using ACS.Service.Data;
+using Microsoft.EntityFrameworkCore;
 
 namespace ACS.Service.Delegates.Normalizers
 {
-    internal static class UnAssignUserFromRoleNormalizer
+    public static class UnAssignUserFromRoleNormalizer
     {
-        // These now reference the same Domain objects as the entity graph
-        public static List<Role> Roles { get; set; } = null!;
-        public static List<User> Users { get; set; } = null!;
+        public static async Task ExecuteAsync(ApplicationDbContext dbContext, int userId, int roleId)
+        {
+            // Find the existing relationship
+            var existingRelation = await dbContext.UserRoles
+                .FirstOrDefaultAsync(ur => ur.UserId == userId && ur.RoleId == roleId);
+            
+            if (existingRelation == null)
+            {
+                throw new InvalidOperationException($"User {userId} is not assigned to role {roleId}.");
+            }
+
+            // Remove the relationship
+            dbContext.UserRoles.Remove(existingRelation);
+            
+            // Update the UpdatedAt timestamp for both entities
+            var user = await dbContext.Users.FindAsync(userId);
+            var role = await dbContext.Roles.FindAsync(roleId);
+            
+            if (user != null)
+            {
+                user.UpdatedAt = DateTime.UtcNow;
+                dbContext.Users.Update(user);
+            }
+            
+            if (role != null)
+            {
+                role.UpdatedAt = DateTime.UtcNow;
+                dbContext.Roles.Update(role);
+            }
+        }
         
+        // Legacy method for compatibility - remove after domain layer is updated
         public static void Execute(int userId, int roleId)
         {
-            if (Roles is null)
-            {
-                throw new InvalidOperationException("Roles collection has not been initialized.");
-            }
-
-            if (Users is null)
-            {
-                throw new InvalidOperationException("Users collection has not been initialized.");
-            }
-
-            var user = Users.SingleOrDefault(x => x.Id == userId)
-                ?? throw new InvalidOperationException($"User {userId} not found.");
-
-            var role = Roles.SingleOrDefault(x => x.Id == roleId)
-                ?? throw new InvalidOperationException($"Role {roleId} not found.");
-
-            if (role.Children.Contains(user))
-            {
-                // Update the domain object collections directly
-                role.Children.Remove(user);
-                user.Parents.Remove(role);
-            }
+            throw new NotSupportedException("Legacy normalizer method is no longer supported. Use ExecuteAsync instead.");
         }
     }
 }

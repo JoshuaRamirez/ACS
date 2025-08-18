@@ -1,0 +1,380 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: acs-tenant1
+  namespace: acs-system
+  labels:
+    app.kubernetes.io/name: acs
+    app.kubernetes.io/component: tenant
+    app.kubernetes.io/instance: tenant1
+    app.kubernetes.io/version: "1.0.0"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: acs
+      app.kubernetes.io/component: tenant
+      app.kubernetes.io/instance: tenant1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: acs
+        app.kubernetes.io/component: tenant
+        app.kubernetes.io/instance: tenant1
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "6000"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+      - name: tenant
+        image: acs/verticalhost:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 6000
+          name: http
+        - containerPort: 6001
+          name: https
+        env:
+        - name: TENANT_ID
+          value: "tenant1"
+        - name: ASPNETCORE_ENVIRONMENT
+          valueFrom:
+            configMapKeyRef:
+              name: acs-config
+              key: ASPNETCORE_ENVIRONMENT
+        - name: ASPNETCORE_URLS
+          value: "https://+:6001;http://+:6000"
+        - name: ConnectionStrings__DefaultConnection
+          value: "Server=sqlserver;Database=ACSDatabase;User Id=sa;Password=$(DB_PASSWORD);TrustServerCertificate=true"
+        - name: ConnectionStrings__Redis
+          value: "redis:6379"
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: acs-secrets
+              key: DB_PASSWORD
+        - name: OpenTelemetry__ServiceName
+          value: "ACS-Tenant1"
+        - name: OpenTelemetry__Endpoint
+          valueFrom:
+            configMapKeyRef:
+              name: acs-config
+              key: OpenTelemetry__Endpoint
+        volumeMounts:
+        - name: acs-keys
+          mountPath: /app/keys
+          readOnly: true
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 6000
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 6000
+          initialDelaySeconds: 10
+          periodSeconds: 10
+      volumes:
+      - name: acs-keys
+        persistentVolumeClaim:
+          claimName: acs-keys
+      initContainers:
+      - name: wait-for-dependencies
+        image: busybox:1.35
+        command:
+        - sh
+        - -c
+        - |
+          echo "Waiting for dependencies..."
+          until nc -z sqlserver 1433 && nc -z redis 6379; do
+            echo "Waiting for SQL Server and Redis..."
+            sleep 2
+          done
+          echo "Dependencies are ready!"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: acs-tenant1
+  namespace: acs-system
+  labels:
+    app.kubernetes.io/name: acs
+    app.kubernetes.io/component: tenant
+    app.kubernetes.io/instance: tenant1
+spec:
+  type: ClusterIP
+  ports:
+  - port: 6000
+    targetPort: 6000
+    name: http
+  - port: 6001
+    targetPort: 6001
+    name: https
+  selector:
+    app.kubernetes.io/name: acs
+    app.kubernetes.io/component: tenant
+    app.kubernetes.io/instance: tenant1
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: acs-tenant2
+  namespace: acs-system
+  labels:
+    app.kubernetes.io/name: acs
+    app.kubernetes.io/component: tenant
+    app.kubernetes.io/instance: tenant2
+    app.kubernetes.io/version: "1.0.0"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: acs
+      app.kubernetes.io/component: tenant
+      app.kubernetes.io/instance: tenant2
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: acs
+        app.kubernetes.io/component: tenant
+        app.kubernetes.io/instance: tenant2
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "6002"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+      - name: tenant
+        image: acs/verticalhost:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 6002
+          name: http
+        - containerPort: 6003
+          name: https
+        env:
+        - name: TENANT_ID
+          value: "tenant2"
+        - name: ASPNETCORE_ENVIRONMENT
+          valueFrom:
+            configMapKeyRef:
+              name: acs-config
+              key: ASPNETCORE_ENVIRONMENT
+        - name: ASPNETCORE_URLS
+          value: "https://+:6003;http://+:6002"
+        - name: ConnectionStrings__DefaultConnection
+          value: "Server=sqlserver;Database=ACSDatabase;User Id=sa;Password=$(DB_PASSWORD);TrustServerCertificate=true"
+        - name: ConnectionStrings__Redis
+          value: "redis:6379"
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: acs-secrets
+              key: DB_PASSWORD
+        - name: OpenTelemetry__ServiceName
+          value: "ACS-Tenant2"
+        - name: OpenTelemetry__Endpoint
+          valueFrom:
+            configMapKeyRef:
+              name: acs-config
+              key: OpenTelemetry__Endpoint
+        volumeMounts:
+        - name: acs-keys
+          mountPath: /app/keys
+          readOnly: true
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 6002
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 6002
+          initialDelaySeconds: 10
+          periodSeconds: 10
+      volumes:
+      - name: acs-keys
+        persistentVolumeClaim:
+          claimName: acs-keys
+      initContainers:
+      - name: wait-for-dependencies
+        image: busybox:1.35
+        command:
+        - sh
+        - -c
+        - |
+          echo "Waiting for dependencies..."
+          until nc -z sqlserver 1433 && nc -z redis 6379; do
+            echo "Waiting for SQL Server and Redis..."
+            sleep 2
+          done
+          echo "Dependencies are ready!"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: acs-tenant2
+  namespace: acs-system
+  labels:
+    app.kubernetes.io/name: acs
+    app.kubernetes.io/component: tenant
+    app.kubernetes.io/instance: tenant2
+spec:
+  type: ClusterIP
+  ports:
+  - port: 6002
+    targetPort: 6002
+    name: http
+  - port: 6003
+    targetPort: 6003
+    name: https
+  selector:
+    app.kubernetes.io/name: acs
+    app.kubernetes.io/component: tenant
+    app.kubernetes.io/instance: tenant2
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: acs-tenant3
+  namespace: acs-system
+  labels:
+    app.kubernetes.io/name: acs
+    app.kubernetes.io/component: tenant
+    app.kubernetes.io/instance: tenant3
+    app.kubernetes.io/version: "1.0.0"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: acs
+      app.kubernetes.io/component: tenant
+      app.kubernetes.io/instance: tenant3
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: acs
+        app.kubernetes.io/component: tenant
+        app.kubernetes.io/instance: tenant3
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "6004"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+      - name: tenant
+        image: acs/verticalhost:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 6004
+          name: http
+        - containerPort: 6005
+          name: https
+        env:
+        - name: TENANT_ID
+          value: "tenant3"
+        - name: ASPNETCORE_ENVIRONMENT
+          valueFrom:
+            configMapKeyRef:
+              name: acs-config
+              key: ASPNETCORE_ENVIRONMENT
+        - name: ASPNETCORE_URLS
+          value: "https://+:6005;http://+:6004"
+        - name: ConnectionStrings__DefaultConnection
+          value: "Server=sqlserver;Database=ACSDatabase;User Id=sa;Password=$(DB_PASSWORD);TrustServerCertificate=true"
+        - name: ConnectionStrings__Redis
+          value: "redis:6379"
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: acs-secrets
+              key: DB_PASSWORD
+        - name: OpenTelemetry__ServiceName
+          value: "ACS-Tenant3"
+        - name: OpenTelemetry__Endpoint
+          valueFrom:
+            configMapKeyRef:
+              name: acs-config
+              key: OpenTelemetry__Endpoint
+        volumeMounts:
+        - name: acs-keys
+          mountPath: /app/keys
+          readOnly: true
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 6004
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 6004
+          initialDelaySeconds: 10
+          periodSeconds: 10
+      volumes:
+      - name: acs-keys
+        persistentVolumeClaim:
+          claimName: acs-keys
+      initContainers:
+      - name: wait-for-dependencies
+        image: busybox:1.35
+        command:
+        - sh
+        - -c
+        - |
+          echo "Waiting for dependencies..."
+          until nc -z sqlserver 1433 && nc -z redis 6379; do
+            echo "Waiting for SQL Server and Redis..."
+            sleep 2
+          done
+          echo "Dependencies are ready!"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: acs-tenant3
+  namespace: acs-system
+  labels:
+    app.kubernetes.io/name: acs
+    app.kubernetes.io/component: tenant
+    app.kubernetes.io/instance: tenant3
+spec:
+  type: ClusterIP
+  ports:
+  - port: 6004
+    targetPort: 6004
+    name: http
+  - port: 6005
+    targetPort: 6005
+    name: https
+  selector:
+    app.kubernetes.io/name: acs
+    app.kubernetes.io/component: tenant
+    app.kubernetes.io/instance: tenant3

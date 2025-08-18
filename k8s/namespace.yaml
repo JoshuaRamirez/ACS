@@ -1,0 +1,39 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: acs-system
+  labels:
+    name: acs-system
+    app.kubernetes.io/name: acs
+    app.kubernetes.io/version: "1.0.0"
+    app.kubernetes.io/component: system
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: acs-resource-quota
+  namespace: acs-system
+spec:
+  hard:
+    requests.cpu: "8"
+    requests.memory: 16Gi
+    limits.cpu: "16"
+    limits.memory: 32Gi
+    persistentvolumeclaims: "10"
+    services: "20"
+    pods: "50"
+---
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: acs-limit-range
+  namespace: acs-system
+spec:
+  limits:
+  - default:
+      cpu: 500m
+      memory: 512Mi
+    defaultRequest:
+      cpu: 100m
+      memory: 128Mi
+    type: Container

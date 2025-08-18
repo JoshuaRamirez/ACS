@@ -11,13 +11,15 @@ public class Role : Entity
     public void AssignUser(User user)
     {
         AddChild(user);
-        AssignUserToRoleNormalizer.Execute(user.Id, this.Id);
+        // Note: Persistence should now be handled through proper service layer
+        // AssignUserToRoleNormalizer.Execute(user.Id, this.Id);
     }
 
     public void UnAssignUser(User user)
     {
         RemoveChild(user);
-        UnAssignUserFromRoleNormalizer.Execute(user.Id, this.Id);
+        // Note: Persistence should now be handled through proper service layer
+        // UnAssignUserFromRoleNormalizer.Execute(user.Id, this.Id);
     }
 
     public void AddToGroup(Group group)

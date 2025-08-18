@@ -1,44 +1,67 @@
-using System;
-using System.Linq;
-using ACS.Service.Domain;
+using ACS.Service.Data;
+using ACS.Service.Data.Models;
+using Microsoft.EntityFrameworkCore;
 
 namespace ACS.Service.Delegates.Normalizers
 {
-    internal static class AddUserToGroupNormalizer
+    public static class AddUserToGroupNormalizer
     {
-        // These now reference the same Domain objects as the entity graph
-        public static List<Group> Groups { get; set; } = null!;
-        public static List<User> Users { get; set; } = null!;
-        
-        public static void Execute(int userId, int groupId)
+        public static async Task ExecuteAsync(ApplicationDbContext dbContext, int userId, int groupId, string createdBy)
         {
-            if (Groups is null)
+            // Verify the user and group exist
+            var userExists = await dbContext.Users.AnyAsync(u => u.Id == userId);
+            if (!userExists)
             {
-                throw new InvalidOperationException("Groups collection has not been initialized.");
+                throw new InvalidOperationException($"User {userId} not found.");
             }
 
-            if (Users is null)
+            var groupExists = await dbContext.Groups.AnyAsync(g => g.Id == groupId);
+            if (!groupExists)
             {
-                throw new InvalidOperationException("Users collection has not been initialized.");
+                throw new InvalidOperationException($"Group {groupId} not found.");
             }
 
-            var user = Users.SingleOrDefault(x => x.Id == userId)
-                ?? throw new InvalidOperationException($"User {userId} not found.");
-
-            var group = Groups.SingleOrDefault(x => x.Id == groupId)
-                ?? throw new InvalidOperationException($"Group {groupId} not found.");
-
-            // Update the domain object collections directly
-            // These ARE the same objects as in the entity graph
-            if (!group.Children.Contains(user))
+            // Check if relationship already exists
+            var existingRelation = await dbContext.UserGroups
+                .FirstOrDefaultAsync(ug => ug.UserId == userId && ug.GroupId == groupId);
+            
+            if (existingRelation != null)
             {
-                group.Children.Add(user);
+                return; // Relationship already exists, nothing to do
+            }
+
+            // Create the new relationship
+            var userGroup = new UserGroup
+            {
+                UserId = userId,
+                GroupId = groupId,
+                CreatedBy = createdBy,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            dbContext.UserGroups.Add(userGroup);
+            
+            // Update the UpdatedAt timestamp for both entities
+            var user = await dbContext.Users.FindAsync(userId);
+            var group = await dbContext.Groups.FindAsync(groupId);
+            
+            if (user != null)
+            {
+                user.UpdatedAt = DateTime.UtcNow;
+                dbContext.Users.Update(user);
             }
             
-            if (!user.Parents.Contains(group))
+            if (group != null)
             {
-                user.Parents.Add(group);
+                group.UpdatedAt = DateTime.UtcNow;
+                dbContext.Groups.Update(group);
             }
+        }
+        
+        // Legacy method for compatibility - remove after domain layer is updated
+        public static void Execute(int userId, int groupId)
+        {
+            throw new NotSupportedException("Legacy normalizer method is no longer supported. Use ExecuteAsync instead.");
         }
     }
 }

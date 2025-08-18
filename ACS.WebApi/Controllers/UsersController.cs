@@ -2,24 +2,29 @@ using Microsoft.AspNetCore.Mvc;
 using ACS.WebApi.DTOs;
 using ACS.WebApi.Services;
 using ACS.Service.Infrastructure;
+using Microsoft.AspNetCore.Authorization;
 
 namespace ACS.WebApi.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Authorize]
 public class UsersController : ControllerBase
 {
     private readonly TenantGrpcClientService _grpcClientService;
     private readonly GrpcErrorMappingService _errorMapper;
+    private readonly IUserContextService _userContext;
     private readonly ILogger<UsersController> _logger;
 
     public UsersController(
         TenantGrpcClientService grpcClientService,
         GrpcErrorMappingService errorMapper,
+        IUserContextService userContext,
         ILogger<UsersController> logger)
     {
         _grpcClientService = grpcClientService;
         _errorMapper = errorMapper;
+        _userContext = userContext;
         _logger = logger;
     }
 
@@ -31,10 +36,11 @@ public class UsersController : ControllerBase
     {
         try
         {
+            var currentUserId = _userContext.GetCurrentUserId();
             var getUsersCommand = new Service.Infrastructure.GetUsersCommand(
                 Guid.NewGuid().ToString(),
                 DateTime.UtcNow,
-                "current-user", // TODO: Get from authentication context
+                currentUserId,
                 request.Page,
                 request.PageSize);
 
@@ -62,10 +68,11 @@ public class UsersController : ControllerBase
     {
         try
         {
+            var currentUserId = _userContext.GetCurrentUserId();
             var getUserCommand = new Service.Infrastructure.GetUserCommand(
                 Guid.NewGuid().ToString(),
                 DateTime.UtcNow,
-                "current-user", // TODO: Get from authentication context
+                currentUserId,
                 id);
 
             var result = await _grpcClientService.GetUserAsync(getUserCommand);
@@ -97,10 +104,11 @@ public class UsersController : ControllerBase
                 return BadRequest(new ApiResponse<UserResponse>(false, null, "User name is required"));
             }
 
+            var currentUserId = _userContext.GetCurrentUserId();
             var createUserCommand = new Service.Infrastructure.CreateUserCommand(
                 Guid.NewGuid().ToString(),
                 DateTime.UtcNow,
-                "current-user", // TODO: Get from authentication context
+                currentUserId,
                 request.Name);
 
             var result = await _grpcClientService.CreateUserAsync(createUserCommand);

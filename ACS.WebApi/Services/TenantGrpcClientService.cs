@@ -8,6 +8,8 @@ using Google.Protobuf;
 using ACS.Service.Infrastructure;
 using ACS.Service.Domain;
 using ACS.Infrastructure;
+using ACS.Infrastructure.Services;
+using Microsoft.Extensions.Configuration;
 using System.Diagnostics;
 
 namespace ACS.WebApi.Services;
@@ -17,15 +19,21 @@ public class TenantGrpcClientService
     private readonly ILogger<TenantGrpcClientService> _logger;
     private readonly ITenantContextService _tenantContextService;
     private readonly CircuitBreakerService _circuitBreaker;
+    private readonly IConfiguration _configuration;
+    private readonly IServiceProvider _serviceProvider;
 
     public TenantGrpcClientService(
         ILogger<TenantGrpcClientService> logger,
         ITenantContextService tenantContextService,
-        CircuitBreakerService circuitBreaker)
+        CircuitBreakerService circuitBreaker,
+        IConfiguration configuration,
+        IServiceProvider serviceProvider)
     {
         _logger = logger;
         _tenantContextService = tenantContextService;
         _circuitBreaker = circuitBreaker;
+        _configuration = configuration;
+        _serviceProvider = serviceProvider;
     }
 
     public async Task<ApiResponse<T>> ExecuteCommandAsync<T>(Func<VerticalService.VerticalServiceClient, Task<T>> operation)
@@ -67,14 +75,29 @@ public class TenantGrpcClientService
                     
                     try
                     {
+                        // Use compression call options if enabled
+                        var callOptions = GrpcCompressionConfiguration.GetCompressionCallOptions(_configuration);
+                        var operationStopwatch = Stopwatch.StartNew();
                         var commandResult = await operation(client);
+                        operationStopwatch.Stop();
+                        
+                        // Record performance metrics
+                        TelemetryService.RecordGrpcCall("ExecuteCommand", "Success", operationStopwatch.Elapsed.TotalSeconds, tenantId);
+                        
                         activity?.SetTag("retry.final_attempt", attempt);
+                        activity?.SetTag("grpc.duration_ms", operationStopwatch.ElapsedMilliseconds);
                         retryActivity?.SetTag("retry.successful", true);
-                        _logger.LogDebug("Successfully executed gRPC command for tenant {TenantId} on attempt {Attempt}", tenantId, attempt);
+                        retryActivity?.SetTag("compression.enabled", _configuration.GetValue<bool>("Grpc:EnableCompression", true));
+                        _logger.LogDebug("Successfully executed gRPC command for tenant {TenantId} on attempt {Attempt} in {DurationMs}ms", 
+                            tenantId, attempt, operationStopwatch.ElapsedMilliseconds);
                         return commandResult;
                     }
                     catch (RpcException rpcEx) when (attempt < maxRetries)
                     {
+                        // Record error metrics
+                        TelemetryService.RecordGrpcCall("ExecuteCommand", rpcEx.Status.StatusCode.ToString(), 0, tenantId);
+                        TelemetryService.RecordError("RpcException", "ExecuteCommand", tenantId);
+                        
                         retryActivity?.SetTag("retry.successful", false);
                         retryActivity?.SetTag("grpc.status_code", rpcEx.Status.StatusCode.ToString());
                         TelemetryService.RecordError(retryActivity, rpcEx);
@@ -160,7 +183,7 @@ public class TenantGrpcClientService
             );
 
             var commandRequest = CreateCommandRequest(checkPermissionCommand);
-            var response = await client.ExecuteCommandAsync(commandRequest).ResponseAsync;
+            var response = await ExecuteCommandWithCompressionAsync(client, commandRequest);
             
             if (response.Success && response.ResultData.Length > 0)
             {
@@ -199,7 +222,7 @@ public class TenantGrpcClientService
             activity?.SetTag("pagination.page_size", command.PageSize);
             
             var commandRequest = CreateCommandRequest(command);
-            var response = await client.ExecuteCommandAsync(commandRequest).ResponseAsync;
+            var response = await ExecuteCommandWithCompressionAsync(client, commandRequest);
             
             if (response.Success && response.ResultData.Length > 0)
             {
@@ -229,7 +252,7 @@ public class TenantGrpcClientService
         return await ExecuteCommandAsync(async (client) =>
         {
             var commandRequest = CreateCommandRequest(command);
-            var response = await client.ExecuteCommandAsync(commandRequest).ResponseAsync;
+            var response = await ExecuteCommandWithCompressionAsync(client, commandRequest);
             
             if (response.Success && response.ResultData.Length > 0)
             {
@@ -258,7 +281,7 @@ public class TenantGrpcClientService
         return await ExecuteCommandAsync(async (client) =>
         {
             var commandRequest = CreateCommandRequest(command);
-            var response = await client.ExecuteCommandAsync(commandRequest).ResponseAsync;
+            var response = await ExecuteCommandWithCompressionAsync(client, commandRequest);
             
             if (response.Success && response.ResultData.Length > 0)
             {
@@ -287,7 +310,7 @@ public class TenantGrpcClientService
         return await ExecuteCommandAsync(async (client) =>
         {
             var commandRequest = CreateCommandRequest(command);
-            var response = await client.ExecuteCommandAsync(commandRequest).ResponseAsync;
+            var response = await ExecuteCommandWithCompressionAsync(client, commandRequest);
             
             if (response.Success && response.ResultData.Length > 0)
             {
@@ -316,7 +339,7 @@ public class TenantGrpcClientService
         return await ExecuteCommandAsync(async (client) =>
         {
             var commandRequest = CreateCommandRequest(command);
-            var response = await client.ExecuteCommandAsync(commandRequest).ResponseAsync;
+            var response = await ExecuteCommandWithCompressionAsync(client, commandRequest);
             
             return response.Success;
         });
@@ -328,7 +351,7 @@ public class TenantGrpcClientService
         return await ExecuteCommandAsync(async (client) =>
         {
             var commandRequest = CreateCommandRequest(command);
-            var response = await client.ExecuteCommandAsync(commandRequest).ResponseAsync;
+            var response = await ExecuteCommandWithCompressionAsync(client, commandRequest);
             
             if (response.Success && response.ResultData.Length > 0)
             {
@@ -359,7 +382,7 @@ public class TenantGrpcClientService
         return await ExecuteCommandAsync(async (client) =>
         {
             var commandRequest = CreateCommandRequest(command);
-            var response = await client.ExecuteCommandAsync(commandRequest).ResponseAsync;
+            var response = await ExecuteCommandWithCompressionAsync(client, commandRequest);
             
             if (response.Success && response.ResultData.Length > 0)
             {
@@ -389,7 +412,7 @@ public class TenantGrpcClientService
         return await ExecuteCommandAsync(async (client) =>
         {
             var commandRequest = CreateCommandRequest(command);
-            var response = await client.ExecuteCommandAsync(commandRequest).ResponseAsync;
+            var response = await ExecuteCommandWithCompressionAsync(client, commandRequest);
             
             if (response.Success && response.ResultData.Length > 0)
             {
@@ -419,7 +442,7 @@ public class TenantGrpcClientService
         return await ExecuteCommandAsync(async (client) =>
         {
             var commandRequest = CreateCommandRequest(command);
-            var response = await client.ExecuteCommandAsync(commandRequest).ResponseAsync;
+            var response = await ExecuteCommandWithCompressionAsync(client, commandRequest);
             
             if (response.Success && response.ResultData.Length > 0)
             {
@@ -449,7 +472,7 @@ public class TenantGrpcClientService
         return await ExecuteCommandAsync(async (client) =>
         {
             var commandRequest = CreateCommandRequest(command);
-            var response = await client.ExecuteCommandAsync(commandRequest).ResponseAsync;
+            var response = await ExecuteCommandWithCompressionAsync(client, commandRequest);
             
             return response.Success;
         });
@@ -461,7 +484,7 @@ public class TenantGrpcClientService
         return await ExecuteCommandAsync(async (client) =>
         {
             var commandRequest = CreateCommandRequest(command);
-            var response = await client.ExecuteCommandAsync(commandRequest).ResponseAsync;
+            var response = await ExecuteCommandWithCompressionAsync(client, commandRequest);
             
             if (response.Success && response.ResultData.Length > 0)
             {
@@ -490,7 +513,7 @@ public class TenantGrpcClientService
         return await ExecuteCommandAsync(async (client) =>
         {
             var commandRequest = CreateCommandRequest(command);
-            var response = await client.ExecuteCommandAsync(commandRequest).ResponseAsync;
+            var response = await ExecuteCommandWithCompressionAsync(client, commandRequest);
             
             if (response.Success && response.ResultData.Length > 0)
             {
@@ -518,7 +541,7 @@ public class TenantGrpcClientService
         return await ExecuteCommandAsync(async (client) =>
         {
             var commandRequest = CreateCommandRequest(command);
-            var response = await client.ExecuteCommandAsync(commandRequest).ResponseAsync;
+            var response = await ExecuteCommandWithCompressionAsync(client, commandRequest);
             
             if (response.Success && response.ResultData.Length > 0)
             {
@@ -546,7 +569,7 @@ public class TenantGrpcClientService
         return await ExecuteCommandAsync(async (client) =>
         {
             var commandRequest = CreateCommandRequest(command);
-            var response = await client.ExecuteCommandAsync(commandRequest).ResponseAsync;
+            var response = await ExecuteCommandWithCompressionAsync(client, commandRequest);
             
             if (response.Success && response.ResultData.Length > 0)
             {
@@ -574,7 +597,7 @@ public class TenantGrpcClientService
         return await ExecuteCommandAsync(async (client) =>
         {
             var commandRequest = CreateCommandRequest(command);
-            var response = await client.ExecuteCommandAsync(commandRequest).ResponseAsync;
+            var response = await ExecuteCommandWithCompressionAsync(client, commandRequest);
             
             return response.Success;
         });
@@ -586,7 +609,7 @@ public class TenantGrpcClientService
         return await ExecuteCommandAsync(async (client) =>
         {
             var commandRequest = CreateCommandRequest(command);
-            var response = await client.ExecuteCommandAsync(commandRequest).ResponseAsync;
+            var response = await ExecuteCommandWithCompressionAsync(client, commandRequest);
             
             if (response.Success && response.ResultData.Length > 0)
             {
@@ -607,7 +630,7 @@ public class TenantGrpcClientService
         return await ExecuteCommandAsync(async (client) =>
         {
             var commandRequest = CreateCommandRequest(command);
-            var response = await client.ExecuteCommandAsync(commandRequest).ResponseAsync;
+            var response = await ExecuteCommandWithCompressionAsync(client, commandRequest);
             
             return response.Success;
         });
@@ -624,6 +647,67 @@ public class TenantGrpcClientService
             CommandData = Google.Protobuf.ByteString.CopyFrom(serializedCommand),
             CorrelationId = command.RequestId
         };
+    }
+    
+    private async Task<CommandResponse> ExecuteCommandWithCompressionAsync(VerticalService.VerticalServiceClient client, CommandRequest request)
+    {
+        var callOptions = GrpcCompressionConfiguration.GetCompressionCallOptions(_configuration);
+        
+        // Add authentication headers if available
+        var authHeaders = GetAuthenticationHeaders();
+        if (authHeaders.Any())
+        {
+            var metadata = callOptions.Headers ?? new Grpc.Core.Metadata();
+            foreach (var header in authHeaders)
+            {
+                metadata.Add(header.Key, header.Value);
+            }
+            callOptions = callOptions.WithHeaders(metadata);
+        }
+        
+        return await client.ExecuteCommandAsync(request, callOptions).ResponseAsync;
+    }
+    
+    private Dictionary<string, string> GetAuthenticationHeaders()
+    {
+        var headers = new Dictionary<string, string>();
+        
+        try
+        {
+            // Try to get current HTTP context
+            var httpContextAccessor = _serviceProvider?.GetService<IHttpContextAccessor>();
+            var httpContext = httpContextAccessor?.HttpContext;
+            
+            if (httpContext != null)
+            {
+                // Extract authorization header
+                var authHeader = httpContext.Request.Headers.Authorization.FirstOrDefault();
+                if (!string.IsNullOrEmpty(authHeader))
+                {
+                    headers["authorization"] = authHeader;
+                }
+                
+                // Add tenant ID header
+                var tenantId = _tenantContextService.GetTenantId();
+                if (!string.IsNullOrEmpty(tenantId))
+                {
+                    headers["tenant-id"] = tenantId;
+                }
+                
+                // Add correlation ID for tracing
+                var correlationId = httpContext.TraceIdentifier;
+                if (!string.IsNullOrEmpty(correlationId))
+                {
+                    headers["correlation-id"] = correlationId;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to extract authentication headers");
+        }
+        
+        return headers;
     }
 
 

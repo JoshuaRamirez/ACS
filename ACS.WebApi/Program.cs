@@ -1,6 +1,11 @@
 using ACS.Infrastructure;
+using ACS.Infrastructure.Authentication;
+using ACS.Infrastructure.RateLimiting;
 using ACS.WebApi.Middleware;
 using ACS.WebApi.Services;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
+using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -15,6 +20,7 @@ builder.Services.AddSingleton<TenantProcessDiscoveryService>();
 
 // Register tenant context and gRPC client services
 builder.Services.AddScoped<ITenantContextService, TenantContextService>();
+builder.Services.AddScoped<IUserContextService, UserContextService>();
 builder.Services.AddSingleton<CircuitBreakerService>();
 builder.Services.AddScoped<GrpcErrorMappingService>();
 builder.Services.AddScoped<TenantGrpcClientService>();
@@ -22,8 +28,56 @@ builder.Services.AddScoped<TenantGrpcClientService>();
 // Add logging
 builder.Services.AddLogging();
 
-// Configure OpenTelemetry for distributed tracing
+// Configure JWT Authentication
+var jwtSecretKey = builder.Configuration.GetValue<string>("Authentication:Jwt:SecretKey") ?? "your-super-secret-key-here-at-least-256-bits-long-for-production";
+var jwtIssuer = builder.Configuration.GetValue<string>("Authentication:Jwt:Issuer") ?? "ACS.WebApi";
+var jwtAudience = builder.Configuration.GetValue<string>("Authentication:Jwt:Audience") ?? "ACS.VerticalHost";
+
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecretKey)),
+            ValidateIssuer = true,
+            ValidIssuer = jwtIssuer,
+            ValidateAudience = true,
+            ValidAudience = jwtAudience,
+            ValidateLifetime = true,
+            ClockSkew = TimeSpan.FromMinutes(5)
+        };
+    });
+
+builder.Services.AddAuthorization();
+
+// Add JWT token service
+builder.Services.AddSingleton<JwtTokenService>();
+
+// Configure OpenTelemetry for distributed tracing and metrics
 builder.Services.ConfigureOpenTelemetry(builder.Configuration);
+
+// Add rate limiting services
+builder.Services.AddRateLimiting(builder.Configuration);
+
+// Configure rate limiting policies
+builder.Services.ConfigureRateLimitingPolicies(policies =>
+{
+    policies.ForTenant("premium_tenant", policy => policy
+        .WithLimit(500)
+        .WithWindow(60)
+        .WithName("premium")
+        .WithPriority(3)
+    );
+    
+    policies.ForEndpoint("/api/admin/*", endpoint => endpoint
+        .WithLimit(10)
+        .WithWindow(60)
+        .WithMethods("POST", "PUT", "DELETE")
+        .WithDescription("Admin operations rate limiting")
+        .WithName("admin_operations")
+    );
+});
 
 // Add CORS for development
 builder.Services.AddCors(options =>
@@ -44,13 +98,24 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
-// Add tenant process resolution middleware BEFORE authorization (skip in testing environment)
+// Add performance metrics middleware
+app.UsePerformanceMetrics();
+
+// Add rate limiting middleware (before authentication)
+app.UseRateLimiting();
+
+// Add JWT authentication middleware
+app.UseJwtAuthentication();
+
+// Add built-in authentication/authorization
+app.UseAuthentication();
+app.UseAuthorization();
+
+// Add tenant process resolution middleware AFTER authorization (skip in testing environment)
 if (!app.Environment.IsEnvironment("Testing"))
 {
     app.UseMiddleware<TenantProcessResolutionMiddleware>();
 }
-
-app.UseAuthorization();
 
 app.MapControllers();
 
