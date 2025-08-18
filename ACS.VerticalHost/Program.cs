@@ -46,6 +46,7 @@ builder.Services.AddSingleton<InMemoryEntityGraph>();
 builder.Services.AddSingleton<TenantDatabasePersistenceService>();
 builder.Services.AddSingleton<EventPersistenceService>();
 builder.Services.AddSingleton<AccessControlDomainService>();
+builder.Services.AddSingleton<CommandTranslationService>();
 
 // Background services
 builder.Services.AddSingleton<TenantRingBuffer>();

@@ -1,13 +1,21 @@
 using ACS.Infrastructure;
 using ACS.WebApi.Middleware;
+using ACS.WebApi.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.AddControllers();
 
+// Add HttpContextAccessor for tenant context service
+builder.Services.AddHttpContextAccessor();
+
 // Register tenant process infrastructure
 builder.Services.AddSingleton<TenantProcessDiscoveryService>();
+
+// Register tenant context and gRPC client services
+builder.Services.AddScoped<ITenantContextService, TenantContextService>();
+builder.Services.AddScoped<TenantGrpcClientService>();
 
 // Add logging
 builder.Services.AddLogging();

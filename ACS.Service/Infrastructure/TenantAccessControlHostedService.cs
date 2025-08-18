@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using ACS.Service.Services;
 
 namespace ACS.Service.Infrastructure;
 
@@ -8,17 +9,23 @@ public class TenantAccessControlHostedService : BackgroundService
     private readonly string _tenantId;
     private readonly TenantRingBuffer _ringBuffer;
     private readonly InMemoryEntityGraph _entityGraph;
+    private readonly AccessControlDomainService _domainService;
+    private readonly CommandTranslationService _commandTranslator;
     private readonly ILogger<TenantAccessControlHostedService> _logger;
 
     public TenantAccessControlHostedService(
         TenantConfiguration tenantConfig,
         TenantRingBuffer ringBuffer,
         InMemoryEntityGraph entityGraph,
+        AccessControlDomainService domainService,
+        CommandTranslationService commandTranslator,
         ILogger<TenantAccessControlHostedService> logger)
     {
         _tenantId = tenantConfig.TenantId;
         _ringBuffer = ringBuffer;
         _entityGraph = entityGraph;
+        _domainService = domainService;
+        _commandTranslator = commandTranslator;
         _logger = logger;
     }
 
@@ -26,11 +33,8 @@ public class TenantAccessControlHostedService : BackgroundService
     {
         _logger.LogInformation("Starting Access Control Hosted Service for tenant {TenantId}", _tenantId);
         
-        // Load entire tenant entity graph into memory
-        await _entityGraph.LoadFromDatabaseAsync(cancellationToken);
-        
-        // Hydrate normalizer collections to reference domain objects
-        _entityGraph.HydrateNormalizerReferences();
+        // Load entire tenant entity graph into memory using domain service
+        await _domainService.LoadEntityGraphAsync(cancellationToken);
         
         _logger.LogInformation("Entity graph loaded and normalizers hydrated for tenant {TenantId}", _tenantId);
         
@@ -61,30 +65,62 @@ public class TenantAccessControlHostedService : BackgroundService
 
     private async Task ProcessCommandAsync(WebRequestCommand command)
     {
+        var startTime = DateTime.UtcNow;
+        
         try
         {
             _logger.LogDebug("Processing command {CommandType} with ID {RequestId} for tenant {TenantId}", 
                 command.GetType().Name, command.RequestId, _tenantId);
             
-            // Command processing will be implemented in Phase 2
-            // For now, just log the command
-            _logger.LogInformation("Command processing implementation pending for Phase 2: {CommandType}", 
-                command.GetType().Name);
+            var commandDescription = _commandTranslator.GetCommandDescription(command);
+            _logger.LogInformation("Executing: {CommandDescription} (RequestId: {RequestId})", 
+                commandDescription, command.RequestId);
             
-            await Task.CompletedTask;
+            // Translate web command to domain command
+            var domainCommand = _commandTranslator.TranslateCommand(command);
             
-            _logger.LogDebug("Successfully processed command {RequestId} for tenant {TenantId}", 
-                command.RequestId, _tenantId);
+            // Execute the domain command through the domain service
+            if (_commandTranslator.IsQueryCommand(command))
+            {
+                // Handle query commands
+                if (domainCommand is CheckPermissionCommand checkCmd)
+                {
+                    var result = await _domainService.ExecuteCommandAsync(checkCmd);
+                    _logger.LogInformation("Permission check result: {Result} for {CommandDescription}", 
+                        result, commandDescription);
+                }
+            }
+            else if (_commandTranslator.IsMutationCommand(command))
+            {
+                // Handle mutation commands
+                await _domainService.ExecuteCommandAsync(domainCommand);
+                _logger.LogInformation("Successfully executed mutation: {CommandDescription}", commandDescription);
+            }
+            else
+            {
+                _logger.LogWarning("Unsupported command type for processing: {CommandType}", command.GetType().Name);
+            }
+            
+            var duration = DateTime.UtcNow - startTime;
+            _logger.LogDebug("Successfully processed command {RequestId} for tenant {TenantId} in {Duration}ms", 
+                command.RequestId, _tenantId, duration.TotalMilliseconds);
+        }
+        catch (NotSupportedException ex)
+        {
+            _logger.LogWarning("Unsupported command {CommandType} for tenant {TenantId}: {Message}", 
+                command.GetType().Name, _tenantId, ex.Message);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error processing command {RequestId} for tenant {TenantId}: {Error}", 
-                command.RequestId, _tenantId, ex.Message);
+            var duration = DateTime.UtcNow - startTime;
+            _logger.LogError(ex, "Error processing command {RequestId} for tenant {TenantId} after {Duration}ms: {Error}", 
+                command.RequestId, _tenantId, duration.TotalMilliseconds, ex.Message);
             
             // In a production system, you might want to:
             // 1. Send error response back to waiting client
-            // 2. Dead letter the command
-            // 3. Trigger alerts
+            // 2. Dead letter the command for retry
+            // 3. Trigger monitoring alerts
+            // 4. Apply circuit breaker patterns
             throw;
         }
     }
