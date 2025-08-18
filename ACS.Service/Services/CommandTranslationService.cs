@@ -195,6 +195,24 @@ public class CommandTranslationService
                 RoleId = cmd.RoleId
             },
             
+            Infrastructure.RemoveRoleFromGroupCommand cmd => new Services.RemoveRoleFromGroupCommand
+            {
+                GroupId = cmd.GroupId,
+                RoleId = cmd.RoleId
+            },
+            
+            Infrastructure.UnAssignUserFromRoleCommand cmd => new Services.UnAssignUserFromRoleCommand
+            {
+                UserId = cmd.TargetUserId,
+                RoleId = cmd.RoleId
+            },
+            
+            Infrastructure.RemoveGroupFromGroupCommand cmd => new Services.RemoveGroupFromGroupCommand
+            {
+                ParentGroupId = cmd.ParentGroupId,
+                ChildGroupId = cmd.ChildGroupId
+            },
+            
             _ => throw new NotSupportedException($"Web command type {webCommand.GetType().Name} is not supported for translation")
         };
     }
@@ -233,7 +251,10 @@ public class CommandTranslationService
             Infrastructure.UpdateRoleCommand => true,
             Infrastructure.DeleteRoleCommand => true,
             Infrastructure.AssignUserToRoleCommand => true,
+            Infrastructure.UnAssignUserFromRoleCommand => true,
             Infrastructure.AddRoleToGroupCommand => true,
+            Infrastructure.RemoveRoleFromGroupCommand => true,
+            Infrastructure.RemoveGroupFromGroupCommand => true,
             Infrastructure.GrantPermissionCommand => true,
             Infrastructure.DenyPermissionCommand => true,
             Infrastructure.RemovePermissionCommand => true,
@@ -250,6 +271,9 @@ public class CommandTranslationService
             Infrastructure.AssignUserToRoleCommand cmd => $"Assign user {cmd.TargetUserId} to role {cmd.RoleId}",
             Infrastructure.AddGroupToGroupCommand cmd => $"Add group {cmd.ChildGroupId} to group {cmd.ParentGroupId}",
             Infrastructure.AddRoleToGroupCommand cmd => $"Add role {cmd.RoleId} to group {cmd.GroupId}",
+            Infrastructure.RemoveRoleFromGroupCommand cmd => $"Remove role {cmd.RoleId} from group {cmd.GroupId}",
+            Infrastructure.UnAssignUserFromRoleCommand cmd => $"Unassign user {cmd.TargetUserId} from role {cmd.RoleId}",
+            Infrastructure.RemoveGroupFromGroupCommand cmd => $"Remove group {cmd.ChildGroupId} from group {cmd.ParentGroupId}",
             Infrastructure.GrantPermissionCommand cmd => $"Grant permission {cmd.Uri}:{cmd.Verb} to entity {cmd.EntityId}",
             Infrastructure.DenyPermissionCommand cmd => $"Deny permission {cmd.Uri}:{cmd.Verb} to entity {cmd.EntityId}",
             Infrastructure.EvaluatePermissionCommand cmd => $"Check permission {cmd.Uri}:{cmd.Verb} for user {cmd.TargetUserId}",

@@ -6,11 +6,14 @@ using System.Threading.Channels;
 using Polly;
 using Polly.Retry;
 using Microsoft.EntityFrameworkCore;
+using System.Diagnostics;
 
 namespace ACS.Service.Services;
 
 public class AccessControlDomainService
 {
+    private static readonly ActivitySource ActivitySource = new("ACS.DomainService");
+    
     private readonly InMemoryEntityGraph _entityGraph;
     private readonly ApplicationDbContext _dbContext;
     private readonly TenantDatabasePersistenceService _persistenceService;
@@ -135,6 +138,10 @@ public class AccessControlDomainService
 
     private async Task ProcessSingleCommand(DomainCommand command)
     {
+        using var activity = ActivitySource.StartActivity($"domain.command.{command.GetType().Name}");
+        activity?.SetTag("command.type", command.GetType().Name);
+        activity?.SetTag("tenant.id", Environment.GetEnvironmentVariable("TENANT_ID") ?? "unknown");
+        
         _logger.LogDebug("Processing command {CommandType}", command.GetType().Name);
         
         var startTime = DateTime.UtcNow;
@@ -196,11 +203,30 @@ public class AccessControlDomainService
             }
 
             var duration = DateTime.UtcNow - startTime;
+            
+            // Add telemetry metrics
+            activity?.SetTag("command.duration_ms", duration.TotalMilliseconds);
+            activity?.SetTag("command.successful", true);
+            
+            if (duration.TotalMilliseconds > 1000) // Flag slow commands
+            {
+                activity?.SetTag("command.slow", true);
+            }
+            
             _logger.LogDebug("Completed command {CommandType} in {Duration}ms", 
                 command.GetType().Name, duration.TotalMilliseconds);
         }
         catch (Exception ex)
         {
+            var duration = DateTime.UtcNow - startTime;
+            
+            // Add error telemetry
+            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+            activity?.SetTag("command.duration_ms", duration.TotalMilliseconds);
+            activity?.SetTag("command.successful", false);
+            activity?.SetTag("error.type", ex.GetType().Name);
+            activity?.SetTag("error.message", ex.Message);
+            
             _logger.LogError(ex, "Failed to process command {CommandType}", command.GetType().Name);
             throw;
         }
@@ -557,8 +583,13 @@ public class AccessControlDomainService
 
     private async Task<User> ProcessCreateUser(CreateUserCommand command)
     {
+        using var activity = ActivitySource.StartActivity("domain.create_user");
+        activity?.SetTag("user.name", command.Name);
+        activity?.SetTag("user.group_id", command.GroupId);
+        
         // Thread-safe ID generation
         var newId = Interlocked.Increment(ref _nextUserId);
+        activity?.SetTag("user.id", newId);
         
         // Create new user domain object
         var user = new User

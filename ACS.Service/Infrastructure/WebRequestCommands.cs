@@ -88,3 +88,12 @@ public record CheckPermissionCommand(string RequestId, DateTime Timestamp, strin
 
 public record AddRoleToGroupCommand(string RequestId, DateTime Timestamp, string UserId, 
     int GroupId, int RoleId) : WebRequestCommand(RequestId, Timestamp, UserId);
+
+public record RemoveRoleFromGroupCommand(string RequestId, DateTime Timestamp, string UserId, 
+    int GroupId, int RoleId) : WebRequestCommand(RequestId, Timestamp, UserId);
+
+public record UnAssignUserFromRoleCommand(string RequestId, DateTime Timestamp, string UserId, 
+    int TargetUserId, int RoleId) : WebRequestCommand(RequestId, Timestamp, UserId);
+
+public record RemoveGroupFromGroupCommand(string RequestId, DateTime Timestamp, string UserId, 
+    int ParentGroupId, int ChildGroupId) : WebRequestCommand(RequestId, Timestamp, UserId);
