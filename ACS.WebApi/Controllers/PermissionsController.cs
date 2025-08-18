@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Mvc;
 using ACS.WebApi.DTOs;
 using ACS.WebApi.Services;
+using ACS.Service.Infrastructure;
+using ACS.Service.Domain;
 
 namespace ACS.WebApi.Controllers;
 
@@ -143,25 +145,36 @@ public class PermissionsController : ControllerBase
     /// Get all permissions for a specific entity
     /// </summary>
     [HttpGet("entity/{entityId:int}")]
-    public Task<ActionResult<ApiResponse<PermissionListResponse>>> GetEntityPermissions(int entityId, [FromQuery] PagedRequest request)
+    public async Task<ActionResult<ApiResponse<PermissionListResponse>>> GetEntityPermissions(int entityId, [FromQuery] PagedRequest request)
     {
         try
         {
             if (entityId <= 0)
             {
-                return Task.FromResult<ActionResult<ApiResponse<PermissionListResponse>>>(BadRequest(new ApiResponse<PermissionListResponse>(false, null, "Entity ID must be greater than 0")));
+                return BadRequest(new ApiResponse<PermissionListResponse>(false, null, "Entity ID must be greater than 0"));
             }
 
-            // For now, return a placeholder since we don't have a GetEntityPermissions gRPC method yet
-            var permissions = new List<PermissionResponse>();
-            var response = new PermissionListResponse(permissions, 0, request.Page, request.PageSize);
+            var getPermissionsCommand = new GetEntityPermissionsCommand(
+                Guid.NewGuid().ToString(),
+                DateTime.UtcNow,
+                "current-user", // TODO: Get from authentication context
+                entityId,
+                request.Page,
+                request.PageSize);
+
+            var result = await _grpcClientService.GetEntityPermissionsAsync(getPermissionsCommand);
             
-            return Task.FromResult<ActionResult<ApiResponse<PermissionListResponse>>>(Ok(new ApiResponse<PermissionListResponse>(true, response)));
+            if (result.Success && result.Data != null)
+            {
+                return Ok(result);
+            }
+            
+            return StatusCode(500, new ApiResponse<PermissionListResponse>(false, null, result.Message ?? "Error retrieving permissions"));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error retrieving permissions for entity {EntityId}", entityId);
-            return Task.FromResult<ActionResult<ApiResponse<PermissionListResponse>>>(StatusCode(500, new ApiResponse<PermissionListResponse>(false, null, "Error retrieving permissions")));
+            return StatusCode(500, new ApiResponse<PermissionListResponse>(false, null, "Error retrieving permissions"));
         }
     }
 
@@ -169,33 +182,53 @@ public class PermissionsController : ControllerBase
     /// Remove a permission from an entity
     /// </summary>
     [HttpDelete("entity/{entityId:int}")]
-    public Task<ActionResult<ApiResponse<bool>>> RemovePermission(int entityId, [FromBody] GrantPermissionRequest request)
+    public async Task<ActionResult<ApiResponse<bool>>> RemovePermission(int entityId, [FromBody] GrantPermissionRequest request)
     {
         try
         {
             if (entityId != request.EntityId)
             {
-                return Task.FromResult<ActionResult<ApiResponse<bool>>>(BadRequest(new ApiResponse<bool>(false, false, "Entity ID in URL and body must match")));
+                return BadRequest(new ApiResponse<bool>(false, false, "Entity ID in URL and body must match"));
             }
 
             if (string.IsNullOrWhiteSpace(request.Uri))
             {
-                return Task.FromResult<ActionResult<ApiResponse<bool>>>(BadRequest(new ApiResponse<bool>(false, false, "URI is required")));
+                return BadRequest(new ApiResponse<bool>(false, false, "URI is required"));
             }
 
             if (string.IsNullOrWhiteSpace(request.HttpVerb))
             {
-                return Task.FromResult<ActionResult<ApiResponse<bool>>>(BadRequest(new ApiResponse<bool>(false, false, "HTTP verb is required")));
+                return BadRequest(new ApiResponse<bool>(false, false, "HTTP verb is required"));
             }
 
-            // For now, return a placeholder since we don't have a RemovePermission gRPC method yet
-            return Task.FromResult<ActionResult<ApiResponse<bool>>>(StatusCode(501, new ApiResponse<bool>(false, false, "RemovePermission not implemented yet")));
+            // Parse the HTTP verb
+            if (!Enum.TryParse<HttpVerb>(request.HttpVerb, true, out var httpVerb))
+            {
+                return BadRequest(new ApiResponse<bool>(false, false, "Invalid HTTP verb"));
+            }
+
+            var removePermissionCommand = new RemovePermissionCommand(
+                Guid.NewGuid().ToString(),
+                DateTime.UtcNow,
+                "current-user", // TODO: Get from authentication context
+                entityId,
+                request.Uri,
+                httpVerb);
+
+            var result = await _grpcClientService.RemovePermissionAsync(removePermissionCommand);
+            
+            if (result.Success)
+            {
+                return Ok(result);
+            }
+            
+            return StatusCode(500, new ApiResponse<bool>(false, false, result.Message ?? "Error removing permission"));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error removing permission from entity {EntityId} for {Uri}:{HttpVerb}", 
                 entityId, request.Uri, request.HttpVerb);
-            return Task.FromResult<ActionResult<ApiResponse<bool>>>(StatusCode(500, new ApiResponse<bool>(false, false, "Error removing permission")));
+            return StatusCode(500, new ApiResponse<bool>(false, false, "Error removing permission"));
         }
     }
 }

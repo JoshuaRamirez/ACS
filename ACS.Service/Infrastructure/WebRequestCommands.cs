@@ -81,3 +81,10 @@ public record GetEntityPermissionsCommand(string RequestId, DateTime Timestamp, 
 
 public record RemovePermissionCommand(string RequestId, DateTime Timestamp, string UserId, 
     int EntityId, string Uri, HttpVerb Verb) : WebRequestCommand(RequestId, Timestamp, UserId);
+
+
+public record CheckPermissionCommand(string RequestId, DateTime Timestamp, string UserId, 
+    int EntityId, string Uri, string HttpVerb) : WebRequestCommand(RequestId, Timestamp, UserId);
+
+public record AddRoleToGroupCommand(string RequestId, DateTime Timestamp, string UserId, 
+    int GroupId, int RoleId) : WebRequestCommand(RequestId, Timestamp, UserId);

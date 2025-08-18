@@ -82,13 +82,9 @@ public class TenantAccessControlHostedService : BackgroundService
             // Execute the domain command through the domain service
             if (_commandTranslator.IsQueryCommand(command))
             {
-                // Handle query commands
-                if (domainCommand is CheckPermissionCommand checkCmd)
-                {
-                    var result = await _domainService.ExecuteCommandAsync(checkCmd);
-                    _logger.LogInformation("Permission check result: {Result} for {CommandDescription}", 
-                        result, commandDescription);
-                }
+                // Handle query commands - for now just execute as regular command
+                await _domainService.ExecuteCommandAsync(domainCommand);
+                _logger.LogInformation("Successfully executed query: {CommandDescription}", commandDescription);
             }
             else if (_commandTranslator.IsMutationCommand(command))
             {
