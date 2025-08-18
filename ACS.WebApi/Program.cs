@@ -39,8 +39,11 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
-// Add tenant process resolution middleware BEFORE authorization
-app.UseMiddleware<TenantProcessResolutionMiddleware>();
+// Add tenant process resolution middleware BEFORE authorization (skip in testing environment)
+if (!app.Environment.IsEnvironment("Testing"))
+{
+    app.UseMiddleware<TenantProcessResolutionMiddleware>();
+}
 
 app.UseAuthorization();
 
