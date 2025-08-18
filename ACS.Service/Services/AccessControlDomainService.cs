@@ -118,6 +118,12 @@ public class AccessControlDomainService
             // Execute the command using pattern matching
             object? result = command switch
             {
+                // CREATE Commands - Phase 2 requirement
+                CreateUserCommand cmd => await ProcessCreateUser(cmd),
+                CreateGroupCommand cmd => await ProcessCreateGroup(cmd),
+                CreateRoleCommand cmd => await ProcessCreateRole(cmd),
+                
+                // Relationship Commands
                 AddUserToGroupCommand cmd => await ProcessAddUserToGroup(cmd),
                 RemoveUserFromGroupCommand cmd => await ProcessRemoveUserFromGroup(cmd),
                 AssignUserToRoleCommand cmd => await ProcessAssignUserToRole(cmd),
@@ -128,6 +134,8 @@ public class AccessControlDomainService
                 RemoveGroupFromGroupCommand cmd => await ProcessRemoveGroupFromGroup(cmd),
                 AddPermissionToEntityCommand cmd => await ProcessAddPermissionToEntity(cmd),
                 RemovePermissionFromEntityCommand cmd => await ProcessRemovePermissionFromEntity(cmd),
+                
+                // Query Commands
                 CheckPermissionCommand cmd => await ProcessCheckPermission(cmd),
                 GetUserCommand cmd => ProcessGetUser(cmd),
                 GetGroupCommand cmd => ProcessGetGroup(cmd),
@@ -505,12 +513,188 @@ public class AccessControlDomainService
 
     #endregion
 
+    #region CREATE Operations - Phase 2 requirement
+
+    private async Task<User> ProcessCreateUser(CreateUserCommand command)
+    {
+        // Generate new ID (in real implementation this would come from database sequence)
+        var newId = _entityGraph.Users.Keys.Any() ? _entityGraph.Users.Keys.Max() + 1 : 1;
+        
+        // Create new user domain object
+        var user = new User
+        {
+            Id = newId,
+            Name = command.Name,
+            Parents = new List<Entity>(),
+            Children = new List<Entity>(),
+            Permissions = new List<Permission>()
+        };
+
+        // Add to entity graph
+        _entityGraph.Users[newId] = user;
+
+        // Handle optional group assignment
+        if (command.GroupId.HasValue)
+        {
+            var group = _entityGraph.GetGroup(command.GroupId.Value);
+            user.Parents.Add(group);
+            group.Children.Add(user);
+        }
+
+        // Handle optional role assignment
+        if (command.RoleId.HasValue)
+        {
+            var role = _entityGraph.GetRole(command.RoleId.Value);
+            user.Parents.Add(role);
+            role.Children.Add(user);
+        }
+
+        // Persist to database
+        await _persistenceService.PersistCreateUserAsync(user.Id, user.Name, command.GroupId, command.RoleId);
+
+        // Log audit event
+        await _eventPersistenceService.LogCreateUserAsync(user.Id, user.Name, command.GroupId, command.RoleId);
+
+        // Refresh normalizer collections to include new user
+        RefreshNormalizerCollections();
+
+        _logger.LogInformation("Created user {UserId} with name '{UserName}'", user.Id, user.Name);
+        
+        return user;
+    }
+
+    private async Task<Group> ProcessCreateGroup(CreateGroupCommand command)
+    {
+        // Generate new ID (in real implementation this would come from database sequence)
+        var newId = _entityGraph.Groups.Keys.Any() ? _entityGraph.Groups.Keys.Max() + 1 : 1;
+        
+        // Create new group domain object
+        var group = new Group
+        {
+            Id = newId,
+            Name = command.Name,
+            Parents = new List<Entity>(),
+            Children = new List<Entity>(),
+            Permissions = new List<Permission>()
+        };
+
+        // Add to entity graph
+        _entityGraph.Groups[newId] = group;
+
+        // Handle optional parent group assignment
+        if (command.ParentGroupId.HasValue)
+        {
+            var parentGroup = _entityGraph.GetGroup(command.ParentGroupId.Value);
+            
+            // Prevent circular references
+            if (WouldCreateCircularReference(group, parentGroup))
+            {
+                throw new InvalidOperationException($"Adding group {newId} to parent group {command.ParentGroupId.Value} would create a circular reference");
+            }
+            
+            group.Parents.Add(parentGroup);
+            parentGroup.Children.Add(group);
+        }
+
+        // Persist to database
+        await _persistenceService.PersistCreateGroupAsync(group.Id, group.Name, command.ParentGroupId);
+
+        // Log audit event
+        await _eventPersistenceService.LogCreateGroupAsync(group.Id, group.Name, command.ParentGroupId);
+
+        // Refresh normalizer collections to include new group
+        RefreshNormalizerCollections();
+
+        _logger.LogInformation("Created group {GroupId} with name '{GroupName}'", group.Id, group.Name);
+        
+        return group;
+    }
+
+    private async Task<Role> ProcessCreateRole(CreateRoleCommand command)
+    {
+        // Generate new ID (in real implementation this would come from database sequence)
+        var newId = _entityGraph.Roles.Keys.Any() ? _entityGraph.Roles.Keys.Max() + 1 : 1;
+        
+        // Create new role domain object
+        var role = new Role
+        {
+            Id = newId,
+            Name = command.Name,
+            Parents = new List<Entity>(),
+            Children = new List<Entity>(),
+            Permissions = new List<Permission>()
+        };
+
+        // Add to entity graph
+        _entityGraph.Roles[newId] = role;
+
+        // Handle optional group assignment
+        if (command.GroupId.HasValue)
+        {
+            var group = _entityGraph.GetGroup(command.GroupId.Value);
+            role.Parents.Add(group);
+            group.Children.Add(role);
+        }
+
+        // Persist to database
+        await _persistenceService.PersistCreateRoleAsync(role.Id, role.Name, command.GroupId);
+
+        // Log audit event
+        await _eventPersistenceService.LogCreateRoleAsync(role.Id, role.Name, command.GroupId);
+
+        // Refresh normalizer collections to include new role
+        RefreshNormalizerCollections();
+
+        _logger.LogInformation("Created role {RoleId} with name '{RoleName}'", role.Id, role.Name);
+        
+        return role;
+    }
+
+    #endregion
+
     public async Task LoadEntityGraphAsync(CancellationToken cancellationToken = default)
     {
         await _entityGraph.LoadFromDatabaseAsync(cancellationToken);
-        _entityGraph.HydrateNormalizerReferences();
+        RefreshNormalizerCollections();
         
         _logger.LogInformation("Entity graph loaded and normalizer references hydrated");
+    }
+
+    private void RefreshNormalizerCollections()
+    {
+        // Update normalizer collections to reference the same domain objects as the entity graph
+        // This ensures normalizers always have current references
+        var usersList = _entityGraph.Users.Values.ToList();
+        var groupsList = _entityGraph.Groups.Values.ToList();
+        var rolesList = _entityGraph.Roles.Values.ToList();
+
+        // User-Group normalizers
+        ACS.Service.Delegates.Normalizers.AddUserToGroupNormalizer.Users = usersList;
+        ACS.Service.Delegates.Normalizers.AddUserToGroupNormalizer.Groups = groupsList;
+        
+        ACS.Service.Delegates.Normalizers.RemoveUserFromGroupNormalizer.Users = usersList;
+        ACS.Service.Delegates.Normalizers.RemoveUserFromGroupNormalizer.Groups = groupsList;
+
+        // User-Role normalizers
+        ACS.Service.Delegates.Normalizers.AssignUserToRoleNormalizer.Users = usersList;
+        ACS.Service.Delegates.Normalizers.AssignUserToRoleNormalizer.Roles = rolesList;
+        
+        ACS.Service.Delegates.Normalizers.UnAssignUserFromRoleNormalizer.Users = usersList;
+        ACS.Service.Delegates.Normalizers.UnAssignUserFromRoleNormalizer.Roles = rolesList;
+
+        // Group-Role normalizers
+        ACS.Service.Delegates.Normalizers.AddRoleToGroupNormalizer.Roles = rolesList;
+        ACS.Service.Delegates.Normalizers.AddRoleToGroupNormalizer.Groups = groupsList;
+        
+        ACS.Service.Delegates.Normalizers.RemoveRoleFromGroupNormalizer.Roles = rolesList;
+        ACS.Service.Delegates.Normalizers.RemoveRoleFromGroupNormalizer.Groups = groupsList;
+
+        // Group-Group normalizers
+        ACS.Service.Delegates.Normalizers.AddGroupToGroupNormalizer.Groups = groupsList;
+        ACS.Service.Delegates.Normalizers.RemoveGroupFromGroupNormalizer.Groups = groupsList;
+
+        _logger.LogDebug("Normalizer collections refreshed with {UserCount} users, {GroupCount} groups, {RoleCount} roles", 
+            usersList.Count, groupsList.Count, rolesList.Count);
     }
 
     public void Dispose()

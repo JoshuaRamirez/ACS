@@ -7,25 +7,36 @@ using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Get tenant ID from command line arguments or environment
-var tenantId = args.Length > 0 ? args[0] : Environment.GetEnvironmentVariable("TENANT_ID");
-if (string.IsNullOrEmpty(tenantId))
+// Parse command line arguments
+var tenantId = Environment.GetEnvironmentVariable("TENANT_ID");
+var grpcPort = 50051; // default
+
+for (int i = 0; i < args.Length; i++)
 {
-    throw new InvalidOperationException("Tenant ID must be provided as command line argument or TENANT_ID environment variable");
+    if (args[i] == "--tenant" && i + 1 < args.Length)
+    {
+        tenantId = args[i + 1];
+        i++; // Skip next arg
+    }
+    else if (args[i] == "--port" && i + 1 < args.Length)
+    {
+        if (int.TryParse(args[i + 1], out var port))
+        {
+            grpcPort = port;
+        }
+        i++; // Skip next arg
+    }
 }
 
-// Get gRPC port from command line arguments
-var grpcPort = 50051; // default
-if (args.Length > 1 && args[1].StartsWith("--grpc-port"))
+// Also check environment variable for port if not set via args
+if (Environment.GetEnvironmentVariable("GRPC_PORT") is string portEnv && int.TryParse(portEnv, out var envPort))
 {
-    if (args.Length > 2 && int.TryParse(args[2], out var port))
-    {
-        grpcPort = port;
-    }
-    else if (args[1].Contains('=') && int.TryParse(args[1].Split('=')[1], out var portFromArg))
-    {
-        grpcPort = portFromArg;
-    }
+    grpcPort = envPort;
+}
+
+if (string.IsNullOrEmpty(tenantId))
+{
+    throw new InvalidOperationException("Tenant ID must be provided via --tenant argument or TENANT_ID environment variable");
 }
 
 // Configure Kestrel to listen on the specified gRPC port

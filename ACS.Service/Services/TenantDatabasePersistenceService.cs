@@ -453,6 +453,115 @@ public class TenantDatabasePersistenceService
 
     #endregion
 
+    #region CREATE Operations - Phase 2 requirement
+
+    public async Task PersistCreateUserAsync(int userId, string name, int? groupId = null, int? roleId = null)
+    {
+        try
+        {
+            var user = new Data.Models.User
+            {
+                Id = userId,
+                Name = name,
+                GroupId = groupId ?? 0,
+                RoleId = roleId ?? 0
+            };
+
+            // Set navigation properties if IDs are provided
+            if (groupId.HasValue && groupId.Value > 0)
+            {
+                user.Group = await _dbContext.Groups.FindAsync(groupId.Value);
+                if (user.Group == null)
+                    throw new InvalidOperationException($"Group {groupId.Value} not found");
+            }
+
+            if (roleId.HasValue && roleId.Value > 0)
+            {
+                user.Role = await _dbContext.Roles.FindAsync(roleId.Value);
+                if (user.Role == null)
+                    throw new InvalidOperationException($"Role {roleId.Value} not found");
+            }
+
+            _dbContext.Users.Add(user);
+            await _dbContext.SaveChangesAsync();
+
+            _logger.LogInformation("Persisted: Created user {UserId} with name '{UserName}'", userId, name);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to persist create user {UserId} with name '{UserName}'", userId, name);
+            throw;
+        }
+    }
+
+    public async Task PersistCreateGroupAsync(int groupId, string name, int? parentGroupId = null)
+    {
+        try
+        {
+            var group = new Data.Models.Group
+            {
+                Id = groupId,
+                Name = name,
+                ParentGroupId = parentGroupId ?? 0
+            };
+
+            // Set navigation property if parent ID is provided
+            if (parentGroupId.HasValue && parentGroupId.Value > 0)
+            {
+                group.ParentGroup = await _dbContext.Groups.FindAsync(parentGroupId.Value);
+                if (group.ParentGroup == null)
+                    throw new InvalidOperationException($"Parent group {parentGroupId.Value} not found");
+                
+                // Check for circular references
+                if (await WouldCreateCircularReferenceAsync(groupId, parentGroupId.Value))
+                    throw new InvalidOperationException($"Adding group {groupId} to parent group {parentGroupId.Value} would create a circular reference");
+            }
+
+            _dbContext.Groups.Add(group);
+            await _dbContext.SaveChangesAsync();
+
+            _logger.LogInformation("Persisted: Created group {GroupId} with name '{GroupName}'", groupId, name);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to persist create group {GroupId} with name '{GroupName}'", groupId, name);
+            throw;
+        }
+    }
+
+    public async Task PersistCreateRoleAsync(int roleId, string name, int? groupId = null)
+    {
+        try
+        {
+            var role = new Data.Models.Role
+            {
+                Id = roleId,
+                Name = name,
+                GroupId = groupId ?? 0
+            };
+
+            // Set navigation property if group ID is provided
+            if (groupId.HasValue && groupId.Value > 0)
+            {
+                role.Group = await _dbContext.Groups.FindAsync(groupId.Value);
+                if (role.Group == null)
+                    throw new InvalidOperationException($"Group {groupId.Value} not found");
+            }
+
+            _dbContext.Roles.Add(role);
+            await _dbContext.SaveChangesAsync();
+
+            _logger.LogInformation("Persisted: Created role {RoleId} with name '{RoleName}'", roleId, name);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to persist create role {RoleId} with name '{RoleName}'", roleId, name);
+            throw;
+        }
+    }
+
+    #endregion
+
     #region Bulk Operations
 
     public async Task<int> SaveChangesAsync()

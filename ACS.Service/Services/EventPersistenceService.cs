@@ -321,6 +321,83 @@ public class EventPersistenceService
 
     #endregion
 
+    #region CREATE Events - Phase 2 requirement
+
+    public async Task LogCreateUserAsync(int userId, string name, int? groupId = null, int? roleId = null, string changedBy = "System")
+    {
+        var auditLog = new AuditLog
+        {
+            EntityType = "User",
+            EntityId = userId,
+            ChangeType = "Create",
+            ChangedBy = changedBy,
+            ChangeDate = DateTime.UtcNow,
+            ChangeDetails = JsonSerializer.Serialize(new
+            {
+                Action = "CreateUser",
+                UserId = userId,
+                Name = name,
+                GroupId = groupId,
+                RoleId = roleId,
+                TenantId = _tenantId,
+                Timestamp = DateTime.UtcNow
+            })
+        };
+
+        await PersistAuditLogAsync(auditLog);
+        _logger.LogDebug("Audit log created for CreateUser: User {UserId} with name '{UserName}'", userId, name);
+    }
+
+    public async Task LogCreateGroupAsync(int groupId, string name, int? parentGroupId = null, string changedBy = "System")
+    {
+        var auditLog = new AuditLog
+        {
+            EntityType = "Group",
+            EntityId = groupId,
+            ChangeType = "Create",
+            ChangedBy = changedBy,
+            ChangeDate = DateTime.UtcNow,
+            ChangeDetails = JsonSerializer.Serialize(new
+            {
+                Action = "CreateGroup",
+                GroupId = groupId,
+                Name = name,
+                ParentGroupId = parentGroupId,
+                TenantId = _tenantId,
+                Timestamp = DateTime.UtcNow
+            })
+        };
+
+        await PersistAuditLogAsync(auditLog);
+        _logger.LogDebug("Audit log created for CreateGroup: Group {GroupId} with name '{GroupName}'", groupId, name);
+    }
+
+    public async Task LogCreateRoleAsync(int roleId, string name, int? groupId = null, string changedBy = "System")
+    {
+        var auditLog = new AuditLog
+        {
+            EntityType = "Role",
+            EntityId = roleId,
+            ChangeType = "Create",
+            ChangedBy = changedBy,
+            ChangeDate = DateTime.UtcNow,
+            ChangeDetails = JsonSerializer.Serialize(new
+            {
+                Action = "CreateRole",
+                RoleId = roleId,
+                Name = name,
+                GroupId = groupId,
+                TenantId = _tenantId,
+                Timestamp = DateTime.UtcNow
+            })
+        };
+
+        await PersistAuditLogAsync(auditLog);
+        _logger.LogDebug("Audit log created for CreateRole: Role {RoleId} with name '{RoleName}'", roleId, name);
+    }
+
+    #endregion
+
     #region Command Events
 
     public async Task LogCommandExecutionAsync(string commandType, object commandData, bool success, string errorMessage = "", long processingTimeMs = 0, string changedBy = "System")

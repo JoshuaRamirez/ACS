@@ -15,6 +15,7 @@
 
   <ItemGroup>
     <Protobuf Include="Protos\vertical.proto" GrpcServices="Both" />
+    <Protobuf Include="Protos\vertical_service.proto" GrpcServices="Both" />
   </ItemGroup>
 
 </Project>

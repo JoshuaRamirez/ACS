@@ -1,13 +1,15 @@
 using System;
 using System.Linq;
-using ACS.Service.Data.Models;
+using ACS.Service.Domain;
 
 namespace ACS.Service.Delegates.Normalizers
 {
     internal static class RemoveUserFromGroupNormalizer
     {
+        // These now reference the same Domain objects as the entity graph
         public static List<Group> Groups { get; set; } = null!;
         public static List<User> Users { get; set; } = null!;
+        
         public static void Execute(int userId, int groupId)
         {
             if (Groups is null)
@@ -26,14 +28,14 @@ namespace ACS.Service.Delegates.Normalizers
             var group = Groups.SingleOrDefault(x => x.Id == groupId)
                 ?? throw new InvalidOperationException($"Group {groupId} not found.");
 
-            if (!group.Users.Contains(user))
+            if (!group.Children.Contains(user))
             {
                 throw new InvalidOperationException($"User {userId} is not a member of group {groupId}.");
             }
 
-            group.Users.Remove(user);
-            user.Group = null;
-            user.GroupId = 0;
+            // Update the domain object collections directly
+            group.Children.Remove(user);
+            user.Parents.Remove(group);
         }
     }
 }

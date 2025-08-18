@@ -1,13 +1,15 @@
 using System;
 using System.Linq;
-using ACS.Service.Data.Models;
+using ACS.Service.Domain;
 
 namespace ACS.Service.Delegates.Normalizers
 {
-    internal class AddRoleToGroupNormalizer
+    internal static class AddRoleToGroupNormalizer
     {
+        // These now reference the same Domain objects as the entity graph
         public static List<Group> Groups { get; set; } = null!;
         public static List<Role> Roles { get; set; } = null!;
+        
         public static void Execute(int roleId, int groupId)
         {
             if (Groups is null)
@@ -26,9 +28,16 @@ namespace ACS.Service.Delegates.Normalizers
             var group = Groups.SingleOrDefault(x => x.Id == groupId)
                 ?? throw new InvalidOperationException($"Group {groupId} not found.");
 
-            group.Roles.Add(role);
-            role.Group = group;
-            role.GroupId = group.Id;
+            // Update the domain object collections directly
+            if (!group.Children.Contains(role))
+            {
+                group.Children.Add(role);
+            }
+            
+            if (!role.Parents.Contains(group))
+            {
+                role.Parents.Add(group);
+            }
         }
     }
 }

@@ -1,18 +1,41 @@
-﻿using ACS.Service.Data.Models;
+using ACS.Service.Domain;
 
 namespace ACS.Service.Delegates.Normalizers
 {
-    internal class AssignUserToRoleNormalizer
+    internal static class AssignUserToRoleNormalizer
     {
-        public static List<Role> Roles { get; set; }
-        public static List<User> Users { get; set; }
+        // These now reference the same Domain objects as the entity graph
+        public static List<Role> Roles { get; set; } = null!;
+        public static List<User> Users { get; set; } = null!;
+        
         public static void Execute(int userId, int roleId)
         {
-            var user = Users.Single(x => x.Id == userId);
-            var role = Roles.Single(x => x.Id == roleId);
-            role.Users.Add(user);
-            user.Role = role;
-            user.RoleId = role.Id;
+            if (Roles is null)
+            {
+                throw new InvalidOperationException("Roles collection has not been initialized.");
+            }
+
+            if (Users is null)
+            {
+                throw new InvalidOperationException("Users collection has not been initialized.");
+            }
+
+            var user = Users.SingleOrDefault(x => x.Id == userId)
+                ?? throw new InvalidOperationException($"User {userId} not found.");
+
+            var role = Roles.SingleOrDefault(x => x.Id == roleId)
+                ?? throw new InvalidOperationException($"Role {roleId} not found.");
+
+            // Update the domain object collections directly
+            if (!role.Children.Contains(user))
+            {
+                role.Children.Add(user);
+            }
+            
+            if (!user.Parents.Contains(role))
+            {
+                user.Parents.Add(role);
+            }
         }
     }
 }

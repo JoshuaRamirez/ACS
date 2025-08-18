@@ -106,3 +106,23 @@ public class GetRoleCommand : DomainCommand<Role>
 {
     public int RoleId { get; set; }
 }
+
+// CREATE Commands - Phase 2 requirement
+public class CreateUserCommand : DomainCommand<User>
+{
+    public string Name { get; set; } = null!;
+    public int? GroupId { get; set; }
+    public int? RoleId { get; set; }
+}
+
+public class CreateGroupCommand : DomainCommand<Group>
+{
+    public string Name { get; set; } = null!;
+    public int? ParentGroupId { get; set; }
+}
+
+public class CreateRoleCommand : DomainCommand<Role>
+{
+    public string Name { get; set; } = null!;
+    public int? GroupId { get; set; }
+}

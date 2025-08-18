@@ -1,0 +1,36 @@
+syntax = "proto3";
+
+option csharp_namespace = "ACS.Core.Grpc";
+
+package acs.vertical.v1;
+
+service VerticalService {
+  // Single command execution endpoint using binary serialization
+  rpc ExecuteCommand(CommandRequest) returns (CommandResponse);
+  
+  // Health check for process monitoring
+  rpc HealthCheck(HealthRequest) returns (HealthResponse);
+}
+
+message CommandRequest {
+  string command_type = 1;  // Type name for deserialization
+  bytes command_data = 2;    // Binary protobuf serialized DomainCommand
+  string correlation_id = 3; // For request tracking
+}
+
+message CommandResponse {
+  bool success = 1;
+  bytes result_data = 2;     // Binary protobuf serialized result
+  string error_message = 3;
+  string correlation_id = 4;
+}
+
+message HealthRequest {
+}
+
+message HealthResponse {
+  bool healthy = 1;
+  int64 uptime_seconds = 2;
+  int32 active_connections = 3;
+  int64 commands_processed = 4;
+}
