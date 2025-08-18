@@ -38,3 +38,46 @@ public record DenyPermissionCommand(string RequestId, DateTime Timestamp, string
 // Query commands (for permission evaluation)
 public record EvaluatePermissionCommand(string RequestId, DateTime Timestamp, string UserId, 
     int TargetUserId, string Uri, HttpVerb Verb) : WebRequestCommand(RequestId, Timestamp, UserId);
+
+// Query commands for entities
+public record GetUsersCommand(string RequestId, DateTime Timestamp, string UserId, 
+    int Page, int PageSize) : WebRequestCommand(RequestId, Timestamp, UserId);
+
+public record GetUserCommand(string RequestId, DateTime Timestamp, string UserId, 
+    int TargetUserId) : WebRequestCommand(RequestId, Timestamp, UserId);
+
+public record UpdateUserCommand(string RequestId, DateTime Timestamp, string UserId, 
+    int TargetUserId, string Name) : WebRequestCommand(RequestId, Timestamp, UserId);
+
+public record DeleteUserCommand(string RequestId, DateTime Timestamp, string UserId, 
+    int TargetUserId) : WebRequestCommand(RequestId, Timestamp, UserId);
+
+public record GetGroupsCommand(string RequestId, DateTime Timestamp, string UserId, 
+    int Page, int PageSize) : WebRequestCommand(RequestId, Timestamp, UserId);
+
+public record GetGroupCommand(string RequestId, DateTime Timestamp, string UserId, 
+    int GroupId) : WebRequestCommand(RequestId, Timestamp, UserId);
+
+public record UpdateGroupCommand(string RequestId, DateTime Timestamp, string UserId, 
+    int GroupId, string Name) : WebRequestCommand(RequestId, Timestamp, UserId);
+
+public record DeleteGroupCommand(string RequestId, DateTime Timestamp, string UserId, 
+    int GroupId) : WebRequestCommand(RequestId, Timestamp, UserId);
+
+public record GetRolesCommand(string RequestId, DateTime Timestamp, string UserId, 
+    int Page, int PageSize) : WebRequestCommand(RequestId, Timestamp, UserId);
+
+public record GetRoleCommand(string RequestId, DateTime Timestamp, string UserId, 
+    int RoleId) : WebRequestCommand(RequestId, Timestamp, UserId);
+
+public record UpdateRoleCommand(string RequestId, DateTime Timestamp, string UserId, 
+    int RoleId, string Name) : WebRequestCommand(RequestId, Timestamp, UserId);
+
+public record DeleteRoleCommand(string RequestId, DateTime Timestamp, string UserId, 
+    int RoleId) : WebRequestCommand(RequestId, Timestamp, UserId);
+
+public record GetEntityPermissionsCommand(string RequestId, DateTime Timestamp, string UserId, 
+    int EntityId, int Page, int PageSize) : WebRequestCommand(RequestId, Timestamp, UserId);
+
+public record RemovePermissionCommand(string RequestId, DateTime Timestamp, string UserId, 
+    int EntityId, string Uri, HttpVerb Verb) : WebRequestCommand(RequestId, Timestamp, UserId);

@@ -76,13 +76,130 @@ public class CommandTranslationService
                 HttpVerb = cmd.Verb
             },
             
+            // User CRUD operations
+            Infrastructure.CreateUserCommand cmd => new Services.CreateUserCommand
+            {
+                Name = cmd.Name
+            },
+            
+            Infrastructure.GetUsersCommand cmd => new Services.GetUsersCommand
+            {
+                Page = cmd.Page,
+                PageSize = cmd.PageSize
+            },
+            
+            Infrastructure.GetUserCommand cmd => new Services.GetUserCommand
+            {
+                UserId = cmd.TargetUserId
+            },
+            
+            Infrastructure.UpdateUserCommand cmd => new Services.UpdateUserCommand
+            {
+                UserId = cmd.TargetUserId,
+                Name = cmd.Name
+            },
+            
+            Infrastructure.DeleteUserCommand cmd => new Services.DeleteUserCommand
+            {
+                UserId = cmd.TargetUserId
+            },
+            
+            // Group CRUD operations
+            Infrastructure.CreateGroupCommand cmd => new Services.CreateGroupCommand
+            {
+                Name = cmd.Name,
+                ParentGroupId = cmd.ParentGroupId
+            },
+            
+            Infrastructure.GetGroupsCommand cmd => new Services.GetGroupsCommand
+            {
+                Page = cmd.Page,
+                PageSize = cmd.PageSize
+            },
+            
+            Infrastructure.GetGroupCommand cmd => new Services.GetGroupCommand
+            {
+                GroupId = cmd.GroupId
+            },
+            
+            Infrastructure.UpdateGroupCommand cmd => new Services.UpdateGroupCommand
+            {
+                GroupId = cmd.GroupId,
+                Name = cmd.Name
+            },
+            
+            Infrastructure.DeleteGroupCommand cmd => new Services.DeleteGroupCommand
+            {
+                GroupId = cmd.GroupId
+            },
+            
+            // Role CRUD operations
+            Infrastructure.CreateRoleCommand cmd => new Services.CreateRoleCommand
+            {
+                Name = cmd.Name,
+                GroupId = cmd.GroupId
+            },
+            
+            Infrastructure.GetRolesCommand cmd => new Services.GetRolesCommand
+            {
+                Page = cmd.Page,
+                PageSize = cmd.PageSize
+            },
+            
+            Infrastructure.GetRoleCommand cmd => new Services.GetRoleCommand
+            {
+                RoleId = cmd.RoleId
+            },
+            
+            Infrastructure.UpdateRoleCommand cmd => new Services.UpdateRoleCommand
+            {
+                RoleId = cmd.RoleId,
+                Name = cmd.Name
+            },
+            
+            Infrastructure.DeleteRoleCommand cmd => new Services.DeleteRoleCommand
+            {
+                RoleId = cmd.RoleId
+            },
+            
+            // Permission operations
+            Infrastructure.GetEntityPermissionsCommand cmd => new Services.GetEntityPermissionsCommand
+            {
+                EntityId = cmd.EntityId,
+                Page = cmd.Page,
+                PageSize = cmd.PageSize
+            },
+            
+            Infrastructure.RemovePermissionCommand cmd => new Services.RemovePermissionFromEntityCommand
+            {
+                EntityId = cmd.EntityId,
+                Permission = new Permission
+                {
+                    Uri = cmd.Uri,
+                    HttpVerb = cmd.Verb,
+                    Grant = false,
+                    Deny = false
+                }
+            },
+            
             _ => throw new NotSupportedException($"Web command type {webCommand.GetType().Name} is not supported for translation")
         };
     }
 
     public bool IsQueryCommand(WebRequestCommand webCommand)
     {
-        return webCommand is Infrastructure.EvaluatePermissionCommand;
+        return webCommand switch
+        {
+            Infrastructure.EvaluatePermissionCommand => true,
+            Infrastructure.GetUsersCommand => true,
+            Infrastructure.GetUserCommand => true,
+            Infrastructure.GetGroupsCommand => true,
+            Infrastructure.GetGroupCommand => true,
+            Infrastructure.GetRolesCommand => true,
+            Infrastructure.GetRoleCommand => true,
+            Infrastructure.GetEntityPermissionsCommand => true,
+            _ => false
+        };
     }
 
     public bool IsMutationCommand(WebRequestCommand webCommand)
@@ -90,14 +207,21 @@ public class CommandTranslationService
         return webCommand switch
         {
             Infrastructure.CreateUserCommand => true,
+            Infrastructure.UpdateUserCommand => true,
+            Infrastructure.DeleteUserCommand => true,
             Infrastructure.AddUserToGroupCommand => true,
             Infrastructure.RemoveUserFromGroupCommand => true,
             Infrastructure.CreateGroupCommand => true,
+            Infrastructure.UpdateGroupCommand => true,
+            Infrastructure.DeleteGroupCommand => true,
             Infrastructure.AddGroupToGroupCommand => true,
             Infrastructure.CreateRoleCommand => true,
+            Infrastructure.UpdateRoleCommand => true,
+            Infrastructure.DeleteRoleCommand => true,
             Infrastructure.AssignUserToRoleCommand => true,
             Infrastructure.GrantPermissionCommand => true,
             Infrastructure.DenyPermissionCommand => true,
+            Infrastructure.RemovePermissionCommand => true,
             _ => false
         };
     }

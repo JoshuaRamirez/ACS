@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using ACS.WebApi.DTOs;
 using ACS.WebApi.Services;
+using ACS.Service.Infrastructure;
 
 namespace ACS.WebApi.Controllers;
 
@@ -23,21 +24,30 @@ public class UsersController : ControllerBase
     /// Get all users for the current tenant
     /// </summary>
     [HttpGet]
-    public Task<ActionResult<ApiResponse<UserListResponse>>> GetUsers([FromQuery] PagedRequest request)
+    public async Task<ActionResult<ApiResponse<UserListResponse>>> GetUsers([FromQuery] PagedRequest request)
     {
         try
         {
-            // For now, return a placeholder since we don't have a GetUsers gRPC method yet
-            // This would need to be implemented in the gRPC service
-            var users = new List<UserResponse>();
-            var response = new UserListResponse(users, 0, request.Page, request.PageSize);
+            var getUsersCommand = new Service.Infrastructure.GetUsersCommand(
+                Guid.NewGuid().ToString(),
+                DateTime.UtcNow,
+                "current-user", // TODO: Get from authentication context
+                request.Page,
+                request.PageSize);
+
+            var result = await _grpcClientService.GetUsersAsync(getUsersCommand);
             
-            return Task.FromResult<ActionResult<ApiResponse<UserListResponse>>>(Ok(new ApiResponse<UserListResponse>(true, response)));
+            if (result.Success && result.Data != null)
+            {
+                return Ok(result);
+            }
+            
+            return StatusCode(500, new ApiResponse<UserListResponse>(false, null, result.ErrorMessage ?? "Error retrieving users"));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error retrieving users");
-            return Task.FromResult<ActionResult<ApiResponse<UserListResponse>>>(StatusCode(500, new ApiResponse<UserListResponse>(false, null, "Error retrieving users")));
+            return StatusCode(500, new ApiResponse<UserListResponse>(false, null, "Error retrieving users"));
         }
     }
 

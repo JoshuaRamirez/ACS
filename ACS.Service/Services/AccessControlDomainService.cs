@@ -149,6 +149,16 @@ public class AccessControlDomainService
                 CreateGroupCommand cmd => await ProcessCreateGroup(cmd),
                 CreateRoleCommand cmd => await ProcessCreateRole(cmd),
                 
+                // UPDATE Commands
+                UpdateUserCommand cmd => await ProcessUpdateUser(cmd),
+                UpdateGroupCommand cmd => await ProcessUpdateGroup(cmd),
+                UpdateRoleCommand cmd => await ProcessUpdateRole(cmd),
+                
+                // DELETE Commands
+                DeleteUserCommand cmd => await ProcessDeleteUser(cmd),
+                DeleteGroupCommand cmd => await ProcessDeleteGroup(cmd),
+                DeleteRoleCommand cmd => await ProcessDeleteRole(cmd),
+                
                 // Relationship Commands
                 AddUserToGroupCommand cmd => await ProcessAddUserToGroup(cmd),
                 RemoveUserFromGroupCommand cmd => await ProcessRemoveUserFromGroup(cmd),
@@ -166,6 +176,10 @@ public class AccessControlDomainService
                 GetUserCommand cmd => ProcessGetUser(cmd),
                 GetGroupCommand cmd => ProcessGetGroup(cmd),
                 GetRoleCommand cmd => ProcessGetRole(cmd),
+                GetUsersCommand cmd => ProcessGetUsers(cmd),
+                GetGroupsCommand cmd => ProcessGetGroups(cmd),
+                GetRolesCommand cmd => ProcessGetRoles(cmd),
+                GetEntityPermissionsCommand cmd => ProcessGetEntityPermissions(cmd),
                 _ => throw new NotSupportedException($"Command type {command.GetType().Name} is not supported")
             };
 
@@ -683,6 +697,250 @@ public class AccessControlDomainService
         _logger.LogInformation("Created role {RoleId} with name '{RoleName}'", role.Id, role.Name);
         
         return role;
+    }
+
+    #endregion
+
+    #region UPDATE Operations
+
+    private async Task<User> ProcessUpdateUser(UpdateUserCommand command)
+    {
+        var user = _entityGraph.GetUser(command.UserId);
+        user.Name = command.Name;
+
+        // Update in database
+        var dbUser = await _dbContext.Users.FindAsync(command.UserId);
+        if (dbUser != null)
+        {
+            dbUser.Name = command.Name;
+            await _dbContext.SaveChangesAsync();
+        }
+
+        // Log audit event
+        await _eventPersistenceService.LogUpdateUserAsync(command.UserId, command.Name);
+
+        _logger.LogInformation("Updated user {UserId} with name '{UserName}'", command.UserId, command.Name);
+        return user;
+    }
+
+    private async Task<Group> ProcessUpdateGroup(UpdateGroupCommand command)
+    {
+        var group = _entityGraph.GetGroup(command.GroupId);
+        group.Name = command.Name;
+
+        // Update in database
+        var dbGroup = await _dbContext.Groups.FindAsync(command.GroupId);
+        if (dbGroup != null)
+        {
+            dbGroup.Name = command.Name;
+            await _dbContext.SaveChangesAsync();
+        }
+
+        // Log audit event
+        await _eventPersistenceService.LogUpdateGroupAsync(command.GroupId, command.Name);
+
+        _logger.LogInformation("Updated group {GroupId} with name '{GroupName}'", command.GroupId, command.Name);
+        return group;
+    }
+
+    private async Task<Role> ProcessUpdateRole(UpdateRoleCommand command)
+    {
+        var role = _entityGraph.GetRole(command.RoleId);
+        role.Name = command.Name;
+
+        // Update in database
+        var dbRole = await _dbContext.Roles.FindAsync(command.RoleId);
+        if (dbRole != null)
+        {
+            dbRole.Name = command.Name;
+            await _dbContext.SaveChangesAsync();
+        }
+
+        // Log audit event
+        await _eventPersistenceService.LogUpdateRoleAsync(command.RoleId, command.Name);
+
+        _logger.LogInformation("Updated role {RoleId} with name '{RoleName}'", command.RoleId, command.Name);
+        return role;
+    }
+
+    #endregion
+
+    #region DELETE Operations
+
+    private async Task<bool> ProcessDeleteUser(DeleteUserCommand command)
+    {
+        var user = _entityGraph.GetUser(command.UserId);
+        
+        // Remove all relationships
+        foreach (var parent in user.Parents.ToList())
+        {
+            parent.Children.Remove(user);
+        }
+        user.Parents.Clear();
+        
+        foreach (var child in user.Children.ToList())
+        {
+            child.Parents.Remove(user);
+        }
+        user.Children.Clear();
+
+        // Remove from entity graph
+        _entityGraph.Users.Remove(command.UserId);
+
+        // Delete from database
+        var dbUser = await _dbContext.Users.FindAsync(command.UserId);
+        if (dbUser != null)
+        {
+            _dbContext.Users.Remove(dbUser);
+            await _dbContext.SaveChangesAsync();
+        }
+
+        // Log audit event
+        await _eventPersistenceService.LogDeleteUserAsync(command.UserId);
+
+        _logger.LogInformation("Deleted user {UserId}", command.UserId);
+        return true;
+    }
+
+    private async Task<bool> ProcessDeleteGroup(DeleteGroupCommand command)
+    {
+        var group = _entityGraph.GetGroup(command.GroupId);
+        
+        // Remove all relationships
+        foreach (var parent in group.Parents.ToList())
+        {
+            parent.Children.Remove(group);
+        }
+        group.Parents.Clear();
+        
+        foreach (var child in group.Children.ToList())
+        {
+            child.Parents.Remove(group);
+        }
+        group.Children.Clear();
+
+        // Remove from entity graph
+        _entityGraph.Groups.Remove(command.GroupId);
+
+        // Delete from database
+        var dbGroup = await _dbContext.Groups.FindAsync(command.GroupId);
+        if (dbGroup != null)
+        {
+            _dbContext.Groups.Remove(dbGroup);
+            await _dbContext.SaveChangesAsync();
+        }
+
+        // Log audit event
+        await _eventPersistenceService.LogDeleteGroupAsync(command.GroupId);
+
+        _logger.LogInformation("Deleted group {GroupId}", command.GroupId);
+        return true;
+    }
+
+    private async Task<bool> ProcessDeleteRole(DeleteRoleCommand command)
+    {
+        var role = _entityGraph.GetRole(command.RoleId);
+        
+        // Remove all relationships
+        foreach (var parent in role.Parents.ToList())
+        {
+            parent.Children.Remove(role);
+        }
+        role.Parents.Clear();
+        
+        foreach (var child in role.Children.ToList())
+        {
+            child.Parents.Remove(role);
+        }
+        role.Children.Clear();
+
+        // Remove from entity graph
+        _entityGraph.Roles.Remove(command.RoleId);
+
+        // Delete from database
+        var dbRole = await _dbContext.Roles.FindAsync(command.RoleId);
+        if (dbRole != null)
+        {
+            _dbContext.Roles.Remove(dbRole);
+            await _dbContext.SaveChangesAsync();
+        }
+
+        // Log audit event
+        await _eventPersistenceService.LogDeleteRoleAsync(command.RoleId);
+
+        _logger.LogInformation("Deleted role {RoleId}", command.RoleId);
+        return true;
+    }
+
+    #endregion
+
+    #region QUERY Operations for Lists
+
+    private List<User> ProcessGetUsers(GetUsersCommand command)
+    {
+        var users = _entityGraph.Users.Values
+            .Skip((command.Page - 1) * command.PageSize)
+            .Take(command.PageSize)
+            .ToList();
+        
+        _logger.LogDebug("Retrieved {Count} users for page {Page}", users.Count, command.Page);
+        return users;
+    }
+
+    private List<Group> ProcessGetGroups(GetGroupsCommand command)
+    {
+        var groups = _entityGraph.Groups.Values
+            .Skip((command.Page - 1) * command.PageSize)
+            .Take(command.PageSize)
+            .ToList();
+        
+        _logger.LogDebug("Retrieved {Count} groups for page {Page}", groups.Count, command.Page);
+        return groups;
+    }
+
+    private List<Role> ProcessGetRoles(GetRolesCommand command)
+    {
+        var roles = _entityGraph.Roles.Values
+            .Skip((command.Page - 1) * command.PageSize)
+            .Take(command.PageSize)
+            .ToList();
+        
+        _logger.LogDebug("Retrieved {Count} roles for page {Page}", roles.Count, command.Page);
+        return roles;
+    }
+
+    private List<Permission> ProcessGetEntityPermissions(GetEntityPermissionsCommand command)
+    {
+        Entity? entity = null;
+        
+        // Try to find the entity in users, groups, or roles
+        if (_entityGraph.Users.ContainsKey(command.EntityId))
+        {
+            entity = _entityGraph.Users[command.EntityId];
+        }
+        else if (_entityGraph.Groups.ContainsKey(command.EntityId))
+        {
+            entity = _entityGraph.Groups[command.EntityId];
+        }
+        else if (_entityGraph.Roles.ContainsKey(command.EntityId))
+        {
+            entity = _entityGraph.Roles[command.EntityId];
+        }
+        
+        if (entity == null)
+        {
+            _logger.LogWarning("Entity {EntityId} not found for permissions query", command.EntityId);
+            return new List<Permission>();
+        }
+        
+        var permissions = entity.Permissions
+            .Skip((command.Page - 1) * command.PageSize)
+            .Take(command.PageSize)
+            .ToList();
+        
+        _logger.LogDebug("Retrieved {Count} permissions for entity {EntityId} on page {Page}", 
+            permissions.Count, command.EntityId, command.Page);
+        return permissions;
     }
 
     #endregion

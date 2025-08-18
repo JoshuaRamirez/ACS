@@ -5,6 +5,9 @@ using Grpc.Core;
 using Microsoft.Extensions.Logging;
 using Google.Protobuf.WellKnownTypes;
 using Google.Protobuf;
+using ACS.Service.Infrastructure;
+using ACS.Service.Domain;
+using ACS.Infrastructure;
 
 namespace ACS.WebApi.Services;
 
@@ -140,6 +143,108 @@ public class TenantGrpcClientService
                 response.ErrorMessage ?? "Permission check failed"
             );
         });
+    }
+
+    // User operations
+    public async Task<ApiResponse<UserListResponse>> GetUsersAsync(Service.Infrastructure.GetUsersCommand command)
+    {
+        return await ExecuteWithRetry(async (client) =>
+        {
+            var commandRequest = CreateCommandRequest(command);
+            var response = await client.ExecuteCommandAsync(commandRequest);
+            
+            if (response.Success && response.ResultData.Length > 0)
+            {
+                var users = ProtoSerializer.Deserialize<List<User>>(response.ResultData);
+                var userResponses = users.Select(u => new UserResponse(u.Id, u.Name, u.Parents.FirstOrDefault()?.Id, u.Children.FirstOrDefault()?.Id)).ToList();
+                var result = new UserListResponse(userResponses, users.Count, command.Page, command.PageSize);
+                
+                return new ApiResponse<UserListResponse>(true, result);
+            }
+            
+            return new ApiResponse<UserListResponse>(false, null, response.ErrorMessage ?? "Failed to retrieve users");
+        });
+    }
+
+    public async Task<ApiResponse<UserResponse>> GetUserAsync(Service.Infrastructure.GetUserCommand command)
+    {
+        return await ExecuteWithRetry(async (client) =>
+        {
+            var commandRequest = CreateCommandRequest(command);
+            var response = await client.ExecuteCommandAsync(commandRequest);
+            
+            if (response.Success && response.ResultData.Length > 0)
+            {
+                var user = ProtoSerializer.Deserialize<User>(response.ResultData);
+                var result = new UserResponse(user.Id, user.Name, user.Parents.FirstOrDefault()?.Id, user.Children.FirstOrDefault()?.Id);
+                
+                return new ApiResponse<UserResponse>(true, result);
+            }
+            
+            return new ApiResponse<UserResponse>(false, null, response.ErrorMessage ?? "User not found");
+        });
+    }
+
+    public async Task<ApiResponse<UserResponse>> CreateUserAsync(Service.Infrastructure.CreateUserCommand command)
+    {
+        return await ExecuteWithRetry(async (client) =>
+        {
+            var commandRequest = CreateCommandRequest(command);
+            var response = await client.ExecuteCommandAsync(commandRequest);
+            
+            if (response.Success && response.ResultData.Length > 0)
+            {
+                var user = ProtoSerializer.Deserialize<User>(response.ResultData);
+                var result = new UserResponse(user.Id, user.Name, user.Parents.FirstOrDefault()?.Id, user.Children.FirstOrDefault()?.Id);
+                
+                return new ApiResponse<UserResponse>(true, result);
+            }
+            
+            return new ApiResponse<UserResponse>(false, null, response.ErrorMessage ?? "Failed to create user");
+        });
+    }
+
+    public async Task<ApiResponse<UserResponse>> UpdateUserAsync(Service.Infrastructure.UpdateUserCommand command)
+    {
+        return await ExecuteWithRetry(async (client) =>
+        {
+            var commandRequest = CreateCommandRequest(command);
+            var response = await client.ExecuteCommandAsync(commandRequest);
+            
+            if (response.Success && response.ResultData.Length > 0)
+            {
+                var user = ProtoSerializer.Deserialize<User>(response.ResultData);
+                var result = new UserResponse(user.Id, user.Name, user.Parents.FirstOrDefault()?.Id, user.Children.FirstOrDefault()?.Id);
+                
+                return new ApiResponse<UserResponse>(true, result);
+            }
+            
+            return new ApiResponse<UserResponse>(false, null, response.ErrorMessage ?? "Failed to update user");
+        });
+    }
+
+    public async Task<ApiResponse<bool>> DeleteUserAsync(Service.Infrastructure.DeleteUserCommand command)
+    {
+        return await ExecuteWithRetry(async (client) =>
+        {
+            var commandRequest = CreateCommandRequest(command);
+            var response = await client.ExecuteCommandAsync(commandRequest);
+            
+            return new ApiResponse<bool>(response.Success, response.Success, response.ErrorMessage);
+        });
+    }
+
+    private CommandRequest CreateCommandRequest(Service.Infrastructure.WebRequestCommand command)
+    {
+        var tenantId = _tenantContextService.GetTenantId();
+        var serializedCommand = ProtoSerializer.Serialize(command);
+
+        return new CommandRequest
+        {
+            CommandType = command.GetType().Name,
+            CommandData = ByteString.CopyFrom(serializedCommand),
+            CorrelationId = command.RequestId
+        };
     }
 
     private CommandRequest CreateCommandRequest(string commandType, IMessage commandData)

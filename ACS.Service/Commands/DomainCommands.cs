@@ -126,3 +126,64 @@ public class CreateRoleCommand : DomainCommand<Role>
     public string Name { get; set; } = null!;
     public int? GroupId { get; set; }
 }
+
+// UPDATE Commands
+public class UpdateUserCommand : DomainCommand<User>
+{
+    public int UserId { get; set; }
+    public string Name { get; set; } = null!;
+}
+
+public class UpdateGroupCommand : DomainCommand<Group>
+{
+    public int GroupId { get; set; }
+    public string Name { get; set; } = null!;
+}
+
+public class UpdateRoleCommand : DomainCommand<Role>
+{
+    public int RoleId { get; set; }
+    public string Name { get; set; } = null!;
+}
+
+// DELETE Commands
+public class DeleteUserCommand : DomainCommand<bool>
+{
+    public int UserId { get; set; }
+}
+
+public class DeleteGroupCommand : DomainCommand<bool>
+{
+    public int GroupId { get; set; }
+}
+
+public class DeleteRoleCommand : DomainCommand<bool>
+{
+    public int RoleId { get; set; }
+}
+
+// QUERY Commands for lists
+public class GetUsersCommand : DomainCommand<List<User>>
+{
+    public int Page { get; set; }
+    public int PageSize { get; set; }
+}
+
+public class GetGroupsCommand : DomainCommand<List<Group>>
+{
+    public int Page { get; set; }
+    public int PageSize { get; set; }
+}
+
+public class GetRolesCommand : DomainCommand<List<Role>>
+{
+    public int Page { get; set; }
+    public int PageSize { get; set; }
+}
+
+public class GetEntityPermissionsCommand : DomainCommand<List<Permission>>
+{
+    public int EntityId { get; set; }
+    public int Page { get; set; }
+    public int PageSize { get; set; }
+}
