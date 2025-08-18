@@ -273,7 +273,7 @@ public class TenantProcessDiscoveryService : IDisposable
         }
     }
 
-    public async Task<List<TenantProcessInfo>> GetAllTenantProcessesAsync()
+    public Task<List<TenantProcessInfo>> GetAllTenantProcessesAsync()
     {
         var processes = new List<TenantProcessInfo>();
         
@@ -296,7 +296,7 @@ public class TenantProcessDiscoveryService : IDisposable
             }
         }
         
-        return processes;
+        return Task.FromResult(processes);
     }
 
     public void Dispose()
