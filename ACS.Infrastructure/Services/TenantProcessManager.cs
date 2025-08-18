@@ -10,8 +10,12 @@ public class TenantProcessManager : IDisposable
     private readonly ILogger<TenantProcessManager> _logger;
     private readonly Dictionary<string, TenantProcess> _processes = new();
     private readonly object _lock = new();
-    private int _nextPort = 5001;
     private bool _disposed = false;
+    
+    // Port management with configurable range
+    private const int MIN_PORT = 5001;
+    private const int MAX_PORT = 5100;
+    private readonly HashSet<int> _usedPorts = new();
 
     public class TenantProcess
     {
@@ -114,7 +118,31 @@ public class TenantProcessManager : IDisposable
     {
         lock (_lock)
         {
-            return _nextPort++;
+            // Find first available port in range
+            for (int port = MIN_PORT; port <= MAX_PORT; port++)
+            {
+                if (!_usedPorts.Contains(port))
+                {
+                    _usedPorts.Add(port);
+                    _logger.LogDebug("Allocated port {Port}, {UsedCount} ports in use", 
+                        port, _usedPorts.Count);
+                    return port;
+                }
+            }
+            
+            throw new InvalidOperationException($"No available ports in range {MIN_PORT}-{MAX_PORT}. All {_usedPorts.Count} ports are in use.");
+        }
+    }
+    
+    private void ReleasePort(int port)
+    {
+        lock (_lock)
+        {
+            if (_usedPorts.Remove(port))
+            {
+                _logger.LogDebug("Released port {Port}, {UsedCount} ports in use", 
+                    port, _usedPorts.Count);
+            }
         }
     }
 
@@ -152,9 +180,11 @@ public class TenantProcessManager : IDisposable
 
     private void StopTenantProcessInternal(string tenantId)
     {
+        TenantProcess? process = null;
+        
         lock (_lock)
         {
-            if (!_processes.TryGetValue(tenantId, out var process))
+            if (!_processes.TryGetValue(tenantId, out process))
                 return;
 
             try
@@ -183,6 +213,8 @@ public class TenantProcessManager : IDisposable
             finally
             {
                 _processes.Remove(tenantId);
+                // Release the port for reuse
+                ReleasePort(process.Port);
             }
         }
 
@@ -243,22 +275,36 @@ public class TenantProcessManager : IDisposable
 
         _disposed = true;
 
+        // Get all tenant IDs to avoid modification during iteration
         List<string> tenantIds;
         lock (_lock)
         {
             tenantIds = _processes.Keys.ToList();
         }
 
-        foreach (var tenantId in tenantIds)
+        // Stop all processes in parallel for faster shutdown
+        if (tenantIds.Count > 0)
         {
-            try
+            _logger.LogInformation("Disposing TenantProcessManager, stopping {Count} processes", tenantIds.Count);
+            
+            Parallel.ForEach(tenantIds, new ParallelOptions { MaxDegreeOfParallelism = 4 }, tenantId =>
             {
-                StopTenantProcessInternal(tenantId);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error disposing tenant process {TenantId}", tenantId);
-            }
+                try
+                {
+                    StopTenantProcessInternal(tenantId);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error disposing tenant process {TenantId}", tenantId);
+                }
+            });
+        }
+
+        // Final cleanup
+        lock (_lock)
+        {
+            _processes.Clear();
+            _usedPorts.Clear();
         }
 
         _logger.LogInformation("TenantProcessManager disposed, all processes stopped");

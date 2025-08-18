@@ -3,6 +3,9 @@ using ACS.Service.Infrastructure;
 using ACS.Service.Domain;
 using ACS.Service.Data;
 using System.Threading.Channels;
+using Polly;
+using Polly.Retry;
+using Microsoft.EntityFrameworkCore;
 
 namespace ACS.Service.Services;
 
@@ -18,6 +21,14 @@ public class AccessControlDomainService
     private readonly ChannelReader<DomainCommand> _commandReader;
     private readonly CancellationTokenSource _cancellationTokenSource;
     private readonly Task _processingTask;
+    
+    // Thread-safe ID generation
+    private int _nextUserId = 0;
+    private int _nextGroupId = 0;
+    private int _nextRoleId = 0;
+    
+    // Retry policy for database operations
+    private readonly AsyncRetryPolicy _retryPolicy;
 
     public AccessControlDomainService(
         InMemoryEntityGraph entityGraph,
@@ -44,11 +55,26 @@ public class AccessControlDomainService
         _commandChannel = Channel.CreateBounded<DomainCommand>(channelOptions);
         _commandWriter = _commandChannel.Writer;
         _commandReader = _commandChannel.Reader;
+        
+        // Configure retry policy for database operations
+        _retryPolicy = Policy
+            .Handle<DbUpdateException>()
+            .Or<TimeoutException>()
+            .Or<InvalidOperationException>(ex => ex.Message.Contains("timeout", StringComparison.OrdinalIgnoreCase))
+            .WaitAndRetryAsync(
+                3,
+                retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt)),
+                onRetry: (exception, timeSpan, retryCount, context) =>
+                {
+                    _logger.LogWarning(exception, 
+                        "Database operation failed. Retry {RetryCount} after {Delay}ms", 
+                        retryCount, timeSpan.TotalMilliseconds);
+                });
 
         // Start background processing task
         _processingTask = Task.Run(ProcessCommandsAsync, _cancellationTokenSource.Token);
         
-        _logger.LogInformation("AccessControlDomainService initialized with single-threaded command processing");
+        _logger.LogInformation("AccessControlDomainService initialized with single-threaded command processing and retry policy");
     }
 
     public async Task<TResult> ExecuteCommandAsync<TResult>(DomainCommand<TResult> command)
@@ -517,8 +543,8 @@ public class AccessControlDomainService
 
     private async Task<User> ProcessCreateUser(CreateUserCommand command)
     {
-        // Generate new ID (in real implementation this would come from database sequence)
-        var newId = _entityGraph.Users.Keys.Any() ? _entityGraph.Users.Keys.Max() + 1 : 1;
+        // Thread-safe ID generation
+        var newId = Interlocked.Increment(ref _nextUserId);
         
         // Create new user domain object
         var user = new User
@@ -549,14 +575,23 @@ public class AccessControlDomainService
             role.Children.Add(user);
         }
 
-        // Persist to database
-        await _persistenceService.PersistCreateUserAsync(user.Id, user.Name, command.GroupId, command.RoleId);
+        // Persist to database with retry logic
+        await _retryPolicy.ExecuteAsync(async () =>
+            await _persistenceService.PersistCreateUserAsync(user.Id, user.Name, command.GroupId, command.RoleId));
 
-        // Log audit event
-        await _eventPersistenceService.LogCreateUserAsync(user.Id, user.Name, command.GroupId, command.RoleId);
+        // Log audit event (non-critical, no retry needed)
+        try
+        {
+            await _eventPersistenceService.LogCreateUserAsync(user.Id, user.Name, command.GroupId, command.RoleId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to log audit event for user creation {UserId}", user.Id);
+            // Don't fail the operation if audit logging fails
+        }
 
-        // Refresh normalizer collections to include new user
-        RefreshNormalizerCollections();
+        // Refresh normalizer collections to include new user (optimized)
+        RefreshNormalizerCollectionsForUsers();
 
         _logger.LogInformation("Created user {UserId} with name '{UserName}'", user.Id, user.Name);
         
@@ -565,8 +600,8 @@ public class AccessControlDomainService
 
     private async Task<Group> ProcessCreateGroup(CreateGroupCommand command)
     {
-        // Generate new ID (in real implementation this would come from database sequence)
-        var newId = _entityGraph.Groups.Keys.Any() ? _entityGraph.Groups.Keys.Max() + 1 : 1;
+        // Thread-safe ID generation
+        var newId = Interlocked.Increment(ref _nextGroupId);
         
         // Create new group domain object
         var group = new Group
@@ -602,8 +637,8 @@ public class AccessControlDomainService
         // Log audit event
         await _eventPersistenceService.LogCreateGroupAsync(group.Id, group.Name, command.ParentGroupId);
 
-        // Refresh normalizer collections to include new group
-        RefreshNormalizerCollections();
+        // Refresh normalizer collections to include new group (optimized)
+        RefreshNormalizerCollectionsForGroups();
 
         _logger.LogInformation("Created group {GroupId} with name '{GroupName}'", group.Id, group.Name);
         
@@ -612,8 +647,8 @@ public class AccessControlDomainService
 
     private async Task<Role> ProcessCreateRole(CreateRoleCommand command)
     {
-        // Generate new ID (in real implementation this would come from database sequence)
-        var newId = _entityGraph.Roles.Keys.Any() ? _entityGraph.Roles.Keys.Max() + 1 : 1;
+        // Thread-safe ID generation
+        var newId = Interlocked.Increment(ref _nextRoleId);
         
         // Create new role domain object
         var role = new Role
@@ -642,8 +677,8 @@ public class AccessControlDomainService
         // Log audit event
         await _eventPersistenceService.LogCreateRoleAsync(role.Id, role.Name, command.GroupId);
 
-        // Refresh normalizer collections to include new role
-        RefreshNormalizerCollections();
+        // Refresh normalizer collections to include new role (optimized)
+        RefreshNormalizerCollectionsForRoles();
 
         _logger.LogInformation("Created role {RoleId} with name '{RoleName}'", role.Id, role.Name);
         
@@ -657,44 +692,101 @@ public class AccessControlDomainService
         await _entityGraph.LoadFromDatabaseAsync(cancellationToken);
         RefreshNormalizerCollections();
         
-        _logger.LogInformation("Entity graph loaded and normalizer references hydrated");
+        // Initialize ID counters from existing data
+        _nextUserId = _entityGraph.Users.Keys.Any() ? _entityGraph.Users.Keys.Max() : 0;
+        _nextGroupId = _entityGraph.Groups.Keys.Any() ? _entityGraph.Groups.Keys.Max() : 0;
+        _nextRoleId = _entityGraph.Roles.Keys.Any() ? _entityGraph.Roles.Keys.Max() : 0;
+        
+        _logger.LogInformation("Entity graph loaded and normalizer references hydrated. Next IDs: User={UserId}, Group={GroupId}, Role={RoleId}", 
+            _nextUserId + 1, _nextGroupId + 1, _nextRoleId + 1);
     }
 
     private void RefreshNormalizerCollections()
     {
-        // Update normalizer collections to reference the same domain objects as the entity graph
-        // This ensures normalizers always have current references
-        var usersList = _entityGraph.Users.Values.ToList();
-        var groupsList = _entityGraph.Groups.Values.ToList();
-        var rolesList = _entityGraph.Roles.Values.ToList();
-
-        // User-Group normalizers
-        ACS.Service.Delegates.Normalizers.AddUserToGroupNormalizer.Users = usersList;
-        ACS.Service.Delegates.Normalizers.AddUserToGroupNormalizer.Groups = groupsList;
+        // Full refresh - used during initialization
+        RefreshNormalizerCollectionsInternal(true, true, true);
+    }
+    
+    private void RefreshNormalizerCollectionsForUsers()
+    {
+        // Optimized refresh for user changes only
+        RefreshNormalizerCollectionsInternal(true, false, false);
+    }
+    
+    private void RefreshNormalizerCollectionsForGroups()
+    {
+        // Optimized refresh for group changes only
+        RefreshNormalizerCollectionsInternal(false, true, false);
+    }
+    
+    private void RefreshNormalizerCollectionsForRoles()
+    {
+        // Optimized refresh for role changes only
+        RefreshNormalizerCollectionsInternal(false, false, true);
+    }
+    
+    private void RefreshNormalizerCollectionsInternal(bool refreshUsers, bool refreshGroups, bool refreshRoles)
+    {
+        // Only refresh what's needed to minimize allocations
+        List<User>? usersList = null;
+        List<Group>? groupsList = null;
+        List<Role>? rolesList = null;
         
-        ACS.Service.Delegates.Normalizers.RemoveUserFromGroupNormalizer.Users = usersList;
-        ACS.Service.Delegates.Normalizers.RemoveUserFromGroupNormalizer.Groups = groupsList;
-
-        // User-Role normalizers
-        ACS.Service.Delegates.Normalizers.AssignUserToRoleNormalizer.Users = usersList;
-        ACS.Service.Delegates.Normalizers.AssignUserToRoleNormalizer.Roles = rolesList;
+        if (refreshUsers)
+        {
+            usersList = _entityGraph.Users.Values.ToList();
+        }
         
-        ACS.Service.Delegates.Normalizers.UnAssignUserFromRoleNormalizer.Users = usersList;
-        ACS.Service.Delegates.Normalizers.UnAssignUserFromRoleNormalizer.Roles = rolesList;
-
-        // Group-Role normalizers
-        ACS.Service.Delegates.Normalizers.AddRoleToGroupNormalizer.Roles = rolesList;
-        ACS.Service.Delegates.Normalizers.AddRoleToGroupNormalizer.Groups = groupsList;
+        if (refreshGroups)
+        {
+            groupsList = _entityGraph.Groups.Values.ToList();
+        }
         
-        ACS.Service.Delegates.Normalizers.RemoveRoleFromGroupNormalizer.Roles = rolesList;
-        ACS.Service.Delegates.Normalizers.RemoveRoleFromGroupNormalizer.Groups = groupsList;
+        if (refreshRoles)
+        {
+            rolesList = _entityGraph.Roles.Values.ToList();
+        }
 
-        // Group-Group normalizers
-        ACS.Service.Delegates.Normalizers.AddGroupToGroupNormalizer.Groups = groupsList;
-        ACS.Service.Delegates.Normalizers.RemoveGroupFromGroupNormalizer.Groups = groupsList;
+        // Update normalizers only for changed collections
+        if (refreshUsers && usersList != null)
+        {
+            // User-Group normalizers
+            ACS.Service.Delegates.Normalizers.AddUserToGroupNormalizer.Users = usersList;
+            ACS.Service.Delegates.Normalizers.RemoveUserFromGroupNormalizer.Users = usersList;
+            
+            // User-Role normalizers
+            ACS.Service.Delegates.Normalizers.AssignUserToRoleNormalizer.Users = usersList;
+            ACS.Service.Delegates.Normalizers.UnAssignUserFromRoleNormalizer.Users = usersList;
+        }
+        
+        if (refreshGroups && groupsList != null)
+        {
+            // User-Group normalizers
+            ACS.Service.Delegates.Normalizers.AddUserToGroupNormalizer.Groups = groupsList;
+            ACS.Service.Delegates.Normalizers.RemoveUserFromGroupNormalizer.Groups = groupsList;
+            
+            // Group-Role normalizers
+            ACS.Service.Delegates.Normalizers.AddRoleToGroupNormalizer.Groups = groupsList;
+            ACS.Service.Delegates.Normalizers.RemoveRoleFromGroupNormalizer.Groups = groupsList;
+            
+            // Group-Group normalizers
+            ACS.Service.Delegates.Normalizers.AddGroupToGroupNormalizer.Groups = groupsList;
+            ACS.Service.Delegates.Normalizers.RemoveGroupFromGroupNormalizer.Groups = groupsList;
+        }
+        
+        if (refreshRoles && rolesList != null)
+        {
+            // User-Role normalizers
+            ACS.Service.Delegates.Normalizers.AssignUserToRoleNormalizer.Roles = rolesList;
+            ACS.Service.Delegates.Normalizers.UnAssignUserFromRoleNormalizer.Roles = rolesList;
+            
+            // Group-Role normalizers
+            ACS.Service.Delegates.Normalizers.AddRoleToGroupNormalizer.Roles = rolesList;
+            ACS.Service.Delegates.Normalizers.RemoveRoleFromGroupNormalizer.Roles = rolesList;
+        }
 
-        _logger.LogDebug("Normalizer collections refreshed with {UserCount} users, {GroupCount} groups, {RoleCount} roles", 
-            usersList.Count, groupsList.Count, rolesList.Count);
+        _logger.LogDebug("Normalizer collections refreshed - Users: {RefreshUsers}, Groups: {RefreshGroups}, Roles: {RefreshRoles}", 
+            refreshUsers, refreshGroups, refreshRoles);
     }
 
     public void Dispose()
