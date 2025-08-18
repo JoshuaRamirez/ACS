@@ -8,6 +8,7 @@ using Google.Protobuf;
 using ACS.Service.Infrastructure;
 using ACS.Service.Domain;
 using ACS.Infrastructure;
+using System.Diagnostics;
 
 namespace ACS.WebApi.Services;
 
@@ -30,39 +31,61 @@ public class TenantGrpcClientService
     public async Task<ApiResponse<T>> ExecuteCommandAsync<T>(Func<VerticalService.VerticalServiceClient, Task<T>> operation)
     {
         var tenantId = string.Empty;
+        using var activity = TelemetryService.StartGrpcClientActivity("ExecuteCommand", tenantId);
+        
         try
         {
             tenantId = _tenantContextService.GetTenantId();
+            activity?.SetTag("tenant.id", tenantId);
+            
             var channel = _tenantContextService.GetGrpcChannel();
             
             if (channel == null)
             {
+                activity?.SetTag("error.reason", "channel_not_found");
                 _logger.LogWarning("gRPC channel not found for tenant {TenantId}", tenantId);
                 return new ApiResponse<T>(false, default, $"Tenant process not available for tenant {tenantId}");
             }
 
+            activity?.SetTag("grpc.channel.state", channel.State.ToString());
+
             // Use circuit breaker pattern for resilience
             var result = await _circuitBreaker.ExecuteAsync(tenantId, async () =>
             {
+                using var cbActivity = TelemetryService.StartCircuitBreakerActivity("execute", tenantId);
+                
                 var client = new VerticalService.VerticalServiceClient(channel);
                 
                 // Execute with retry logic inside circuit breaker
                 const int maxRetries = 3;
                 for (int attempt = 1; attempt <= maxRetries; attempt++)
                 {
+                    using var retryActivity = TelemetryService.ActivitySource.StartActivity($"grpc.retry.attempt_{attempt}");
+                    retryActivity?.SetTag("tenant.id", tenantId);
+                    retryActivity?.SetTag("retry.attempt", attempt);
+                    retryActivity?.SetTag("retry.max_attempts", maxRetries);
+                    
                     try
                     {
                         var commandResult = await operation(client);
+                        activity?.SetTag("retry.final_attempt", attempt);
+                        retryActivity?.SetTag("retry.successful", true);
                         _logger.LogDebug("Successfully executed gRPC command for tenant {TenantId} on attempt {Attempt}", tenantId, attempt);
                         return commandResult;
                     }
                     catch (RpcException rpcEx) when (attempt < maxRetries)
                     {
+                        retryActivity?.SetTag("retry.successful", false);
+                        retryActivity?.SetTag("grpc.status_code", rpcEx.Status.StatusCode.ToString());
+                        TelemetryService.RecordError(retryActivity, rpcEx);
+                        
                         _logger.LogWarning(rpcEx, "gRPC call failed for tenant {TenantId} on attempt {Attempt}/{MaxRetries}: {Status}", 
                             tenantId, attempt, maxRetries, rpcEx.Status);
                         
                         // Wait before retry
-                        await Task.Delay(TimeSpan.FromMilliseconds(100 * attempt));
+                        var delay = TimeSpan.FromMilliseconds(100 * attempt);
+                        retryActivity?.SetTag("retry.delay_ms", delay.TotalMilliseconds);
+                        await Task.Delay(delay);
                     }
                 }
                 
@@ -70,15 +93,22 @@ public class TenantGrpcClientService
                 throw new RpcException(new Status(StatusCode.Unavailable, "gRPC service temporarily unavailable after retries"));
             });
             
+            activity?.SetTag("operation.successful", true);
             return new ApiResponse<T>(true, result);
         }
         catch (CircuitBreakerOpenException cbEx)
         {
+            activity?.SetTag("circuit_breaker.open", true);
+            TelemetryService.RecordError(activity, cbEx);
             _logger.LogWarning(cbEx, "Circuit breaker is open for tenant {TenantId}", tenantId);
             return new ApiResponse<T>(false, default, "Service temporarily unavailable - circuit breaker open", new List<string> { cbEx.Message });
         }
         catch (RpcException rpcEx)
         {
+            activity?.SetTag("grpc.status_code", rpcEx.Status.StatusCode.ToString());
+            activity?.SetTag("grpc.status_detail", rpcEx.Status.Detail);
+            TelemetryService.RecordError(activity, rpcEx);
+            
             _logger.LogError(rpcEx, "gRPC error for tenant {TenantId}: {Status} - {Detail}", tenantId, rpcEx.Status, rpcEx.Status.Detail);
             
             var errorMessage = rpcEx.Status.StatusCode switch
@@ -95,6 +125,7 @@ public class TenantGrpcClientService
         }
         catch (Exception ex)
         {
+            TelemetryService.RecordError(activity, ex);
             _logger.LogError(ex, "Unexpected error executing gRPC command for tenant {TenantId}: {Error}", tenantId, ex.Message);
             return new ApiResponse<T>(false, default, "Internal server error", new List<string> { ex.Message });
         }
@@ -162,6 +193,11 @@ public class TenantGrpcClientService
     {
         return await ExecuteCommandAsync(async (client) =>
         {
+            using var activity = TelemetryService.ActivitySource.StartActivity("grpc.command.GetUsers");
+            TelemetryService.RecordCommandProcessing(activity, nameof(GetUsersCommand), command.RequestId);
+            activity?.SetTag("pagination.page", command.Page);
+            activity?.SetTag("pagination.page_size", command.PageSize);
+            
             var commandRequest = CreateCommandRequest(command);
             var response = await client.ExecuteCommandAsync(commandRequest).ResponseAsync;
             

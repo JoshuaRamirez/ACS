@@ -22,6 +22,9 @@ builder.Services.AddScoped<TenantGrpcClientService>();
 // Add logging
 builder.Services.AddLogging();
 
+// Configure OpenTelemetry for distributed tracing
+builder.Services.ConfigureOpenTelemetry(builder.Configuration);
+
 // Add CORS for development
 builder.Services.AddCors(options =>
 {

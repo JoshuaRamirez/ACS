@@ -63,6 +63,9 @@ builder.Services.AddSingleton<CommandTranslationService>();
 builder.Services.AddSingleton<TenantRingBuffer>();
 builder.Services.AddHostedService<TenantAccessControlHostedService>();
 
+// Configure OpenTelemetry for distributed tracing
+builder.Services.ConfigureOpenTelemetry(builder.Configuration);
+
 // gRPC services
 builder.Services.AddGrpc(options =>
 {

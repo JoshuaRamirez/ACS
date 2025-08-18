@@ -6,6 +6,7 @@ using Google.Protobuf;
 using Microsoft.Extensions.Logging;
 using ACS.Infrastructure;
 using System.Reflection;
+using System.Diagnostics;
 
 namespace ACS.VerticalHost.Services;
 
@@ -32,6 +33,9 @@ public class VerticalGrpcService : VerticalService.VerticalServiceBase
         ServerCallContext context)
     {
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        using var activity = VerticalHostTelemetryService.StartGrpcServiceActivity("ExecuteCommand");
+        activity?.SetTag("command.type", request.CommandType);
+        activity?.SetTag("command.correlation_id", request.CorrelationId);
         
         try
         {
@@ -56,14 +60,20 @@ public class VerticalGrpcService : VerticalService.VerticalServiceBase
             var isVoidCommand = !commandType.IsGenericType;
             byte[] resultData = Array.Empty<byte>();
 
+            using var commandActivity = VerticalHostTelemetryService.StartCommandProcessingActivity(
+                request.CommandType, request.CorrelationId);
+
             if (isVoidCommand)
             {
                 // Execute void command
                 await _domainService.ExecuteCommandAsync((DomainCommand)command);
+                commandActivity?.SetTag("command.has_result", false);
             }
             else
             {
                 // Execute command with result
+                commandActivity?.SetTag("command.has_result", true);
+                
                 var executeMethod = typeof(AccessControlDomainService)
                     .GetMethods()
                     .Where(m => m.Name == "ExecuteCommandAsync" && m.IsGenericMethodDefinition)
@@ -75,6 +85,8 @@ public class VerticalGrpcService : VerticalService.VerticalServiceBase
                 }
 
                 var resultType = commandType.GetGenericArguments()[0];
+                commandActivity?.SetTag("command.result_type", resultType.Name);
+                
                 var genericMethod = executeMethod.MakeGenericMethod(resultType);
                 
                 var task = genericMethod.Invoke(_domainService, new[] { command });
@@ -94,12 +106,18 @@ public class VerticalGrpcService : VerticalService.VerticalServiceBase
                 {
                     // Serialize result using binary protobuf
                     resultData = ProtoSerializer.Serialize(result);
+                    commandActivity?.SetTag("result.serialized_size", resultData.Length);
                 }
             }
 
             Interlocked.Increment(ref _commandsProcessed);
             
             stopwatch.Stop();
+            
+            // Record telemetry metrics
+            VerticalHostTelemetryService.RecordCommandMetrics(activity, stopwatch.Elapsed, true);
+            VerticalHostTelemetryService.RecordCommandMetrics(commandActivity, stopwatch.Elapsed, true);
+            
             _logger.LogInformation("Command {CommandType} executed successfully in {ElapsedMs}ms", 
                 request.CommandType, stopwatch.ElapsedMilliseconds);
 
@@ -113,6 +131,11 @@ public class VerticalGrpcService : VerticalService.VerticalServiceBase
         catch (Exception ex)
         {
             stopwatch.Stop();
+            
+            // Record error in telemetry
+            VerticalHostTelemetryService.RecordError(activity, ex);
+            VerticalHostTelemetryService.RecordCommandMetrics(activity, stopwatch.Elapsed, false);
+            
             _logger.LogError(ex, "Error executing command {CommandType} after {ElapsedMs}ms", 
                 request.CommandType, stopwatch.ElapsedMilliseconds);
 
@@ -129,14 +152,21 @@ public class VerticalGrpcService : VerticalService.VerticalServiceBase
         HealthRequest request,
         ServerCallContext context)
     {
+        using var activity = VerticalHostTelemetryService.StartGrpcServiceActivity("HealthCheck");
+        
         var uptime = DateTime.UtcNow - _startTime;
+        var commandsProcessed = Interlocked.Read(ref _commandsProcessed);
+        
+        activity?.SetTag("health.uptime_seconds", uptime.TotalSeconds);
+        activity?.SetTag("health.commands_processed", commandsProcessed);
+        activity?.SetTag("health.status", "healthy");
         
         var response = new HealthResponse
         {
             Healthy = true,
             UptimeSeconds = (long)uptime.TotalSeconds,
             ActiveConnections = 1, // Can be enhanced with real metrics
-            CommandsProcessed = Interlocked.Read(ref _commandsProcessed)
+            CommandsProcessed = commandsProcessed
         };
 
         _logger.LogDebug("Health check: Uptime={Uptime}s, Commands={Commands}", 
