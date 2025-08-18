@@ -5,7 +5,6 @@ using Grpc.Core;
 using Microsoft.Extensions.Logging;
 using Google.Protobuf.WellKnownTypes;
 using Google.Protobuf;
-using System.Text.Json;
 
 namespace ACS.WebApi.Services;
 
@@ -101,38 +100,34 @@ public class TenantGrpcClientService
         {
             var tenantId = _tenantContextService.GetTenantId();
             
-            var commandData = Any.Pack(new StringValue 
-            { 
-                Value = JsonSerializer.Serialize(new 
-                {
-                    EntityId = request.EntityId,
-                    Uri = request.Uri,
-                    HttpVerb = request.HttpVerb
-                })
-            });
+            var queryData = new CheckPermissionQuery
+            {
+                EntityId = request.EntityId,
+                Uri = request.Uri,
+                HttpVerb = request.HttpVerb
+            };
 
             var queryRequest = new QueryRequest
             {
                 TenantId = tenantId,
                 QueryId = Guid.NewGuid().ToString(),
                 QueryType = "CheckPermission",
-                QueryData = commandData
+                QueryData = Any.Pack(queryData)
             };
 
             var response = await client.ExecuteQueryAsync(queryRequest);
             
             if (response.Success && response.ResultData != null)
             {
-                var resultJson = response.ResultData.Unpack<StringValue>().Value;
-                var hasPermission = JsonSerializer.Deserialize<bool>(resultJson);
+                var result = response.ResultData.Unpack<CheckPermissionResult>();
                 
                 return new CheckPermissionResponse(
-                    hasPermission,
+                    result.HasPermission,
                     request.Uri,
                     request.HttpVerb,
                     request.EntityId,
                     "Entity",
-                    hasPermission ? "Permission granted" : "Permission denied"
+                    result.Reason
                 );
             }
             
@@ -147,21 +142,16 @@ public class TenantGrpcClientService
         });
     }
 
-    private CommandRequest CreateCommandRequest(string commandType, object commandData)
+    private CommandRequest CreateCommandRequest(string commandType, IMessage commandData)
     {
         var tenantId = _tenantContextService.GetTenantId();
-        
-        var data = Any.Pack(new StringValue 
-        { 
-            Value = JsonSerializer.Serialize(commandData)
-        });
 
         return new CommandRequest
         {
             TenantId = tenantId,
             CommandId = Guid.NewGuid().ToString(),
             CommandType = commandType,
-            CommandData = data,
+            CommandData = Any.Pack(commandData),
             Timestamp = Timestamp.FromDateTime(DateTime.UtcNow)
         };
     }
@@ -170,12 +160,13 @@ public class TenantGrpcClientService
     {
         return await ExecuteVoidCommandAsync(async client =>
         {
-            var commandRequest = CreateCommandRequest("AddUserToGroup", new
+            var commandData = new AddUserToGroupCommand
             {
                 UserId = request.UserId,
                 GroupId = request.GroupId
-            });
+            };
 
+            var commandRequest = CreateCommandRequest("AddUserToGroup", commandData);
             var response = await client.SubmitCommandAsync(commandRequest);
             
             if (!response.Success)
@@ -189,12 +180,13 @@ public class TenantGrpcClientService
     {
         return await ExecuteVoidCommandAsync(async client =>
         {
-            var commandRequest = CreateCommandRequest("AssignUserToRole", new
+            var commandData = new AssignUserToRoleCommand
             {
                 UserId = request.UserId,
                 RoleId = request.RoleId
-            });
+            };
 
+            var commandRequest = CreateCommandRequest("AssignUserToRole", commandData);
             var response = await client.SubmitCommandAsync(commandRequest);
             
             if (!response.Success)
@@ -208,14 +200,15 @@ public class TenantGrpcClientService
     {
         return await ExecuteVoidCommandAsync(async client =>
         {
-            var commandRequest = CreateCommandRequest("GrantPermission", new
+            var commandData = new GrantPermissionCommand
             {
                 EntityId = request.EntityId,
                 Uri = request.Uri,
                 HttpVerb = request.HttpVerb,
                 Scheme = request.Scheme
-            });
+            };
 
+            var commandRequest = CreateCommandRequest("GrantPermission", commandData);
             var response = await client.SubmitCommandAsync(commandRequest);
             
             if (!response.Success)
@@ -229,14 +222,15 @@ public class TenantGrpcClientService
     {
         return await ExecuteVoidCommandAsync(async client =>
         {
-            var commandRequest = CreateCommandRequest("DenyPermission", new
+            var commandData = new DenyPermissionCommand
             {
                 EntityId = request.EntityId,
                 Uri = request.Uri,
                 HttpVerb = request.HttpVerb,
                 Scheme = request.Scheme
-            });
+            };
 
+            var commandRequest = CreateCommandRequest("DenyPermission", commandData);
             var response = await client.SubmitCommandAsync(commandRequest);
             
             if (!response.Success)
@@ -250,12 +244,13 @@ public class TenantGrpcClientService
     {
         return await ExecuteVoidCommandAsync(async client =>
         {
-            var commandRequest = CreateCommandRequest("AddGroupToGroup", new
+            var commandData = new AddGroupToGroupCommand
             {
                 ParentGroupId = request.ParentGroupId,
                 ChildGroupId = request.ChildGroupId
-            });
+            };
 
+            var commandRequest = CreateCommandRequest("AddGroupToGroup", commandData);
             var response = await client.SubmitCommandAsync(commandRequest);
             
             if (!response.Success)
@@ -269,12 +264,13 @@ public class TenantGrpcClientService
     {
         return await ExecuteVoidCommandAsync(async client =>
         {
-            var commandRequest = CreateCommandRequest("AddRoleToGroup", new
+            var commandData = new AddRoleToGroupCommand
             {
                 GroupId = request.GroupId,
                 RoleId = request.RoleId
-            });
+            };
 
+            var commandRequest = CreateCommandRequest("AddRoleToGroup", commandData);
             var response = await client.SubmitCommandAsync(commandRequest);
             
             if (!response.Success)

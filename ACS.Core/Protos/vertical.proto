@@ -53,3 +53,117 @@ message TenantHealthResponse {
   int64 commands_processed = 3;
   int64 memory_usage_bytes = 4;
 }
+
+// Command Data Messages (using binary protobuf serialization)
+message AddUserToGroupCommand {
+  int32 user_id = 1;
+  int32 group_id = 2;
+}
+
+message AssignUserToRoleCommand {
+  int32 user_id = 1;
+  int32 role_id = 2;
+}
+
+message GrantPermissionCommand {
+  int32 entity_id = 1;
+  string uri = 2;
+  string http_verb = 3;
+  string scheme = 4;
+}
+
+message DenyPermissionCommand {
+  int32 entity_id = 1;
+  string uri = 2;
+  string http_verb = 3;
+  string scheme = 4;
+}
+
+message AddGroupToGroupCommand {
+  int32 parent_group_id = 1;
+  int32 child_group_id = 2;
+}
+
+message AddRoleToGroupCommand {
+  int32 group_id = 1;
+  int32 role_id = 2;
+}
+
+message CreateUserCommand {
+  string name = 1;
+  int32 group_id = 2;
+  int32 role_id = 3;
+}
+
+message CreateGroupCommand {
+  string name = 1;
+  int32 parent_group_id = 2;
+}
+
+message CreateRoleCommand {
+  string name = 1;
+  int32 group_id = 2;
+}
+
+// Query Data Messages
+message CheckPermissionQuery {
+  int32 entity_id = 1;
+  string uri = 2;
+  string http_verb = 3;
+}
+
+message GetUserQuery {
+  int32 user_id = 1;
+}
+
+message GetGroupQuery {
+  int32 group_id = 1;
+}
+
+message GetRoleQuery {
+  int32 role_id = 1;
+}
+
+// Response Data Messages
+message CheckPermissionResult {
+  bool has_permission = 1;
+  string reason = 2;
+}
+
+message UserResult {
+  int32 id = 1;
+  string name = 2;
+  int32 group_id = 3;
+  string group_name = 4;
+  int32 role_id = 5;
+  string role_name = 6;
+  repeated PermissionResult permissions = 7;
+}
+
+message GroupResult {
+  int32 id = 1;
+  string name = 2;
+  int32 parent_group_id = 3;
+  string parent_group_name = 4;
+  repeated int32 child_group_ids = 5;
+  repeated int32 user_ids = 6;
+  repeated int32 role_ids = 7;
+}
+
+message RoleResult {
+  int32 id = 1;
+  string name = 2;
+  int32 group_id = 3;
+  string group_name = 4;
+  repeated int32 user_ids = 5;
+  repeated PermissionResult permissions = 6;
+}
+
+message PermissionResult {
+  int32 id = 1;
+  string uri = 2;
+  string http_verb = 3;
+  bool grant = 4;
+  bool deny = 5;
+  string scheme = 6;
+}
