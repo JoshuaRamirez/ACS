@@ -83,7 +83,7 @@ public class MockTenantContextService : ITenantContextService
 
 public class MockTenantGrpcClientService : TenantGrpcClientService
 {
-    public MockTenantGrpcClientService() : base(null!, null!)
+    public MockTenantGrpcClientService() : base(null!, null!, null!)
     {
     }
 

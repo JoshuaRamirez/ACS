@@ -10,13 +10,16 @@ namespace ACS.WebApi.Controllers;
 public class RolesController : ControllerBase
 {
     private readonly TenantGrpcClientService _grpcClientService;
+    private readonly GrpcErrorMappingService _errorMapper;
     private readonly ILogger<RolesController> _logger;
 
     public RolesController(
         TenantGrpcClientService grpcClientService,
+        GrpcErrorMappingService errorMapper,
         ILogger<RolesController> logger)
     {
         _grpcClientService = grpcClientService;
+        _errorMapper = errorMapper;
         _logger = logger;
     }
 
@@ -47,7 +50,7 @@ public class RolesController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error retrieving roles");
-            return StatusCode(500, new ApiResponse<RoleListResponse>(false, null, "Error retrieving roles"));
+            return this.HandleGrpcException<RoleListResponse>(ex, _errorMapper, "Error retrieving roles");
         }
     }
 
@@ -82,7 +85,7 @@ public class RolesController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error retrieving role {RoleId}", id);
-            return StatusCode(500, new ApiResponse<RoleResponse>(false, null, "Error retrieving role"));
+            return this.HandleGrpcException<RoleResponse>(ex, _errorMapper, "Error retrieving role");
         }
     }
 
@@ -118,7 +121,7 @@ public class RolesController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error creating role");
-            return StatusCode(500, new ApiResponse<RoleResponse>(false, null, "Error creating role"));
+            return this.HandleGrpcException<RoleResponse>(ex, _errorMapper, "Error creating role");
         }
     }
 
@@ -159,7 +162,7 @@ public class RolesController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error updating role {RoleId}", id);
-            return StatusCode(500, new ApiResponse<RoleResponse>(false, null, "Error updating role"));
+            return this.HandleGrpcException<RoleResponse>(ex, _errorMapper, "Error updating role");
         }
     }
 
@@ -194,7 +197,7 @@ public class RolesController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error deleting role {RoleId}", id);
-            return StatusCode(500, new ApiResponse<bool>(false, false, "Error deleting role"));
+            return this.HandleGrpcException<bool>(ex, _errorMapper, "Error deleting role");
         }
     }
 }

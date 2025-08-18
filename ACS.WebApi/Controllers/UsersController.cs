@@ -10,13 +10,16 @@ namespace ACS.WebApi.Controllers;
 public class UsersController : ControllerBase
 {
     private readonly TenantGrpcClientService _grpcClientService;
+    private readonly GrpcErrorMappingService _errorMapper;
     private readonly ILogger<UsersController> _logger;
 
     public UsersController(
         TenantGrpcClientService grpcClientService,
+        GrpcErrorMappingService errorMapper,
         ILogger<UsersController> logger)
     {
         _grpcClientService = grpcClientService;
+        _errorMapper = errorMapper;
         _logger = logger;
     }
 
@@ -47,7 +50,7 @@ public class UsersController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error retrieving users");
-            return StatusCode(500, new ApiResponse<UserListResponse>(false, null, "Error retrieving users"));
+            return this.HandleGrpcException<UserListResponse>(ex, _errorMapper, "Error retrieving users");
         }
     }
 
@@ -72,17 +75,12 @@ public class UsersController : ControllerBase
                 return Ok(result);
             }
             
-            if (result.Message?.Contains("not found") == true)
-            {
-                return NotFound(new ApiResponse<UserResponse>(false, null, $"User {id} not found"));
-            }
-            
             return StatusCode(500, new ApiResponse<UserResponse>(false, null, result.Message ?? "Error retrieving user"));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error retrieving user {UserId}", id);
-            return StatusCode(500, new ApiResponse<UserResponse>(false, null, "Error retrieving user"));
+            return this.HandleGrpcException<UserResponse>(ex, _errorMapper, "Error retrieving user");
         }
     }
 
@@ -117,7 +115,7 @@ public class UsersController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error creating user");
-            return StatusCode(500, new ApiResponse<UserResponse>(false, null, "Error creating user"));
+            return this.HandleGrpcException<UserResponse>(ex, _errorMapper, "Error creating user");
         }
     }
 
@@ -148,17 +146,12 @@ public class UsersController : ControllerBase
                 return Ok(result);
             }
             
-            if (result.Message?.Contains("not found") == true)
-            {
-                return NotFound(new ApiResponse<UserResponse>(false, null, $"User {id} not found"));
-            }
-            
             return StatusCode(500, new ApiResponse<UserResponse>(false, null, result.Message ?? "Error updating user"));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error updating user {UserId}", id);
-            return StatusCode(500, new ApiResponse<UserResponse>(false, null, "Error updating user"));
+            return this.HandleGrpcException<UserResponse>(ex, _errorMapper, "Error updating user");
         }
     }
 
@@ -183,17 +176,12 @@ public class UsersController : ControllerBase
                 return Ok(result);
             }
             
-            if (result.Message?.Contains("not found") == true)
-            {
-                return NotFound(new ApiResponse<bool>(false, false, $"User {id} not found"));
-            }
-            
             return StatusCode(500, new ApiResponse<bool>(false, false, result.Message ?? "Error deleting user"));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error deleting user {UserId}", id);
-            return StatusCode(500, new ApiResponse<bool>(false, false, "Error deleting user"));
+            return this.HandleGrpcException<bool>(ex, _errorMapper, "Error deleting user");
         }
     }
 
@@ -222,7 +210,7 @@ public class UsersController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error adding user {UserId} to group {GroupId}", userId, request.GroupId);
-            return StatusCode(500, new ApiResponse<bool>(false, false, "Error adding user to group"));
+            return this.HandleGrpcException<bool>(ex, _errorMapper, "Error adding user to group");
         }
     }
 
@@ -251,7 +239,7 @@ public class UsersController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error assigning user {UserId} to role {RoleId}", userId, request.RoleId);
-            return StatusCode(500, new ApiResponse<bool>(false, false, "Error assigning user to role"));
+            return this.HandleGrpcException<bool>(ex, _errorMapper, "Error assigning user to role");
         }
     }
 }

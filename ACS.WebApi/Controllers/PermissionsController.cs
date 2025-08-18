@@ -11,13 +11,16 @@ namespace ACS.WebApi.Controllers;
 public class PermissionsController : ControllerBase
 {
     private readonly TenantGrpcClientService _grpcClientService;
+    private readonly GrpcErrorMappingService _errorMapper;
     private readonly ILogger<PermissionsController> _logger;
 
     public PermissionsController(
         TenantGrpcClientService grpcClientService,
+        GrpcErrorMappingService errorMapper,
         ILogger<PermissionsController> logger)
     {
         _grpcClientService = grpcClientService;
+        _errorMapper = errorMapper;
         _logger = logger;
     }
 
@@ -57,7 +60,7 @@ public class PermissionsController : ControllerBase
         {
             _logger.LogError(ex, "Error checking permission for entity {EntityId} on {Uri}:{HttpVerb}", 
                 request.EntityId, request.Uri, request.HttpVerb);
-            return StatusCode(500, new ApiResponse<CheckPermissionResponse>(false, null, "Error checking permission"));
+            return this.HandleGrpcException<CheckPermissionResponse>(ex, _errorMapper, "Error checking permission");
         }
     }
 
@@ -97,7 +100,7 @@ public class PermissionsController : ControllerBase
         {
             _logger.LogError(ex, "Error granting permission to entity {EntityId} for {Uri}:{HttpVerb}", 
                 request.EntityId, request.Uri, request.HttpVerb);
-            return StatusCode(500, new ApiResponse<bool>(false, false, "Error granting permission"));
+            return this.HandleGrpcException<bool>(ex, _errorMapper, "Error granting permission");
         }
     }
 
@@ -137,7 +140,7 @@ public class PermissionsController : ControllerBase
         {
             _logger.LogError(ex, "Error denying permission to entity {EntityId} for {Uri}:{HttpVerb}", 
                 request.EntityId, request.Uri, request.HttpVerb);
-            return StatusCode(500, new ApiResponse<bool>(false, false, "Error denying permission"));
+            return this.HandleGrpcException<bool>(ex, _errorMapper, "Error denying permission");
         }
     }
 
@@ -174,7 +177,7 @@ public class PermissionsController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error retrieving permissions for entity {EntityId}", entityId);
-            return StatusCode(500, new ApiResponse<PermissionListResponse>(false, null, "Error retrieving permissions"));
+            return this.HandleGrpcException<PermissionListResponse>(ex, _errorMapper, "Error retrieving permissions");
         }
     }
 
@@ -228,7 +231,7 @@ public class PermissionsController : ControllerBase
         {
             _logger.LogError(ex, "Error removing permission from entity {EntityId} for {Uri}:{HttpVerb}", 
                 entityId, request.Uri, request.HttpVerb);
-            return StatusCode(500, new ApiResponse<bool>(false, false, "Error removing permission"));
+            return this.HandleGrpcException<bool>(ex, _errorMapper, "Error removing permission");
         }
     }
 }

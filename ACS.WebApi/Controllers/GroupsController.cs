@@ -10,13 +10,16 @@ namespace ACS.WebApi.Controllers;
 public class GroupsController : ControllerBase
 {
     private readonly TenantGrpcClientService _grpcClientService;
+    private readonly GrpcErrorMappingService _errorMapper;
     private readonly ILogger<GroupsController> _logger;
 
     public GroupsController(
         TenantGrpcClientService grpcClientService,
+        GrpcErrorMappingService errorMapper,
         ILogger<GroupsController> logger)
     {
         _grpcClientService = grpcClientService;
+        _errorMapper = errorMapper;
         _logger = logger;
     }
 
@@ -47,7 +50,7 @@ public class GroupsController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error retrieving groups");
-            return StatusCode(500, new ApiResponse<GroupListResponse>(false, null, "Error retrieving groups"));
+            return this.HandleGrpcException<GroupListResponse>(ex, _errorMapper, "Error retrieving groups");
         }
     }
 
@@ -82,7 +85,7 @@ public class GroupsController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error retrieving group {GroupId}", id);
-            return StatusCode(500, new ApiResponse<GroupResponse>(false, null, "Error retrieving group"));
+            return this.HandleGrpcException<GroupResponse>(ex, _errorMapper, "Error retrieving group");
         }
     }
 
@@ -118,7 +121,7 @@ public class GroupsController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error creating group");
-            return StatusCode(500, new ApiResponse<GroupResponse>(false, null, "Error creating group"));
+            return this.HandleGrpcException<GroupResponse>(ex, _errorMapper, "Error creating group");
         }
     }
 
@@ -159,7 +162,7 @@ public class GroupsController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error updating group {GroupId}", id);
-            return StatusCode(500, new ApiResponse<GroupResponse>(false, null, "Error updating group"));
+            return this.HandleGrpcException<GroupResponse>(ex, _errorMapper, "Error updating group");
         }
     }
 
@@ -194,7 +197,7 @@ public class GroupsController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error deleting group {GroupId}", id);
-            return StatusCode(500, new ApiResponse<bool>(false, false, "Error deleting group"));
+            return this.HandleGrpcException<bool>(ex, _errorMapper, "Error deleting group");
         }
     }
 
@@ -223,7 +226,7 @@ public class GroupsController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error adding group {ChildGroupId} to group {ParentGroupId}", request.ChildGroupId, parentGroupId);
-            return StatusCode(500, new ApiResponse<bool>(false, false, "Error adding group to group"));
+            return this.HandleGrpcException<bool>(ex, _errorMapper, "Error adding group to group");
         }
     }
 
@@ -252,7 +255,7 @@ public class GroupsController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error adding role {RoleId} to group {GroupId}", request.RoleId, groupId);
-            return StatusCode(500, new ApiResponse<bool>(false, false, "Error adding role to group"));
+            return this.HandleGrpcException<bool>(ex, _errorMapper, "Error adding role to group");
         }
     }
 }
