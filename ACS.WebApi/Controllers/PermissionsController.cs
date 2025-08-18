@@ -143,25 +143,25 @@ public class PermissionsController : ControllerBase
     /// Get all permissions for a specific entity
     /// </summary>
     [HttpGet("entity/{entityId:int}")]
-    public async Task<ActionResult<ApiResponse<PermissionListResponse>>> GetEntityPermissions(int entityId, [FromQuery] PagedRequest request)
+    public Task<ActionResult<ApiResponse<PermissionListResponse>>> GetEntityPermissions(int entityId, [FromQuery] PagedRequest request)
     {
         try
         {
             if (entityId <= 0)
             {
-                return BadRequest(new ApiResponse<PermissionListResponse>(false, null, "Entity ID must be greater than 0"));
+                return Task.FromResult<ActionResult<ApiResponse<PermissionListResponse>>>(BadRequest(new ApiResponse<PermissionListResponse>(false, null, "Entity ID must be greater than 0")));
             }
 
             // For now, return a placeholder since we don't have a GetEntityPermissions gRPC method yet
             var permissions = new List<PermissionResponse>();
             var response = new PermissionListResponse(permissions, 0, request.Page, request.PageSize);
             
-            return Ok(new ApiResponse<PermissionListResponse>(true, response));
+            return Task.FromResult<ActionResult<ApiResponse<PermissionListResponse>>>(Ok(new ApiResponse<PermissionListResponse>(true, response)));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error retrieving permissions for entity {EntityId}", entityId);
-            return StatusCode(500, new ApiResponse<PermissionListResponse>(false, null, "Error retrieving permissions"));
+            return Task.FromResult<ActionResult<ApiResponse<PermissionListResponse>>>(StatusCode(500, new ApiResponse<PermissionListResponse>(false, null, "Error retrieving permissions")));
         }
     }
 
@@ -169,33 +169,33 @@ public class PermissionsController : ControllerBase
     /// Remove a permission from an entity
     /// </summary>
     [HttpDelete("entity/{entityId:int}")]
-    public async Task<ActionResult<ApiResponse<bool>>> RemovePermission(int entityId, [FromBody] GrantPermissionRequest request)
+    public Task<ActionResult<ApiResponse<bool>>> RemovePermission(int entityId, [FromBody] GrantPermissionRequest request)
     {
         try
         {
             if (entityId != request.EntityId)
             {
-                return BadRequest(new ApiResponse<bool>(false, false, "Entity ID in URL and body must match"));
+                return Task.FromResult<ActionResult<ApiResponse<bool>>>(BadRequest(new ApiResponse<bool>(false, false, "Entity ID in URL and body must match")));
             }
 
             if (string.IsNullOrWhiteSpace(request.Uri))
             {
-                return BadRequest(new ApiResponse<bool>(false, false, "URI is required"));
+                return Task.FromResult<ActionResult<ApiResponse<bool>>>(BadRequest(new ApiResponse<bool>(false, false, "URI is required")));
             }
 
             if (string.IsNullOrWhiteSpace(request.HttpVerb))
             {
-                return BadRequest(new ApiResponse<bool>(false, false, "HTTP verb is required"));
+                return Task.FromResult<ActionResult<ApiResponse<bool>>>(BadRequest(new ApiResponse<bool>(false, false, "HTTP verb is required")));
             }
 
             // For now, return a placeholder since we don't have a RemovePermission gRPC method yet
-            return StatusCode(501, new ApiResponse<bool>(false, false, "RemovePermission not implemented yet"));
+            return Task.FromResult<ActionResult<ApiResponse<bool>>>(StatusCode(501, new ApiResponse<bool>(false, false, "RemovePermission not implemented yet")));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error removing permission from entity {EntityId} for {Uri}:{HttpVerb}", 
                 entityId, request.Uri, request.HttpVerb);
-            return StatusCode(500, new ApiResponse<bool>(false, false, "Error removing permission"));
+            return Task.FromResult<ActionResult<ApiResponse<bool>>>(StatusCode(500, new ApiResponse<bool>(false, false, "Error removing permission")));
         }
     }
 }

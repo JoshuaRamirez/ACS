@@ -23,7 +23,7 @@ public class GroupsController : ControllerBase
     /// Get all groups for the current tenant
     /// </summary>
     [HttpGet]
-    public async Task<ActionResult<ApiResponse<GroupListResponse>>> GetGroups([FromQuery] PagedRequest request)
+    public Task<ActionResult<ApiResponse<GroupListResponse>>> GetGroups([FromQuery] PagedRequest request)
     {
         try
         {
@@ -31,12 +31,12 @@ public class GroupsController : ControllerBase
             var groups = new List<GroupResponse>();
             var response = new GroupListResponse(groups, 0, request.Page, request.PageSize);
             
-            return Ok(new ApiResponse<GroupListResponse>(true, response));
+            return Task.FromResult<ActionResult<ApiResponse<GroupListResponse>>>(Ok(new ApiResponse<GroupListResponse>(true, response)));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error retrieving groups");
-            return StatusCode(500, new ApiResponse<GroupListResponse>(false, null, "Error retrieving groups"));
+            return Task.FromResult<ActionResult<ApiResponse<GroupListResponse>>>(StatusCode(500, new ApiResponse<GroupListResponse>(false, null, "Error retrieving groups")));
         }
     }
 
@@ -44,17 +44,17 @@ public class GroupsController : ControllerBase
     /// Get a specific group by ID
     /// </summary>
     [HttpGet("{id:int}")]
-    public async Task<ActionResult<ApiResponse<GroupResponse>>> GetGroup(int id)
+    public Task<ActionResult<ApiResponse<GroupResponse>>> GetGroup(int id)
     {
         try
         {
             // For now, return a placeholder since we don't have a GetGroup gRPC method yet
-            return NotFound(new ApiResponse<GroupResponse>(false, null, $"Group {id} not found"));
+            return Task.FromResult<ActionResult<ApiResponse<GroupResponse>>>(NotFound(new ApiResponse<GroupResponse>(false, null, $"Group {id} not found")));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error retrieving group {GroupId}", id);
-            return StatusCode(500, new ApiResponse<GroupResponse>(false, null, "Error retrieving group"));
+            return Task.FromResult<ActionResult<ApiResponse<GroupResponse>>>(StatusCode(500, new ApiResponse<GroupResponse>(false, null, "Error retrieving group")));
         }
     }
 
@@ -62,22 +62,22 @@ public class GroupsController : ControllerBase
     /// Create a new group
     /// </summary>
     [HttpPost]
-    public async Task<ActionResult<ApiResponse<GroupResponse>>> CreateGroup([FromBody] CreateGroupRequest request)
+    public Task<ActionResult<ApiResponse<GroupResponse>>> CreateGroup([FromBody] CreateGroupRequest request)
     {
         try
         {
             if (string.IsNullOrWhiteSpace(request.Name))
             {
-                return BadRequest(new ApiResponse<GroupResponse>(false, null, "Group name is required"));
+                return Task.FromResult<ActionResult<ApiResponse<GroupResponse>>>(BadRequest(new ApiResponse<GroupResponse>(false, null, "Group name is required")));
             }
 
             // For now, return a placeholder since we don't have a CreateGroup gRPC method yet
-            return StatusCode(501, new ApiResponse<GroupResponse>(false, null, "CreateGroup not implemented yet"));
+            return Task.FromResult<ActionResult<ApiResponse<GroupResponse>>>(StatusCode(501, new ApiResponse<GroupResponse>(false, null, "CreateGroup not implemented yet")));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error creating group");
-            return StatusCode(500, new ApiResponse<GroupResponse>(false, null, "Error creating group"));
+            return Task.FromResult<ActionResult<ApiResponse<GroupResponse>>>(StatusCode(500, new ApiResponse<GroupResponse>(false, null, "Error creating group")));
         }
     }
 
@@ -85,22 +85,22 @@ public class GroupsController : ControllerBase
     /// Update an existing group
     /// </summary>
     [HttpPut("{id:int}")]
-    public async Task<ActionResult<ApiResponse<GroupResponse>>> UpdateGroup(int id, [FromBody] UpdateGroupRequest request)
+    public Task<ActionResult<ApiResponse<GroupResponse>>> UpdateGroup(int id, [FromBody] UpdateGroupRequest request)
     {
         try
         {
             if (string.IsNullOrWhiteSpace(request.Name))
             {
-                return BadRequest(new ApiResponse<GroupResponse>(false, null, "Group name is required"));
+                return Task.FromResult<ActionResult<ApiResponse<GroupResponse>>>(BadRequest(new ApiResponse<GroupResponse>(false, null, "Group name is required")));
             }
 
             // For now, return a placeholder since we don't have an UpdateGroup gRPC method yet
-            return StatusCode(501, new ApiResponse<GroupResponse>(false, null, "UpdateGroup not implemented yet"));
+            return Task.FromResult<ActionResult<ApiResponse<GroupResponse>>>(StatusCode(501, new ApiResponse<GroupResponse>(false, null, "UpdateGroup not implemented yet")));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error updating group {GroupId}", id);
-            return StatusCode(500, new ApiResponse<GroupResponse>(false, null, "Error updating group"));
+            return Task.FromResult<ActionResult<ApiResponse<GroupResponse>>>(StatusCode(500, new ApiResponse<GroupResponse>(false, null, "Error updating group")));
         }
     }
 
@@ -108,17 +108,17 @@ public class GroupsController : ControllerBase
     /// Delete a group
     /// </summary>
     [HttpDelete("{id:int}")]
-    public async Task<ActionResult<ApiResponse<bool>>> DeleteGroup(int id)
+    public Task<ActionResult<ApiResponse<bool>>> DeleteGroup(int id)
     {
         try
         {
             // For now, return a placeholder since we don't have a DeleteGroup gRPC method yet
-            return StatusCode(501, new ApiResponse<bool>(false, false, "DeleteGroup not implemented yet"));
+            return Task.FromResult<ActionResult<ApiResponse<bool>>>(StatusCode(501, new ApiResponse<bool>(false, false, "DeleteGroup not implemented yet")));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error deleting group {GroupId}", id);
-            return StatusCode(500, new ApiResponse<bool>(false, false, "Error deleting group"));
+            return Task.FromResult<ActionResult<ApiResponse<bool>>>(StatusCode(500, new ApiResponse<bool>(false, false, "Error deleting group")));
         }
     }
 

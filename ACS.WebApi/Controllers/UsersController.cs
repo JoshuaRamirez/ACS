@@ -23,7 +23,7 @@ public class UsersController : ControllerBase
     /// Get all users for the current tenant
     /// </summary>
     [HttpGet]
-    public async Task<ActionResult<ApiResponse<UserListResponse>>> GetUsers([FromQuery] PagedRequest request)
+    public Task<ActionResult<ApiResponse<UserListResponse>>> GetUsers([FromQuery] PagedRequest request)
     {
         try
         {
@@ -32,12 +32,12 @@ public class UsersController : ControllerBase
             var users = new List<UserResponse>();
             var response = new UserListResponse(users, 0, request.Page, request.PageSize);
             
-            return Ok(new ApiResponse<UserListResponse>(true, response));
+            return Task.FromResult<ActionResult<ApiResponse<UserListResponse>>>(Ok(new ApiResponse<UserListResponse>(true, response)));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error retrieving users");
-            return StatusCode(500, new ApiResponse<UserListResponse>(false, null, "Error retrieving users"));
+            return Task.FromResult<ActionResult<ApiResponse<UserListResponse>>>(StatusCode(500, new ApiResponse<UserListResponse>(false, null, "Error retrieving users")));
         }
     }
 
@@ -45,18 +45,18 @@ public class UsersController : ControllerBase
     /// Get a specific user by ID
     /// </summary>
     [HttpGet("{id:int}")]
-    public async Task<ActionResult<ApiResponse<UserResponse>>> GetUser(int id)
+    public Task<ActionResult<ApiResponse<UserResponse>>> GetUser(int id)
     {
         try
         {
             // For now, return a placeholder since we don't have a GetUser gRPC method yet
             // This would need to be implemented in the gRPC service
-            return NotFound(new ApiResponse<UserResponse>(false, null, $"User {id} not found"));
+            return Task.FromResult<ActionResult<ApiResponse<UserResponse>>>(NotFound(new ApiResponse<UserResponse>(false, null, $"User {id} not found")));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error retrieving user {UserId}", id);
-            return StatusCode(500, new ApiResponse<UserResponse>(false, null, "Error retrieving user"));
+            return Task.FromResult<ActionResult<ApiResponse<UserResponse>>>(StatusCode(500, new ApiResponse<UserResponse>(false, null, "Error retrieving user")));
         }
     }
 
@@ -64,23 +64,23 @@ public class UsersController : ControllerBase
     /// Create a new user
     /// </summary>
     [HttpPost]
-    public async Task<ActionResult<ApiResponse<UserResponse>>> CreateUser([FromBody] CreateUserRequest request)
+    public Task<ActionResult<ApiResponse<UserResponse>>> CreateUser([FromBody] CreateUserRequest request)
     {
         try
         {
             if (string.IsNullOrWhiteSpace(request.Name))
             {
-                return BadRequest(new ApiResponse<UserResponse>(false, null, "User name is required"));
+                return Task.FromResult<ActionResult<ApiResponse<UserResponse>>>(BadRequest(new ApiResponse<UserResponse>(false, null, "User name is required")));
             }
 
             // For now, return a placeholder since we don't have a CreateUser gRPC method yet
             // This would need to be implemented in the gRPC service
-            return StatusCode(501, new ApiResponse<UserResponse>(false, null, "CreateUser not implemented yet"));
+            return Task.FromResult<ActionResult<ApiResponse<UserResponse>>>(StatusCode(501, new ApiResponse<UserResponse>(false, null, "CreateUser not implemented yet")));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error creating user");
-            return StatusCode(500, new ApiResponse<UserResponse>(false, null, "Error creating user"));
+            return Task.FromResult<ActionResult<ApiResponse<UserResponse>>>(StatusCode(500, new ApiResponse<UserResponse>(false, null, "Error creating user")));
         }
     }
 
@@ -88,22 +88,22 @@ public class UsersController : ControllerBase
     /// Update an existing user
     /// </summary>
     [HttpPut("{id:int}")]
-    public async Task<ActionResult<ApiResponse<UserResponse>>> UpdateUser(int id, [FromBody] UpdateUserRequest request)
+    public Task<ActionResult<ApiResponse<UserResponse>>> UpdateUser(int id, [FromBody] UpdateUserRequest request)
     {
         try
         {
             if (string.IsNullOrWhiteSpace(request.Name))
             {
-                return BadRequest(new ApiResponse<UserResponse>(false, null, "User name is required"));
+                return Task.FromResult<ActionResult<ApiResponse<UserResponse>>>(BadRequest(new ApiResponse<UserResponse>(false, null, "User name is required")));
             }
 
             // For now, return a placeholder since we don't have an UpdateUser gRPC method yet
-            return StatusCode(501, new ApiResponse<UserResponse>(false, null, "UpdateUser not implemented yet"));
+            return Task.FromResult<ActionResult<ApiResponse<UserResponse>>>(StatusCode(501, new ApiResponse<UserResponse>(false, null, "UpdateUser not implemented yet")));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error updating user {UserId}", id);
-            return StatusCode(500, new ApiResponse<UserResponse>(false, null, "Error updating user"));
+            return Task.FromResult<ActionResult<ApiResponse<UserResponse>>>(StatusCode(500, new ApiResponse<UserResponse>(false, null, "Error updating user")));
         }
     }
 
@@ -111,17 +111,17 @@ public class UsersController : ControllerBase
     /// Delete a user
     /// </summary>
     [HttpDelete("{id:int}")]
-    public async Task<ActionResult<ApiResponse<bool>>> DeleteUser(int id)
+    public Task<ActionResult<ApiResponse<bool>>> DeleteUser(int id)
     {
         try
         {
             // For now, return a placeholder since we don't have a DeleteUser gRPC method yet
-            return StatusCode(501, new ApiResponse<bool>(false, false, "DeleteUser not implemented yet"));
+            return Task.FromResult<ActionResult<ApiResponse<bool>>>(StatusCode(501, new ApiResponse<bool>(false, false, "DeleteUser not implemented yet")));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error deleting user {UserId}", id);
-            return StatusCode(500, new ApiResponse<bool>(false, false, "Error deleting user"));
+            return Task.FromResult<ActionResult<ApiResponse<bool>>>(StatusCode(500, new ApiResponse<bool>(false, false, "Error deleting user")));
         }
     }
 

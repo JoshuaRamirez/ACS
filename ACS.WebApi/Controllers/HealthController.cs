@@ -27,7 +27,7 @@ public class HealthController : ControllerBase
     /// Get health status of the WebApi and current tenant process
     /// </summary>
     [HttpGet]
-    public async Task<ActionResult<ApiResponse<HealthCheckResponse>>> GetHealth()
+    public Task<ActionResult<ApiResponse<HealthCheckResponse>>> GetHealth()
     {
         try
         {
@@ -63,7 +63,7 @@ public class HealthController : ControllerBase
             var status = details.ContainsKey("tenantError") ? "degraded" : "healthy";
             var response = new HealthCheckResponse(status, details);
 
-            return Ok(new ApiResponse<HealthCheckResponse>(true, response));
+            return Task.FromResult<ActionResult<ApiResponse<HealthCheckResponse>>>(Ok(new ApiResponse<HealthCheckResponse>(true, response)));
         }
         catch (Exception ex)
         {
@@ -77,7 +77,7 @@ public class HealthController : ControllerBase
             };
 
             var errorResponse = new HealthCheckResponse("unhealthy", errorDetails);
-            return StatusCode(500, new ApiResponse<HealthCheckResponse>(false, errorResponse, "Health check failed"));
+            return Task.FromResult<ActionResult<ApiResponse<HealthCheckResponse>>>(StatusCode(500, new ApiResponse<HealthCheckResponse>(false, errorResponse, "Health check failed")));
         }
     }
 
