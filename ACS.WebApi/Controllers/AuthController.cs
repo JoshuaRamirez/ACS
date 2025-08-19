@@ -1,5 +1,6 @@
 using ACS.Infrastructure.Authentication;
 using ACS.WebApi.DTOs;
+using ACS.Service.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -11,11 +12,16 @@ public class AuthController : ControllerBase
 {
     private readonly ILogger<AuthController> _logger;
     private readonly JwtTokenService _jwtTokenService;
+    private readonly IAuthenticationService _authenticationService;
 
-    public AuthController(ILogger<AuthController> logger, JwtTokenService jwtTokenService)
+    public AuthController(
+        ILogger<AuthController> logger, 
+        JwtTokenService jwtTokenService,
+        IAuthenticationService authenticationService)
     {
         _logger = logger;
         _jwtTokenService = jwtTokenService;
+        _authenticationService = authenticationService;
     }
 
     /// <summary>
@@ -27,26 +33,26 @@ public class AuthController : ControllerBase
     {
         try
         {
-            _logger.LogInformation("Login attempt for user {Username} in tenant {TenantId}", request.Username, request.TenantId);
+            _logger.LogInformation("Login attempt for user {Email} in tenant {TenantId}", request.Email, request.TenantId);
 
-            // In a real implementation, this would validate credentials against the database
-            // For now, we'll use basic validation for demonstration
-            if (!await ValidateCredentialsAsync(request))
+            // Authenticate using the real authentication service
+            var authResult = await _authenticationService.AuthenticateAsync(request.Email, request.Password, request.TenantId);
+            
+            if (!authResult.IsSuccess)
             {
-                _logger.LogWarning("Invalid credentials for user {Username}", request.Username);
-                return Unauthorized(new { Message = "Invalid credentials" });
+                _logger.LogWarning("Authentication failed for user {Email}: {Error}", request.Email, authResult.ErrorMessage);
+                return Unauthorized(new { Message = authResult.ErrorMessage });
             }
 
-            // Get user roles (in real implementation, fetch from database)
-            var roles = await GetUserRolesAsync(request.Username, request.TenantId);
-            
             // Generate JWT token
             var token = _jwtTokenService.GenerateToken(
-                userId: request.Username,
-                tenantId: request.TenantId,
-                roles: roles,
+                userId: authResult.UserId.ToString(),
+                tenantId: authResult.TenantId,
+                roles: authResult.Roles,
                 additionalClaims: new Dictionary<string, object>
                 {
+                    ["user_name"] = authResult.UserName,
+                    ["email"] = authResult.Email,
                     ["login_time"] = DateTime.UtcNow.ToString("O"),
                     ["client_ip"] = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown"
                 });
@@ -56,17 +62,19 @@ public class AuthController : ControllerBase
                 Token = token,
                 TokenType = "Bearer",
                 ExpiresIn = TimeSpan.FromHours(24).TotalSeconds,
-                UserId = request.Username,
-                TenantId = request.TenantId,
-                Roles = roles.ToList()
+                UserId = authResult.UserId.ToString(),
+                UserName = authResult.UserName,
+                Email = authResult.Email,
+                TenantId = authResult.TenantId,
+                Roles = authResult.Roles.ToList()
             };
 
-            _logger.LogInformation("Successful login for user {Username} in tenant {TenantId}", request.Username, request.TenantId);
+            _logger.LogInformation("Successful login for user {Email} in tenant {TenantId}", request.Email, request.TenantId);
             return Ok(response);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error during login for user {Username}", request.Username);
+            _logger.LogError(ex, "Error during login for user {Email}", request.Email);
             return StatusCode(500, new { Message = "Authentication service error" });
         }
     }
@@ -143,46 +151,67 @@ public class AuthController : ControllerBase
     }
 
     /// <summary>
-    /// Validate user credentials (mock implementation)
+    /// Change password for authenticated user
     /// </summary>
-    private async Task<bool> ValidateCredentialsAsync(LoginRequest request)
+    [HttpPost("change-password")]
+    [Authorize]
+    public async Task<ActionResult> ChangePassword([FromBody] ChangePasswordRequest request)
     {
-        // In a real implementation, this would:
-        // 1. Hash the password and compare with stored hash
-        // 2. Check account lockout status
-        // 3. Verify tenant association
-        // 4. Check account expiration/status
+        try
+        {
+            var authContext = HttpContext.Items["AuthContext"] as AuthenticationContext;
+            if (authContext == null)
+            {
+                return Unauthorized();
+            }
 
-        // For demonstration, accept any non-empty credentials
-        await Task.Delay(100); // Simulate database lookup
+            if (!int.TryParse(authContext.UserId, out var userId))
+            {
+                return BadRequest(new { Message = "Invalid user context" });
+            }
 
-        return !string.IsNullOrEmpty(request.Username) && 
-               !string.IsNullOrEmpty(request.Password) && 
-               !string.IsNullOrEmpty(request.TenantId);
+            var success = await _authenticationService.ChangePasswordAsync(userId, request.CurrentPassword, request.NewPassword);
+            
+            if (!success)
+            {
+                return BadRequest(new { Message = "Current password is incorrect" });
+            }
+
+            _logger.LogInformation("Password changed successfully for user {UserId}", userId);
+            return Ok(new { Message = "Password changed successfully" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error changing password");
+            return StatusCode(500, new { Message = "Password change failed" });
+        }
     }
 
     /// <summary>
-    /// Get user roles for tenant (mock implementation)
+    /// Unlock a user account (admin only)
     /// </summary>
-    private async Task<IEnumerable<string>> GetUserRolesAsync(string username, string tenantId)
+    [HttpPost("unlock-account")]
+    [Authorize(Roles = "Admin")]
+    public async Task<ActionResult> UnlockAccount([FromBody] UnlockAccountRequest request)
     {
-        // In a real implementation, this would fetch roles from the ACS domain service
-        await Task.Delay(50); // Simulate database lookup
-
-        // Return mock roles based on username patterns
-        return username.ToLowerInvariant() switch
+        try
         {
-            var u when u.Contains("admin") => new[] { "Admin", "Operator", "User" },
-            var u when u.Contains("operator") => new[] { "Operator", "User" },
-            _ => new[] { "User" }
-        };
+            await _authenticationService.UnlockAccountAsync(request.Email);
+            _logger.LogInformation("Account unlocked for {Email}", request.Email);
+            return Ok(new { Message = "Account unlocked successfully" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error unlocking account for {Email}", request.Email);
+            return StatusCode(500, new { Message = "Failed to unlock account" });
+        }
     }
 }
 
 // DTOs for authentication
 public record LoginRequest
 {
-    public string Username { get; init; } = string.Empty;
+    public string Email { get; init; } = string.Empty;
     public string Password { get; init; } = string.Empty;
     public string TenantId { get; init; } = string.Empty;
 }
@@ -193,8 +222,21 @@ public record LoginResponse
     public string TokenType { get; init; } = string.Empty;
     public double ExpiresIn { get; init; }
     public string UserId { get; init; } = string.Empty;
+    public string UserName { get; init; } = string.Empty;
+    public string Email { get; init; } = string.Empty;
     public string TenantId { get; init; } = string.Empty;
     public List<string> Roles { get; init; } = new();
+}
+
+public record ChangePasswordRequest
+{
+    public string CurrentPassword { get; init; } = string.Empty;
+    public string NewPassword { get; init; } = string.Empty;
+}
+
+public record UnlockAccountRequest
+{
+    public string Email { get; init; } = string.Empty;
 }
 
 public record UserInfoResponse

@@ -16,6 +16,7 @@ namespace ACS.Service.Data
         public DbSet<Role> Roles { get; set; }
         public DbSet<Group> Groups { get; set; }
         public DbSet<VerbType> VerbTypes { get; set; }
+        public DbSet<SchemeType> SchemeTypes { get; set; }
         public DbSet<Resource> Resources { get; set; }
         public DbSet<PermissionScheme> EntityPermissions { get; set; }
         public DbSet<UriAccess> UriAccesses { get; set; }
@@ -48,8 +49,15 @@ namespace ACS.Service.Data
             {
                 entity.HasKey(u => u.Id);
                 entity.Property(u => u.Name).IsRequired().HasMaxLength(100);
+                entity.Property(u => u.Email).IsRequired().HasMaxLength(256);
+                entity.Property(u => u.PasswordHash).IsRequired().HasMaxLength(500);
+                entity.Property(u => u.Salt).HasMaxLength(100);
                 entity.Property(u => u.CreatedAt).IsRequired();
                 entity.Property(u => u.UpdatedAt).IsRequired();
+                entity.Property(u => u.IsActive).IsRequired();
+                entity.Property(u => u.FailedLoginAttempts).IsRequired();
+                
+                entity.HasIndex(u => u.Email).IsUnique();
                 
                 entity.HasOne(u => u.Entity)
                     .WithMany(e => e.Users)
@@ -179,6 +187,80 @@ namespace ACS.Service.Data
                     .WithMany(g => g.ParentGroupRelations)
                     .HasForeignKey(gh => gh.ChildGroupId)
                     .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            // SchemeType configuration
+            modelBuilder.Entity<SchemeType>(entity =>
+            {
+                entity.HasKey(st => st.Id);
+                entity.Property(st => st.SchemeName).IsRequired().HasMaxLength(100);
+            });
+
+            // VerbType configuration
+            modelBuilder.Entity<VerbType>(entity =>
+            {
+                entity.HasKey(vt => vt.Id);
+                entity.Property(vt => vt.VerbName).IsRequired().HasMaxLength(50);
+            });
+
+            // Resource configuration
+            modelBuilder.Entity<Resource>(entity =>
+            {
+                entity.HasKey(r => r.Id);
+                entity.Property(r => r.Uri).IsRequired().HasMaxLength(500);
+            });
+
+            // PermissionScheme configuration
+            modelBuilder.Entity<PermissionScheme>(entity =>
+            {
+                entity.HasKey(ps => ps.Id);
+                
+                entity.HasOne(ps => ps.Entity)
+                    .WithMany()
+                    .HasForeignKey(ps => ps.EntityId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                
+                entity.HasOne(ps => ps.SchemeType)
+                    .WithMany()
+                    .HasForeignKey(ps => ps.SchemeTypeId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            // UriAccess configuration
+            modelBuilder.Entity<UriAccess>(entity =>
+            {
+                entity.HasKey(ua => ua.Id);
+                entity.Property(ua => ua.Grant).IsRequired();
+                entity.Property(ua => ua.Deny).IsRequired();
+                
+                entity.HasCheckConstraint("CK_UriAccess_Grant_Deny_Exclusive", 
+                    "([Grant] = 1 AND [Deny] = 0) OR ([Grant] = 0 AND [Deny] = 1)");
+                
+                entity.HasOne(ua => ua.Resource)
+                    .WithMany()
+                    .HasForeignKey(ua => ua.ResourceId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                
+                entity.HasOne(ua => ua.VerbType)
+                    .WithMany()
+                    .HasForeignKey(ua => ua.VerbTypeId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                
+                entity.HasOne(ua => ua.PermissionScheme)
+                    .WithMany()
+                    .HasForeignKey(ua => ua.PermissionSchemeId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            // AuditLog configuration
+            modelBuilder.Entity<AuditLog>(entity =>
+            {
+                entity.HasKey(al => al.Id);
+                entity.Property(al => al.EntityType).IsRequired().HasMaxLength(50);
+                entity.Property(al => al.ChangeType).IsRequired().HasMaxLength(10);
+                entity.Property(al => al.ChangedBy).IsRequired().HasMaxLength(100);
+                entity.Property(al => al.ChangeDate).IsRequired();
+                entity.Property(al => al.ChangeDetails).IsRequired().HasMaxLength(4000);
             });
         }
     }

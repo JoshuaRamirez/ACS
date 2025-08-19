@@ -189,7 +189,7 @@ public class PermissionEvaluationService : IPermissionEvaluationService
             var uriAccesses = _dbContext.UriAccesses
                 .Include(ua => ua.Resource)
                 .Include(ua => ua.VerbType)
-                .Where(ua => ua.EntityPermissionId == scheme.Id)
+                .Where(ua => ua.PermissionSchemeId == scheme.Id)
                 .ToList();
 
             foreach (var uriAccess in uriAccesses)

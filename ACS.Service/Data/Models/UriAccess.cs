@@ -17,7 +17,7 @@ public class UriAccess
     public VerbType VerbType { get; set; } = null!;
 
     [ForeignKey("PermissionScheme")]
-    public int EntityPermissionId { get; set; }
+    public int PermissionSchemeId { get; set; }
     public PermissionScheme PermissionScheme { get; set; } = null!;
 
     public bool Grant { get; set; }

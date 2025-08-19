@@ -1,9 +1,12 @@
 using ACS.Infrastructure;
 using ACS.Infrastructure.Authentication;
 using ACS.Infrastructure.RateLimiting;
+using ACS.Service.Data;
+using ACS.Service.Services;
 using ACS.WebApi.Middleware;
 using ACS.WebApi.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
 
@@ -53,6 +56,22 @@ builder.Services.AddAuthorization();
 
 // Add JWT token service
 builder.Services.AddSingleton<JwtTokenService>();
+
+// Add database context (configure connection string for multi-tenant scenarios)
+builder.Services.AddDbContext<ApplicationDbContext>(options =>
+{
+    // For development, use a default connection string
+    // In production, this would be resolved per tenant
+    var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") 
+        ?? "Server=(localdb)\\MSSQLLocalDB;Database=ACS_Development;Trusted_Connection=true;MultipleActiveResultSets=true";
+    options.UseSqlServer(connectionString);
+});
+
+// Add authentication services
+builder.Services.AddScoped<IPasswordHashService, PasswordHashService>();
+builder.Services.AddScoped<IAuthenticationService, AuthenticationService>();
+builder.Services.AddScoped<ICommandProcessingService, CommandProcessingService>();
+builder.Services.AddScoped<IUserService, UserService>();
 
 // Configure OpenTelemetry for distributed tracing and metrics
 builder.Services.ConfigureOpenTelemetry(builder.Configuration);

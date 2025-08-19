@@ -195,7 +195,7 @@ public class TenantDatabasePersistenceService
 
             // Check if URI access already exists
             var existingUriAccess = await _dbContext.UriAccesses
-                .FirstOrDefaultAsync(ua => ua.EntityPermissionId == permissionScheme.Id &&
+                .FirstOrDefaultAsync(ua => ua.PermissionSchemeId == permissionScheme.Id &&
                                           ua.ResourceId == resource.Id &&
                                           ua.VerbTypeId == verbType.Id);
 
@@ -210,7 +210,7 @@ public class TenantDatabasePersistenceService
                 // Create new URI access
                 var uriAccess = new UriAccess
                 {
-                    EntityPermissionId = permissionScheme.Id,
+                    PermissionSchemeId = permissionScheme.Id,
                     PermissionScheme = permissionScheme,
                     ResourceId = resource.Id,
                     Resource = resource,
@@ -272,7 +272,7 @@ public class TenantDatabasePersistenceService
 
             // Find and remove the URI access
             var uriAccess = await _dbContext.UriAccesses
-                .FirstOrDefaultAsync(ua => ua.EntityPermissionId == permissionScheme.Id &&
+                .FirstOrDefaultAsync(ua => ua.PermissionSchemeId == permissionScheme.Id &&
                                           ua.ResourceId == resource.Id &&
                                           ua.VerbTypeId == verbType.Id);
 
