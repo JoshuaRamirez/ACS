@@ -3,6 +3,7 @@ using ACS.Alerting.Channels;
 using ACS.Infrastructure;
 using ACS.Infrastructure.Authentication;
 using ACS.Infrastructure.Compression;
+using ACS.Infrastructure.Configuration;
 using ACS.Infrastructure.DependencyInjection;
 using ACS.Infrastructure.Monitoring;
 using ACS.Infrastructure.Optimization;
@@ -28,6 +29,16 @@ using Microsoft.IdentityModel.Tokens;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Configure enhanced environment variable support
+builder.Configuration.AddEnvironmentVariables("ACS_", includeSystemVariables: false);
+
+// Load environment-specific .env file if it exists
+var envFile = Path.Combine(builder.Environment.ContentRootPath, $".env.{builder.Environment.EnvironmentName}");
+if (File.Exists(envFile))
+{
+    builder.Configuration.AddEnvironmentVariablesFromFile(envFile, optional: true);
+}
 
 // Configure Key Vault for secrets management
 builder.Host.ConfigureKeyVault((context, options) =>
@@ -117,6 +128,24 @@ builder.Services.AddSwaggerDocumentation();
 
 // Add alerting system
 builder.Services.AddAlerting(builder.Configuration);
+
+// Add configuration validation services
+builder.Services.AddConfigurationValidation(validateAtStartup: true);
+
+// Add configuration hot-reload support
+builder.Services.AddConfigurationHotReload(options =>
+{
+    options.Enabled = !builder.Environment.IsProduction(); // Disable in production by default
+    options.ValidateOnReload = true;
+    options.LogChanges = true;
+    options.MonitoredSections.AddRange(new[] 
+    { 
+        "Authentication:Jwt", 
+        "ConnectionStrings", 
+        "RateLimit", 
+        "FeatureFlags" 
+    });
+});
 
 var app = builder.Build();
 
