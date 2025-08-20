@@ -1,3 +1,5 @@
+using ACS.Alerting;
+using ACS.Alerting.Channels;
 using ACS.Infrastructure;
 using ACS.Infrastructure.Authentication;
 using ACS.Infrastructure.Compression;
@@ -18,6 +20,7 @@ using ACS.WebApi.Security.Headers;
 using ACS.WebApi.Security.Validation;
 using ACS.WebApi.Services;
 using ACS.WebApi.Configuration;
+using ACS.WebApi.Extensions;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -111,6 +114,9 @@ builder.Services.ConfigureRateLimitingPolicies(policies =>
 
 // Add comprehensive Swagger/OpenAPI documentation
 builder.Services.AddSwaggerDocumentation();
+
+// Add alerting system
+builder.Services.AddAlerting(builder.Configuration);
 
 var app = builder.Build();
 

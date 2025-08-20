@@ -41,6 +41,7 @@
     <ProjectReference Include="..\ACS.Core\ACS.Core.csproj" />
     <ProjectReference Include="..\ACS.Service\ACS.Service.csproj" />
     <ProjectReference Include="..\ACS.Infrastructure\ACS.Infrastructure.csproj" />
+    <ProjectReference Include="..\ACS.Alerting\ACS.Alerting.csproj" />
   </ItemGroup>
 
   <ItemGroup>
