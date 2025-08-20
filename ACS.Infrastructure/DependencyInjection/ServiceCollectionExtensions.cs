@@ -193,6 +193,9 @@ public static class ServiceCollectionExtensions
         // Register data seeding service
         services.AddScoped<IDataSeeder, DataSeeder>();
         
+        // Register index analyzer service
+        services.AddScoped<IIndexAnalyzer, IndexAnalyzer>();
+        
         return services;
     }
 
@@ -266,6 +269,7 @@ public static class ServiceCollectionExtensions
         // Add as hosted services
         services.AddHostedService<DeadLetterQueueService>();
         services.AddHostedService<HealthMonitoringService>();
+        services.AddHostedService<IndexMaintenanceService>();
         
         // Tenant metrics
         services.AddTenantMetrics();
