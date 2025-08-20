@@ -1,0 +1,218 @@
+{
+  "dashboard": {
+    "id": null,
+    "uid": "acs-alerts",
+    "title": "ACS Alerting Dashboard",
+    "tags": ["acs", "alerts", "monitoring"],
+    "timezone": "browser",
+    "schemaVersion": 38,
+    "version": 1,
+    "refresh": "30s",
+    "time": {
+      "from": "now-24h",
+      "to": "now"
+    },
+    "panels": [
+      {
+        "id": 1,
+        "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+        "type": "stat",
+        "title": "Active Alerts",
+        "targets": [
+          {
+            "expr": "acs_alerts_active_total",
+            "legendFormat": "Active"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "green", "value": 0 },
+                { "color": "yellow", "value": 5 },
+                { "color": "red", "value": 10 }
+              ]
+            },
+            "mappings": [],
+            "unit": "short"
+          }
+        }
+      },
+      {
+        "id": 2,
+        "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+        "type": "stat",
+        "title": "Critical Alerts",
+        "targets": [
+          {
+            "expr": "acs_alerts_active_total{severity=\"critical\"}",
+            "legendFormat": "Critical"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "fixedColor": "red",
+              "mode": "fixed"
+            },
+            "unit": "short"
+          }
+        }
+      },
+      {
+        "id": 3,
+        "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+        "type": "stat",
+        "title": "Alerts Throttled",
+        "targets": [
+          {
+            "expr": "rate(acs_alerts_throttled_total[1h])",
+            "legendFormat": "Throttled/hour"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "decimals": 1
+          }
+        }
+      },
+      {
+        "id": 4,
+        "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+        "type": "stat",
+        "title": "Avg Resolution Time",
+        "targets": [
+          {
+            "expr": "avg(acs_alert_resolution_time_seconds)",
+            "legendFormat": "Minutes"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "m",
+            "decimals": 1
+          }
+        }
+      },
+      {
+        "id": 5,
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+        "type": "graph",
+        "title": "Alert Trends by Severity",
+        "targets": [
+          {
+            "expr": "sum(rate(acs_alerts_created_total[1h])) by (severity)",
+            "legendFormat": "{{severity}}"
+          }
+        ],
+        "yaxes": [
+          { "format": "short", "label": "Alerts/hour" }
+        ],
+        "seriesOverrides": [
+          { "alias": "critical", "color": "#E02F44" },
+          { "alias": "warning", "color": "#FF9830" },
+          { "alias": "info", "color": "#3274D9" }
+        ]
+      },
+      {
+        "id": 6,
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+        "type": "graph",
+        "title": "Alert Categories",
+        "targets": [
+          {
+            "expr": "sum(rate(acs_alerts_created_total[1h])) by (category)",
+            "legendFormat": "{{category}}"
+          }
+        ],
+        "yaxes": [
+          { "format": "short", "label": "Alerts/hour" }
+        ]
+      },
+      {
+        "id": 7,
+        "gridPos": { "h": 8, "w": 24, "x": 0, "y": 12 },
+        "type": "table",
+        "title": "Recent Critical Alerts",
+        "targets": [
+          {
+            "expr": "acs_alert_details{severity=\"critical\"}",
+            "format": "table",
+            "instant": true
+          }
+        ],
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {},
+              "indexByName": {},
+              "renameByName": {
+                "Time": "Timestamp",
+                "alert_id": "Alert ID",
+                "title": "Title",
+                "source": "Source",
+                "status": "Status"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "id": 8,
+        "gridPos": { "h": 6, "w": 8, "x": 0, "y": 20 },
+        "type": "piechart",
+        "title": "Alerts by Status",
+        "targets": [
+          {
+            "expr": "sum(acs_alerts_total) by (status)",
+            "legendFormat": "{{status}}"
+          }
+        ]
+      },
+      {
+        "id": 9,
+        "gridPos": { "h": 6, "w": 8, "x": 8, "y": 20 },
+        "type": "piechart",
+        "title": "Notification Channels Used",
+        "targets": [
+          {
+            "expr": "sum(acs_notifications_sent_total) by (channel)",
+            "legendFormat": "{{channel}}"
+          }
+        ]
+      },
+      {
+        "id": 10,
+        "gridPos": { "h": 6, "w": 8, "x": 16, "y": 20 },
+        "type": "stat",
+        "title": "Notification Success Rate",
+        "targets": [
+          {
+            "expr": "sum(rate(acs_notifications_success_total[1h])) / sum(rate(acs_notifications_sent_total[1h])) * 100",
+            "legendFormat": "Success %"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "decimals": 1,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "red", "value": 0 },
+                { "color": "yellow", "value": 90 },
+                { "color": "green", "value": 95 }
+              ]
+            }
+          }
+        }
+      }
+    ]
+  }
+}

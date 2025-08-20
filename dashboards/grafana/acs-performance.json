@@ -1,0 +1,174 @@
+{
+  "dashboard": {
+    "id": null,
+    "uid": "acs-performance",
+    "title": "ACS Performance Monitoring",
+    "tags": ["acs", "performance", "monitoring"],
+    "timezone": "browser",
+    "schemaVersion": 38,
+    "version": 1,
+    "refresh": "10s",
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "panels": [
+      {
+        "id": 1,
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+        "type": "graph",
+        "title": "Request Latency Distribution",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.5, sum(rate(http_request_duration_seconds_bucket[5m])) by (le, endpoint))",
+            "legendFormat": "p50 - {{endpoint}}"
+          },
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le, endpoint))",
+            "legendFormat": "p95 - {{endpoint}}"
+          },
+          {
+            "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket[5m])) by (le, endpoint))",
+            "legendFormat": "p99 - {{endpoint}}"
+          }
+        ],
+        "yaxes": [
+          { "format": "ms", "label": "Latency (ms)" }
+        ],
+        "xaxis": {
+          "mode": "time"
+        }
+      },
+      {
+        "id": 2,
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+        "type": "graph",
+        "title": "Database Query Performance",
+        "targets": [
+          {
+            "expr": "rate(acs_database_query_duration_seconds_sum[5m]) / rate(acs_database_query_duration_seconds_count[5m])",
+            "legendFormat": "Avg Query Time"
+          },
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(acs_database_query_duration_seconds_bucket[5m])) by (le))",
+            "legendFormat": "p95 Query Time"
+          }
+        ],
+        "yaxes": [
+          { "format": "ms", "label": "Query Time (ms)" }
+        ]
+      },
+      {
+        "id": 3,
+        "gridPos": { "h": 8, "w": 8, "x": 0, "y": 8 },
+        "type": "graph",
+        "title": "Cache Performance",
+        "targets": [
+          {
+            "expr": "rate(acs_cache_hits_total[5m]) / (rate(acs_cache_hits_total[5m]) + rate(acs_cache_misses_total[5m])) * 100",
+            "legendFormat": "Hit Rate %"
+          },
+          {
+            "expr": "rate(acs_cache_evictions_total[5m])",
+            "legendFormat": "Evictions/sec"
+          }
+        ],
+        "yaxes": [
+          { "format": "percent", "label": "Hit Rate %" },
+          { "format": "ops", "label": "Evictions/sec" }
+        ]
+      },
+      {
+        "id": 4,
+        "gridPos": { "h": 8, "w": 8, "x": 8, "y": 8 },
+        "type": "graph",
+        "title": "GC Performance",
+        "targets": [
+          {
+            "expr": "rate(dotnet_gc_collections_total[5m])",
+            "legendFormat": "Gen {{generation}}"
+          },
+          {
+            "expr": "dotnet_gc_pause_seconds",
+            "legendFormat": "GC Pause"
+          }
+        ],
+        "yaxes": [
+          { "format": "ops", "label": "Collections/sec" },
+          { "format": "ms", "label": "Pause Time" }
+        ]
+      },
+      {
+        "id": 5,
+        "gridPos": { "h": 8, "w": 8, "x": 16, "y": 8 },
+        "type": "graph",
+        "title": "Thread Pool Metrics",
+        "targets": [
+          {
+            "expr": "dotnet_threadpool_num_threads",
+            "legendFormat": "Active Threads"
+          },
+          {
+            "expr": "dotnet_threadpool_queue_length",
+            "legendFormat": "Queue Length"
+          }
+        ],
+        "yaxes": [
+          { "format": "short", "label": "Count" }
+        ]
+      },
+      {
+        "id": 6,
+        "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 },
+        "type": "heatmap",
+        "title": "Request Latency Heatmap",
+        "targets": [
+          {
+            "expr": "sum(rate(http_request_duration_seconds_bucket[5m])) by (le)",
+            "format": "heatmap",
+            "legendFormat": "{{le}}"
+          }
+        ],
+        "dataFormat": "timeseries",
+        "cards": {
+          "cardPadding": 2,
+          "cardRound": 2
+        },
+        "color": {
+          "mode": "spectrum",
+          "scheme": "interpolateOranges"
+        },
+        "yAxis": {
+          "format": "ms",
+          "decimals": 0
+        }
+      },
+      {
+        "id": 7,
+        "gridPos": { "h": 6, "w": 12, "x": 0, "y": 24 },
+        "type": "table",
+        "title": "Slowest Endpoints",
+        "targets": [
+          {
+            "expr": "topk(10, histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le, endpoint)))",
+            "format": "table",
+            "instant": true
+          }
+        ]
+      },
+      {
+        "id": 8,
+        "gridPos": { "h": 6, "w": 12, "x": 12, "y": 24 },
+        "type": "table",
+        "title": "Database Slow Queries",
+        "targets": [
+          {
+            "expr": "topk(10, acs_database_slow_queries_total)",
+            "format": "table",
+            "instant": true
+          }
+        ]
+      }
+    ]
+  }
+}

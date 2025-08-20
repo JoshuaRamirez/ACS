@@ -1,0 +1,718 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ACS Monitoring Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .dashboard {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            border-radius: 10px;
+            padding: 20px 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header h1 {
+            color: #2d3748;
+            font-size: 28px;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        .status-dot.healthy {
+            background: #48bb78;
+        }
+
+        .status-dot.warning {
+            background: #ed8936;
+        }
+
+        .status-dot.critical {
+            background: #f56565;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .metric-card {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s ease;
+        }
+
+        .metric-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        .metric-label {
+            color: #718096;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+
+        .metric-value {
+            color: #2d3748;
+            font-size: 32px;
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+
+        .metric-change {
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .metric-change.positive {
+            color: #48bb78;
+        }
+
+        .metric-change.negative {
+            color: #f56565;
+        }
+
+        .chart-container {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .chart-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .chart-title {
+            color: #2d3748;
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .chart-controls {
+            display: flex;
+            gap: 10px;
+        }
+
+        .chart-control {
+            padding: 5px 12px;
+            border: 1px solid #e2e8f0;
+            border-radius: 5px;
+            background: white;
+            color: #4a5568;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .chart-control:hover {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+
+        .chart-control.active {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+
+        #responseTimeChart,
+        #requestVolumeChart,
+        #errorRateChart {
+            height: 300px;
+        }
+
+        .alerts-section {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .alert-item {
+            display: flex;
+            align-items: center;
+            padding: 12px;
+            border-radius: 5px;
+            margin-bottom: 10px;
+            transition: all 0.3s ease;
+        }
+
+        .alert-item:hover {
+            transform: translateX(5px);
+        }
+
+        .alert-item.critical {
+            background: #fff5f5;
+            border-left: 4px solid #f56565;
+        }
+
+        .alert-item.warning {
+            background: #fffdf7;
+            border-left: 4px solid #ed8936;
+        }
+
+        .alert-item.info {
+            background: #f7fafc;
+            border-left: 4px solid #4299e1;
+        }
+
+        .alert-icon {
+            margin-right: 15px;
+            font-size: 20px;
+        }
+
+        .alert-content {
+            flex: 1;
+        }
+
+        .alert-title {
+            color: #2d3748;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .alert-time {
+            color: #718096;
+            font-size: 12px;
+        }
+
+        .table-container {
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th {
+            background: #f7fafc;
+            color: #4a5568;
+            font-weight: 600;
+            text-align: left;
+            padding: 12px;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        td {
+            padding: 12px;
+            border-top: 1px solid #e2e8f0;
+            color: #2d3748;
+        }
+
+        tr:hover {
+            background: #f7fafc;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 40px;
+            color: #718096;
+        }
+
+        .spinner {
+            border: 3px solid #e2e8f0;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .refresh-indicator {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: white;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .refresh-indicator:hover {
+            transform: scale(1.1);
+            box-shadow: 0 6px 8px rgba(0, 0, 0, 0.15);
+        }
+
+        .refresh-indicator.refreshing {
+            animation: spin 1s linear infinite;
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard">
+        <div class="header">
+            <h1>🎯 ACS Monitoring Dashboard</h1>
+            <div class="status-indicator">
+                <span>System Status:</span>
+                <div class="status-dot healthy" id="systemStatus"></div>
+                <span id="statusText">Healthy</span>
+                <span id="lastUpdate" style="margin-left: 20px; color: #718096;">Last update: --:--:--</span>
+            </div>
+        </div>
+
+        <div class="metrics-grid">
+            <div class="metric-card">
+                <div class="metric-label">Requests/sec</div>
+                <div class="metric-value" id="requestRate">--</div>
+                <div class="metric-change positive">
+                    <span>↑</span>
+                    <span id="requestRateChange">+12%</span>
+                </div>
+            </div>
+
+            <div class="metric-card">
+                <div class="metric-label">Avg Response Time</div>
+                <div class="metric-value" id="responseTime">--</div>
+                <div class="metric-change positive">
+                    <span>↓</span>
+                    <span id="responseTimeChange">-8%</span>
+                </div>
+            </div>
+
+            <div class="metric-card">
+                <div class="metric-label">Error Rate</div>
+                <div class="metric-value" id="errorRate">--</div>
+                <div class="metric-change negative">
+                    <span>↑</span>
+                    <span id="errorRateChange">+0.2%</span>
+                </div>
+            </div>
+
+            <div class="metric-card">
+                <div class="metric-label">Active Users</div>
+                <div class="metric-value" id="activeUsers">--</div>
+                <div class="metric-change positive">
+                    <span>↑</span>
+                    <span id="activeUsersChange">+25</span>
+                </div>
+            </div>
+
+            <div class="metric-card">
+                <div class="metric-label">CPU Usage</div>
+                <div class="metric-value" id="cpuUsage">--</div>
+                <div class="metric-change positive">
+                    <span>↓</span>
+                    <span id="cpuChange">-5%</span>
+                </div>
+            </div>
+
+            <div class="metric-card">
+                <div class="metric-label">Memory Usage</div>
+                <div class="metric-value" id="memoryUsage">--</div>
+                <div class="metric-change positive">
+                    <span>↑</span>
+                    <span id="memoryChange">+120MB</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="chart-container">
+            <div class="chart-header">
+                <h2 class="chart-title">Response Time Trends</h2>
+                <div class="chart-controls">
+                    <button class="chart-control active" onclick="updateTimeRange('1h')">1H</button>
+                    <button class="chart-control" onclick="updateTimeRange('6h')">6H</button>
+                    <button class="chart-control" onclick="updateTimeRange('24h')">24H</button>
+                    <button class="chart-control" onclick="updateTimeRange('7d')">7D</button>
+                </div>
+            </div>
+            <canvas id="responseTimeChart"></canvas>
+        </div>
+
+        <div class="chart-container">
+            <div class="chart-header">
+                <h2 class="chart-title">Request Volume</h2>
+            </div>
+            <canvas id="requestVolumeChart"></canvas>
+        </div>
+
+        <div class="alerts-section">
+            <div class="chart-header">
+                <h2 class="chart-title">Active Alerts</h2>
+                <span id="alertCount" style="color: #718096;">0 active</span>
+            </div>
+            <div id="alertsList">
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <p>Loading alerts...</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="chart-container">
+            <div class="chart-header">
+                <h2 class="chart-title">Top Endpoints by Request Count</h2>
+            </div>
+            <div class="table-container">
+                <table id="endpointsTable">
+                    <thead>
+                        <tr>
+                            <th>Endpoint</th>
+                            <th>Requests</th>
+                            <th>Avg Response Time</th>
+                            <th>Error Rate</th>
+                            <th>P95 Latency</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td colspan="5" style="text-align: center; color: #718096;">Loading...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="refresh-indicator" onclick="refreshDashboard()" id="refreshBtn">
+        🔄
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        // Dashboard configuration
+        const API_BASE = '/api/dashboard';
+        const REFRESH_INTERVAL = 5000; // 5 seconds
+        
+        // Chart instances
+        let responseTimeChart = null;
+        let requestVolumeChart = null;
+        
+        // Initialize dashboard
+        async function initDashboard() {
+            setupCharts();
+            await refreshDashboard();
+            setInterval(refreshDashboard, REFRESH_INTERVAL);
+        }
+        
+        // Setup Chart.js charts
+        function setupCharts() {
+            const responseTimeCtx = document.getElementById('responseTimeChart').getContext('2d');
+            responseTimeChart = new Chart(responseTimeCtx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'P50',
+                        data: [],
+                        borderColor: '#48bb78',
+                        backgroundColor: 'rgba(72, 187, 120, 0.1)',
+                        tension: 0.4
+                    }, {
+                        label: 'P95',
+                        data: [],
+                        borderColor: '#ed8936',
+                        backgroundColor: 'rgba(237, 137, 54, 0.1)',
+                        tension: 0.4
+                    }, {
+                        label: 'P99',
+                        data: [],
+                        borderColor: '#f56565',
+                        backgroundColor: 'rgba(245, 101, 101, 0.1)',
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top'
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Response Time (ms)'
+                            }
+                        }
+                    }
+                }
+            });
+            
+            const requestVolumeCtx = document.getElementById('requestVolumeChart').getContext('2d');
+            requestVolumeChart = new Chart(requestVolumeCtx, {
+                type: 'bar',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Requests',
+                        data: [],
+                        backgroundColor: '#667eea',
+                        borderColor: '#5a67d8',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Requests per minute'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        // Refresh dashboard data
+        async function refreshDashboard() {
+            const refreshBtn = document.getElementById('refreshBtn');
+            refreshBtn.classList.add('refreshing');
+            
+            try {
+                // Fetch overview data
+                const response = await fetch(`${API_BASE}/overview`);
+                const data = await response.json();
+                
+                updateMetrics(data);
+                updateCharts(data);
+                updateAlerts(data);
+                updateEndpointsTable(data);
+                
+                // Update last update time
+                const now = new Date();
+                document.getElementById('lastUpdate').textContent = 
+                    `Last update: ${now.toLocaleTimeString()}`;
+                
+            } catch (error) {
+                console.error('Error refreshing dashboard:', error);
+                updateSystemStatus('critical', 'Error loading data');
+            } finally {
+                refreshBtn.classList.remove('refreshing');
+            }
+        }
+        
+        // Update metric cards
+        function updateMetrics(data) {
+            if (data.performanceMetrics) {
+                document.getElementById('requestRate').textContent = 
+                    data.performanceMetrics.requestsPerSecond.toFixed(1);
+                document.getElementById('responseTime').textContent = 
+                    `${data.performanceMetrics.averageResponseTimeMs.toFixed(0)}ms`;
+                document.getElementById('errorRate').textContent = 
+                    `${data.performanceMetrics.errorRate.toFixed(2)}%`;
+            }
+            
+            if (data.resourceUtilization) {
+                document.getElementById('cpuUsage').textContent = 
+                    `${data.resourceUtilization.cpuUsagePercent.toFixed(1)}%`;
+                document.getElementById('memoryUsage').textContent = 
+                    `${data.resourceUtilization.memoryUsageMB}MB`;
+            }
+            
+            if (data.tenantStatistics) {
+                document.getElementById('activeUsers').textContent = 
+                    data.tenantStatistics.activeTenantsToday;
+            }
+            
+            // Update system status
+            if (data.systemStatus) {
+                const status = data.systemStatus.health.toLowerCase();
+                updateSystemStatus(
+                    status === 'healthy' ? 'healthy' : 
+                    status === 'degraded' ? 'warning' : 'critical',
+                    data.systemStatus.health
+                );
+            }
+        }
+        
+        // Update system status indicator
+        function updateSystemStatus(status, text) {
+            const statusDot = document.getElementById('systemStatus');
+            const statusText = document.getElementById('statusText');
+            
+            statusDot.className = `status-dot ${status}`;
+            statusText.textContent = text;
+        }
+        
+        // Update charts with new data
+        function updateCharts(data) {
+            // Generate sample data for demo
+            const now = new Date();
+            const labels = [];
+            for (let i = 59; i >= 0; i--) {
+                const time = new Date(now - i * 60000);
+                labels.push(time.toLocaleTimeString());
+            }
+            
+            // Update response time chart
+            responseTimeChart.data.labels = labels.slice(-20);
+            responseTimeChart.data.datasets[0].data = Array.from({length: 20}, () => 
+                Math.random() * 50 + 20);
+            responseTimeChart.data.datasets[1].data = Array.from({length: 20}, () => 
+                Math.random() * 100 + 50);
+            responseTimeChart.data.datasets[2].data = Array.from({length: 20}, () => 
+                Math.random() * 150 + 100);
+            responseTimeChart.update();
+            
+            // Update request volume chart
+            requestVolumeChart.data.labels = labels.slice(-10);
+            requestVolumeChart.data.datasets[0].data = Array.from({length: 10}, () => 
+                Math.floor(Math.random() * 1000 + 500));
+            requestVolumeChart.update();
+        }
+        
+        // Update alerts list
+        function updateAlerts(data) {
+            const alertsList = document.getElementById('alertsList');
+            const alertCount = document.getElementById('alertCount');
+            
+            if (data.alertSummary) {
+                alertCount.textContent = `${data.alertSummary.activeCount} active`;
+                
+                // Generate sample alerts for demo
+                const alerts = [
+                    {
+                        severity: 'critical',
+                        title: 'High Error Rate Detected',
+                        time: '2 minutes ago',
+                        icon: '🔴'
+                    },
+                    {
+                        severity: 'warning',
+                        title: 'Memory Usage Above 80%',
+                        time: '15 minutes ago',
+                        icon: '🟡'
+                    },
+                    {
+                        severity: 'info',
+                        title: 'Scheduled Maintenance Starting',
+                        time: '1 hour ago',
+                        icon: '🔵'
+                    }
+                ];
+                
+                alertsList.innerHTML = alerts.map(alert => `
+                    <div class="alert-item ${alert.severity}">
+                        <div class="alert-icon">${alert.icon}</div>
+                        <div class="alert-content">
+                            <div class="alert-title">${alert.title}</div>
+                            <div class="alert-time">${alert.time}</div>
+                        </div>
+                    </div>
+                `).join('');
+            }
+        }
+        
+        // Update endpoints table
+        function updateEndpointsTable(data) {
+            const tbody = document.querySelector('#endpointsTable tbody');
+            
+            // Generate sample data for demo
+            const endpoints = [
+                { endpoint: '/api/users', requests: 15234, avgTime: 45, errorRate: 0.2, p95: 120 },
+                { endpoint: '/api/groups', requests: 8923, avgTime: 32, errorRate: 0.1, p95: 89 },
+                { endpoint: '/api/permissions', requests: 6234, avgTime: 28, errorRate: 0.3, p95: 76 },
+                { endpoint: '/api/auth/login', requests: 4532, avgTime: 125, errorRate: 1.2, p95: 245 },
+                { endpoint: '/api/tenants', requests: 2341, avgTime: 56, errorRate: 0.0, p95: 134 }
+            ];
+            
+            tbody.innerHTML = endpoints.map(endpoint => `
+                <tr>
+                    <td>${endpoint.endpoint}</td>
+                    <td>${endpoint.requests.toLocaleString()}</td>
+                    <td>${endpoint.avgTime}ms</td>
+                    <td>${endpoint.errorRate}%</td>
+                    <td>${endpoint.p95}ms</td>
+                </tr>
+            `).join('');
+        }
+        
+        // Update time range for charts
+        function updateTimeRange(range) {
+            document.querySelectorAll('.chart-control').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.target.classList.add('active');
+            
+            // Refresh with new time range
+            refreshDashboard();
+        }
+        
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', initDashboard);
+    </script>
+</body>
+</html>
