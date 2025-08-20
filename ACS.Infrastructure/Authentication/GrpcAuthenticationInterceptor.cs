@@ -27,14 +27,22 @@ public class GrpcAuthenticationInterceptor : Interceptor
         ServerCallContext context,
         UnaryServerMethod<TRequest, TResponse> continuation)
     {
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var method = context.Method;
+        var peer = context.Peer; // Client address
+        var requestType = typeof(TRequest).Name;
+        
         try
         {
+            _logger.LogTrace("gRPC authentication started for {Method} ({RequestType}) from {Peer}", 
+                method, requestType, peer);
+
             // Extract authentication information from gRPC metadata
             var authContext = await AuthenticateRequestAsync(context);
             
             if (authContext == null)
             {
-                _logger.LogWarning("Unauthenticated gRPC request to {Method}", context.Method);
+                _logger.LogWarning("GRPC AUTH FAILED: Unauthenticated gRPC request to {Method} from {Peer}", method, peer);
                 throw new RpcException(new Status(StatusCode.Unauthenticated, "Authentication required"));
             }
 
@@ -50,25 +58,32 @@ public class GrpcAuthenticationInterceptor : Interceptor
             var isAuthorized = await AuthorizeRequestAsync(context, authContext);
             if (!isAuthorized)
             {
-                _logger.LogWarning("Unauthorized gRPC request to {Method} for user {UserId} in tenant {TenantId}", 
-                    context.Method, authContext.UserId, authContext.TenantId);
+                _logger.LogWarning("GRPC AUTHORIZATION DENIED: User {UserId} in tenant {TenantId} denied access to {Method} from {Peer}", 
+                    authContext.UserId, authContext.TenantId, method, peer);
                 throw new RpcException(new Status(StatusCode.PermissionDenied, "Insufficient permissions"));
             }
 
-            _logger.LogDebug("Authenticated gRPC request to {Method} for user {UserId} in tenant {TenantId}", 
-                context.Method, authContext.UserId, authContext.TenantId);
+            _logger.LogInformation("GRPC REQUEST AUTHORIZED: User {UserId} in tenant {TenantId} accessing {Method} from {Peer} in {ElapsedMs}ms", 
+                authContext.UserId, authContext.TenantId, method, peer, stopwatch.ElapsedMilliseconds);
 
             // Continue with the request
-            return await continuation(request, context);
+            var response = await continuation(request, context);
+            
+            _logger.LogInformation("GRPC REQUEST COMPLETED: {Method} for user {UserId} completed successfully in {ElapsedMs}ms", 
+                method, authContext.UserId, stopwatch.ElapsedMilliseconds);
+            
+            return response;
         }
-        catch (RpcException)
+        catch (RpcException ex)
         {
-            // Re-throw gRPC exceptions
+            _logger.LogWarning("GRPC REQUEST FAILED: {Method} from {Peer} failed with gRPC status {StatusCode}: {Detail} after {ElapsedMs}ms", 
+                method, peer, ex.StatusCode, ex.Status.Detail, stopwatch.ElapsedMilliseconds);
             throw;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error in gRPC authentication interceptor for method {Method}", context.Method);
+            _logger.LogError(ex, "GRPC AUTH ERROR: Exception in gRPC authentication interceptor for {Method} from {Peer} after {ElapsedMs}ms", 
+                method, peer, stopwatch.ElapsedMilliseconds);
             throw new RpcException(new Status(StatusCode.Internal, "Authentication error"));
         }
     }

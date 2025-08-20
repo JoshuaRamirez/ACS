@@ -25,6 +25,14 @@ public class CommandProcessingService : ICommandProcessingService
 
     public async Task<TResult> ExecuteCommandAsync<TResult>(Infrastructure.WebRequestCommand command)
     {
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var commandId = command.CommandId;
+        var commandType = command.GetType().Name;
+        var userId = command.UserId;
+        
+        _logger.LogInformation("Command execution started: {CommandType}({CommandId}) by User:{UserId}", 
+            commandType, commandId, userId);
+            
         using var transaction = await _unitOfWork.BeginTransactionAsync();
         try
         {
@@ -32,19 +40,29 @@ public class CommandProcessingService : ICommandProcessingService
             await _unitOfWork.SaveChangesAsync();
             await transaction.CommitAsync();
             
-            _logger.LogInformation("Command {CommandType} executed successfully with result", command.GetType().Name);
+            _logger.LogInformation("Command {CommandType}({CommandId}) executed successfully by User:{UserId} in {ElapsedMs}ms", 
+                commandType, commandId, userId, stopwatch.ElapsedMilliseconds);
             return result;
         }
         catch (Exception ex)
         {
             await transaction.RollbackAsync();
-            _logger.LogError(ex, "Error executing command {CommandType}", command.GetType().Name);
+            _logger.LogError(ex, "Command {CommandType}({CommandId}) failed for User:{UserId} after {ElapsedMs}ms", 
+                commandType, commandId, userId, stopwatch.ElapsedMilliseconds);
             throw;
         }
     }
 
     public async Task ExecuteCommandAsync(Infrastructure.WebRequestCommand command)
     {
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var commandId = command.CommandId;
+        var commandType = command.GetType().Name;
+        var userId = command.UserId;
+        
+        _logger.LogInformation("Command execution started: {CommandType}({CommandId}) by User:{UserId}", 
+            commandType, commandId, userId);
+            
         using var transaction = await _unitOfWork.BeginTransactionAsync();
         try
         {
@@ -52,12 +70,14 @@ public class CommandProcessingService : ICommandProcessingService
             await _unitOfWork.SaveChangesAsync();
             await transaction.CommitAsync();
             
-            _logger.LogInformation("Command {CommandType} executed successfully", command.GetType().Name);
+            _logger.LogInformation("Command {CommandType}({CommandId}) executed successfully by User:{UserId} in {ElapsedMs}ms", 
+                commandType, commandId, userId, stopwatch.ElapsedMilliseconds);
         }
         catch (Exception ex)
         {
             await transaction.RollbackAsync();
-            _logger.LogError(ex, "Error executing command {CommandType}", command.GetType().Name);
+            _logger.LogError(ex, "Command {CommandType}({CommandId}) failed for User:{UserId} after {ElapsedMs}ms", 
+                commandType, commandId, userId, stopwatch.ElapsedMilliseconds);
             throw;
         }
     }

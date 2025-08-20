@@ -26,11 +26,21 @@ public class JwtAuthenticationMiddleware
 
     public async Task InvokeAsync(HttpContext context)
     {
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var requestPath = context.Request.Path.Value ?? "unknown";
+        var method = context.Request.Method;
+        var clientIp = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        var userAgent = context.Request.Headers.UserAgent.ToString();
+
         try
         {
+            _logger.LogTrace("Authentication middleware processing request: {Method} {Path} from {ClientIp}", 
+                method, requestPath, clientIp);
+
             // Skip authentication for certain paths
             if (ShouldSkipAuthentication(context.Request.Path))
             {
+                _logger.LogTrace("Skipping authentication for path: {Path}", requestPath);
                 await _next(context);
                 return;
             }
@@ -48,6 +58,7 @@ public class JwtAuthenticationMiddleware
                     var userId = principal.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? string.Empty;
                     var tenantId = principal.FindFirst("tenant_id")?.Value ?? string.Empty;
                     var roles = principal.FindAll(ClaimTypes.Role).Select(c => c.Value).ToList();
+                    var userName = principal.FindFirst(ClaimTypes.Name)?.Value ?? "unknown";
 
                     var authContext = new AuthenticationContext
                     {
@@ -61,11 +72,13 @@ public class JwtAuthenticationMiddleware
                     context.Items["AuthContext"] = authContext;
                     context.Items["TenantId"] = tenantId;
 
-                    _logger.LogDebug("Authenticated user {UserId} for tenant {TenantId}", userId, tenantId);
+                    _logger.LogInformation("USER AUTHENTICATED: {UserName}({UserId}) for tenant {TenantId} accessing {Method} {Path} from {ClientIp} in {ElapsedMs}ms", 
+                        userName, userId, tenantId, method, requestPath, clientIp, stopwatch.ElapsedMilliseconds);
                 }
                 else
                 {
-                    _logger.LogWarning("Invalid JWT token provided");
+                    _logger.LogWarning("AUTHENTICATION FAILED: Invalid JWT token provided for {Method} {Path} from {ClientIp} (UserAgent: {UserAgent})", 
+                        method, requestPath, clientIp, userAgent);
                     context.Response.StatusCode = 401;
                     await context.Response.WriteAsync("Invalid token");
                     return;
@@ -73,7 +86,8 @@ public class JwtAuthenticationMiddleware
             }
             else if (RequiresAuthentication(context))
             {
-                _logger.LogWarning("No JWT token provided for protected endpoint {Path}", context.Request.Path);
+                _logger.LogWarning("AUTHENTICATION REQUIRED: No JWT token provided for protected endpoint {Method} {Path} from {ClientIp} (UserAgent: {UserAgent})", 
+                    method, requestPath, clientIp, userAgent);
                 context.Response.StatusCode = 401;
                 await context.Response.WriteAsync("Authentication required");
                 return;
@@ -83,7 +97,8 @@ public class JwtAuthenticationMiddleware
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error in JWT authentication middleware");
+            _logger.LogError(ex, "AUTHENTICATION ERROR: Exception in JWT authentication middleware for {Method} {Path} from {ClientIp} after {ElapsedMs}ms", 
+                method, requestPath, clientIp, stopwatch.ElapsedMilliseconds);
             context.Response.StatusCode = 500;
             await context.Response.WriteAsync("Authentication error");
         }

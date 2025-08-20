@@ -54,22 +54,50 @@ public class PermissionEvaluationService : IPermissionEvaluationService
 
     public async Task<bool> HasPermissionAsync(int entityId, string uri, Domain.HttpVerb httpVerb)
     {
-        // Check cache first
-        var cacheKey = $"perm_{entityId}_{uri}_{httpVerb}";
-        if (_cache.TryGetValue<bool>(cacheKey, out var cachedResult))
+        var stopwatch = Stopwatch.StartNew();
+        
+        try
         {
-            _cacheStats.HitCount++;
-            return cachedResult;
-        }
-        
-        _cacheStats.MissCount++;
+            _logger.LogDebug("Permission check started for Entity:{EntityId}, URI:{Uri}, Verb:{HttpVerb}", 
+                entityId, uri, httpVerb);
 
-        var result = await EvaluatePermissionAsync(entityId, uri, httpVerb);
-        
-        // Cache the result
-        _cache.Set(cacheKey, result.IsAllowed, TimeSpan.FromMinutes(5));
-        
-        return result.IsAllowed;
+            // Check cache first
+            var cacheKey = $"perm_{entityId}_{uri}_{httpVerb}";
+            if (_cache.TryGetValue<bool>(cacheKey, out var cachedResult))
+            {
+                _cacheStats.HitCount++;
+                _logger.LogDebug("Permission check cache HIT for Entity:{EntityId}, URI:{Uri}, Result:{Result} in {ElapsedMs}ms", 
+                    entityId, uri, cachedResult, stopwatch.ElapsedMilliseconds);
+                return cachedResult;
+            }
+            
+            _cacheStats.MissCount++;
+            _logger.LogDebug("Permission check cache MISS for Entity:{EntityId}, URI:{Uri}", entityId, uri);
+
+            var result = await EvaluatePermissionAsync(entityId, uri, httpVerb);
+            
+            // Cache the result
+            _cache.Set(cacheKey, result.IsAllowed, TimeSpan.FromMinutes(5));
+            
+            _logger.LogInformation("Permission evaluation completed for Entity:{EntityId}, URI:{Uri}, Verb:{HttpVerb}, Result:{Result} in {ElapsedMs}ms", 
+                entityId, uri, httpVerb, result.IsAllowed, stopwatch.ElapsedMilliseconds);
+
+            // Log security-relevant denials
+            if (!result.IsAllowed)
+            {
+                _logger.LogWarning("PERMISSION DENIED: Entity:{EntityId} attempted access to URI:{Uri} with verb:{HttpVerb}. Reason:{Reason}", 
+                    entityId, uri, httpVerb, result.DenialReason ?? "Insufficient permissions");
+            }
+            
+            return result.IsAllowed;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error evaluating permission for Entity:{EntityId}, URI:{Uri}, Verb:{HttpVerb} in {ElapsedMs}ms", 
+                entityId, uri, httpVerb, stopwatch.ElapsedMilliseconds);
+            // Fail-safe: deny access on error
+            return false;
+        }
     }
 
     public async Task<List<Domain.Permission>> GetEffectivePermissionsAsync(int entityId)
@@ -97,20 +125,48 @@ public class PermissionEvaluationService : IPermissionEvaluationService
 
     public async Task<bool> CanUserAccessResourceAsync(int userId, string uri, Domain.HttpVerb httpVerb)
     {
-        // Check if user exists
-        var user = await _dbContext.Users.FindAsync(userId);
-        if (user == null)
-            return false;
-
-        // Get user's entity ID
-        var userEntity = await _dbContext.Entities
-            .FirstOrDefaultAsync(e => e.EntityType == "User" && 
-                                     e.Users.Any(u => u.Id == userId));
+        var stopwatch = Stopwatch.StartNew();
         
-        if (userEntity == null)
-            return false;
+        try
+        {
+            _logger.LogDebug("User access check started for User:{UserId}, URI:{Uri}, Verb:{HttpVerb}", 
+                userId, uri, httpVerb);
 
-        return await HasPermissionAsync(userEntity.Id, uri, httpVerb);
+            // Check if user exists
+            var user = await _dbContext.Users.FindAsync(userId);
+            if (user == null)
+            {
+                _logger.LogWarning("ACCESS DENIED: User:{UserId} not found for URI:{Uri} with verb:{HttpVerb}", 
+                    userId, uri, httpVerb);
+                return false;
+            }
+
+            // Get user's entity ID
+            var userEntity = await _dbContext.Entities
+                .FirstOrDefaultAsync(e => e.EntityType == "User" && 
+                                         e.Users.Any(u => u.Id == userId));
+            
+            if (userEntity == null)
+            {
+                _logger.LogError("User:{UserId} exists but has no corresponding entity for URI:{Uri} access check", 
+                    userId, uri);
+                return false;
+            }
+
+            var result = await HasPermissionAsync(userEntity.Id, uri, httpVerb);
+            
+            _logger.LogInformation("User access evaluation completed for User:{UserId}({UserName}), URI:{Uri}, Verb:{HttpVerb}, Result:{Result} in {ElapsedMs}ms", 
+                userId, user.Name, uri, httpVerb, result, stopwatch.ElapsedMilliseconds);
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error evaluating user access for User:{UserId}, URI:{Uri}, Verb:{HttpVerb} in {ElapsedMs}ms", 
+                userId, uri, httpVerb, stopwatch.ElapsedMilliseconds);
+            // Fail-safe: deny access on error
+            return false;
+        }
     }
 
     public async Task<List<Domain.Permission>> GetUserPermissionsAsync(int userId)

@@ -28,24 +28,45 @@ public class AuditService : IAuditService
 
     public async Task LogAsync(string action, string entityType, int entityId, string performedBy, string details)
     {
-        var auditLog = new AuditLog
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        
+        try
         {
-            EntityType = entityType,
-            EntityId = entityId,
-            ChangeType = action,
-            ChangedBy = performedBy,
-            ChangeDate = DateTime.UtcNow,
-            ChangeDetails = details
-        };
+            _logger.LogDebug("Creating audit log: {Action} on {EntityType}:{EntityId} by {User}", 
+                action, entityType, entityId, performedBy);
 
-        _dbContext.AuditLogs.Add(auditLog);
-        await _dbContext.SaveChangesAsync();
+            var auditLog = new AuditLog
+            {
+                EntityType = entityType,
+                EntityId = entityId,
+                ChangeType = action,
+                ChangedBy = performedBy,
+                ChangeDate = DateTime.UtcNow,
+                ChangeDetails = details
+            };
 
-        // Check alert rules
-        await CheckAlertRulesAsync(auditLog);
+            _dbContext.AuditLogs.Add(auditLog);
+            await _dbContext.SaveChangesAsync();
 
-        _logger.LogInformation("Audit log created: {Action} on {EntityType}:{EntityId} by {User}",
-            action, entityType, entityId, performedBy);
+            // Check alert rules
+            await CheckAlertRulesAsync(auditLog);
+
+            _logger.LogInformation("AUDIT LOG CREATED: {Action} on {EntityType}:{EntityId} by {User} in {ElapsedMs}ms",
+                action, entityType, entityId, performedBy, stopwatch.ElapsedMilliseconds);
+                
+            // Log sensitive operations with higher severity
+            if (IsHighSensitivityOperation(action, entityType))
+            {
+                _logger.LogWarning("SENSITIVE OPERATION AUDIT: {Action} on {EntityType}:{EntityId} by {User} - Details: {Details}",
+                    action, entityType, entityId, performedBy, details);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to create audit log for {Action} on {EntityType}:{EntityId} by {User} after {ElapsedMs}ms",
+                action, entityType, entityId, performedBy, stopwatch.ElapsedMilliseconds);
+            throw;
+        }
     }
 
     public async Task LogSecurityEventAsync(string eventType, string severity, string source, string details, string? userId = null)
@@ -83,21 +104,47 @@ public class AuditService : IAuditService
 
     public async Task LogAccessAttemptAsync(string resource, string action, string userId, bool success, string? reason = null)
     {
-        var details = new
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        
+        try
         {
-            Resource = resource,
-            Action = action,
-            Success = success,
-            Reason = reason,
-            Timestamp = DateTime.UtcNow
-        };
+            var details = new
+            {
+                Resource = resource,
+                Action = action,
+                Success = success,
+                Reason = reason,
+                Timestamp = DateTime.UtcNow
+            };
 
-        await LogAsync(
-            success ? "ACCESS_GRANTED" : "ACCESS_DENIED",
-            "AccessAttempt",
-            0,
-            userId,
-            JsonSerializer.Serialize(details));
+            var auditAction = success ? "ACCESS_GRANTED" : "ACCESS_DENIED";
+            
+            // Log with appropriate severity
+            if (success)
+            {
+                _logger.LogInformation("ACCESS GRANTED: User {UserId} granted {Action} access to {Resource} in {ElapsedMs}ms",
+                    userId, action, resource, stopwatch.ElapsedMilliseconds);
+            }
+            else
+            {
+                _logger.LogWarning("ACCESS DENIED: User {UserId} denied {Action} access to {Resource}. Reason: {Reason} in {ElapsedMs}ms",
+                    userId, action, resource, reason ?? "Insufficient permissions", stopwatch.ElapsedMilliseconds);
+            }
+
+            await LogAsync(auditAction, "AccessAttempt", 0, userId, JsonSerializer.Serialize(details));
+            
+            // Track failed attempts for security monitoring
+            if (!success)
+            {
+                await TrackFailedAccessAttemptAsync(userId, resource, action, reason);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to log access attempt for User {UserId} accessing {Resource} after {ElapsedMs}ms",
+                userId, resource, stopwatch.ElapsedMilliseconds);
+            throw;
+        }
 
         // Track failed attempts for suspicious activity detection
         if (!success)
@@ -1612,6 +1659,46 @@ public class AuditService : IAuditService
         
         xml.AppendLine("</AuditLogs>");
         return xml.ToString();
+    }
+
+    private bool IsHighSensitivityOperation(string action, string entityType)
+    {
+        var sensitiveActions = new[]
+        {
+            "DELETE", "ASSIGN_ADMIN", "REMOVE_ADMIN", "GRANT_PERMISSION",
+            "REVOKE_PERMISSION", "LOGIN_FAILED", "EXPORT_DATA", "BULK_DELETE"
+        };
+        
+        var sensitiveEntityTypes = new[]
+        {
+            "User", "Role", "Permission", "SecurityEvent", "AuditLog"
+        };
+        
+        return sensitiveActions.Contains(action.ToUpperInvariant()) ||
+               sensitiveEntityTypes.Contains(entityType);
+    }
+    
+    private async Task TrackFailedAccessAttemptAsync(string userId, string resource, string action, string? reason)
+    {
+        try
+        {
+            // In a real implementation, this would track failed attempts for security monitoring
+            // and potentially trigger alerts for suspicious activity patterns
+            _logger.LogDebug("Tracking failed access attempt for User {UserId} to {Resource} with action {Action}",
+                userId, resource, action);
+            
+            // Could implement:
+            // - Rate limiting triggers
+            // - IP-based blocking
+            // - Account lockout mechanisms
+            // - Security team notifications
+            
+            await Task.CompletedTask;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to track failed access attempt for User {UserId}", userId);
+        }
     }
 
     #endregion
