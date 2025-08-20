@@ -1,0 +1,404 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: acs-webapi-network-policy
+  namespace: acs-system
+  labels:
+    app.kubernetes.io/name: acs
+    app.kubernetes.io/component: security
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: webapi
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/component: dashboard
+    ports:
+    - protocol: TCP
+      port: 5000
+    - protocol: TCP
+      port: 5001
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/component: database
+    ports:
+    - protocol: TCP
+      port: 1433
+  - to:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/component: cache
+    ports:
+    - protocol: TCP
+      port: 6379
+  - to:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/component: tenant
+    ports:
+    - protocol: TCP
+      port: 6000
+    - protocol: TCP
+      port: 6001
+    - protocol: TCP
+      port: 6002
+    - protocol: TCP
+      port: 6003
+    - protocol: TCP
+      port: 6004
+    - protocol: TCP
+      port: 6005
+  - to:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/component: otel-collector
+    ports:
+    - protocol: TCP
+      port: 4317
+    - protocol: TCP
+      port: 4318
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 53
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 443
+    - protocol: TCP
+      port: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: acs-database-network-policy
+  namespace: acs-system
+  labels:
+    app.kubernetes.io/name: acs
+    app.kubernetes.io/component: security
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: database
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/component: webapi
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/component: tenant
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/component: dashboard
+    ports:
+    - protocol: TCP
+      port: 1433
+  egress:
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 53
+    - protocol: UDP
+      port: 53
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: acs-redis-network-policy
+  namespace: acs-system
+  labels:
+    app.kubernetes.io/name: acs
+    app.kubernetes.io/component: security
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: cache
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/component: webapi
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/component: tenant
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/component: dashboard
+    ports:
+    - protocol: TCP
+      port: 6379
+  - from:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/component: prometheus
+    ports:
+    - protocol: TCP
+      port: 9121
+  egress:
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 53
+    - protocol: UDP
+      port: 53
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: acs-tenant-network-policy
+  namespace: acs-system
+  labels:
+    app.kubernetes.io/name: acs
+    app.kubernetes.io/component: security
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: tenant
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/component: webapi
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/component: prometheus
+    ports:
+    - protocol: TCP
+      port: 6000
+    - protocol: TCP
+      port: 6001
+    - protocol: TCP
+      port: 6002
+    - protocol: TCP
+      port: 6003
+    - protocol: TCP
+      port: 6004
+    - protocol: TCP
+      port: 6005
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/component: database
+    ports:
+    - protocol: TCP
+      port: 1433
+  - to:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/component: cache
+    ports:
+    - protocol: TCP
+      port: 6379
+  - to:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/component: otel-collector
+    ports:
+    - protocol: TCP
+      port: 4317
+    - protocol: TCP
+      port: 4318
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 53
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 443
+    - protocol: TCP
+      port: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: acs-monitoring-network-policy
+  namespace: acs-system
+  labels:
+    app.kubernetes.io/name: acs
+    app.kubernetes.io/component: security
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: prometheus
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/component: grafana
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 9090
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/component: webapi
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/component: tenant
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/component: cache
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/component: otel-collector
+    ports:
+    - protocol: TCP
+      port: 5000
+    - protocol: TCP
+      port: 6000
+    - protocol: TCP
+      port: 6002
+    - protocol: TCP
+      port: 6004
+    - protocol: TCP
+      port: 8080
+    - protocol: TCP
+      port: 8888
+    - protocol: TCP
+      port: 9121
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 53
+    - protocol: UDP
+      port: 53
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: acs-grafana-network-policy
+  namespace: acs-system
+  labels:
+    app.kubernetes.io/name: acs
+    app.kubernetes.io/component: security
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: grafana
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 3000
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/component: prometheus
+    ports:
+    - protocol: TCP
+      port: 9090
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 53
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 443
+    - protocol: TCP
+      port: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: acs-dashboard-network-policy
+  namespace: acs-system
+  labels:
+    app.kubernetes.io/name: acs
+    app.kubernetes.io/component: security
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: dashboard
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 8080
+    - protocol: TCP
+      port: 8081
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/component: webapi
+    ports:
+    - protocol: TCP
+      port: 5000
+    - protocol: TCP
+      port: 5001
+  - to:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/component: database
+    ports:
+    - protocol: TCP
+      port: 1433
+  - to:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/component: cache
+    ports:
+    - protocol: TCP
+      port: 6379
+  - to:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/component: otel-collector
+    ports:
+    - protocol: TCP
+      port: 4317
+    - protocol: TCP
+      port: 4318
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 53
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 443
+    - protocol: TCP
+      port: 80

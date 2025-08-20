@@ -1,0 +1,111 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+metadata:
+  name: acs-system
+  labels:
+    app.kubernetes.io/name: acs
+    app.kubernetes.io/version: "1.0.0"
+
+namespace: acs-system
+
+resources:
+- namespace.yaml
+- persistent-volumes.yaml
+- configmaps.yaml
+- secrets.yaml
+- database.yaml
+- redis.yaml
+- webapi.yaml
+- dashboard.yaml
+- tenants.yaml
+- monitoring.yaml
+- network-policies.yaml
+
+commonLabels:
+  app.kubernetes.io/managed-by: kustomize
+  app.kubernetes.io/part-of: acs-system
+
+images:
+- name: acs/webapi
+  newTag: "1.0.0"
+- name: acs/dashboard
+  newTag: "1.0.0"  
+- name: acs/verticalhost
+  newTag: "1.0.0"
+
+patches:
+- target:
+    kind: Deployment
+    name: acs-webapi
+  patch: |-
+    - op: add
+      path: /spec/template/spec/containers/0/securityContext
+      value:
+        runAsNonRoot: true
+        runAsUser: 1001
+        readOnlyRootFilesystem: true
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop:
+          - ALL
+    - op: add
+      path: /spec/template/spec/securityContext
+      value:
+        seccompProfile:
+          type: RuntimeDefault
+
+- target:
+    kind: Deployment
+    name: acs-dashboard
+  patch: |-
+    - op: add
+      path: /spec/template/spec/containers/0/securityContext
+      value:
+        runAsNonRoot: true
+        runAsUser: 1001
+        readOnlyRootFilesystem: true
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop:
+          - ALL
+    - op: add
+      path: /spec/template/spec/securityContext
+      value:
+        seccompProfile:
+          type: RuntimeDefault
+
+- target:
+    kind: Deployment
+    labelSelector: "app.kubernetes.io/component=tenant"
+  patch: |-
+    - op: add
+      path: /spec/template/spec/containers/0/securityContext
+      value:
+        runAsNonRoot: true
+        runAsUser: 1001
+        readOnlyRootFilesystem: true
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop:
+          - ALL
+    - op: add
+      path: /spec/template/spec/securityContext
+      value:
+        seccompProfile:
+          type: RuntimeDefault
+
+configMapGenerator:
+- name: acs-environment-config
+  literals:
+  - DEPLOYMENT_TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+  - CLUSTER_NAME=acs-production
+  - DEPLOYMENT_VERSION=1.0.0
+
+secretGenerator:
+- name: acs-dashboard-auth
+  literals:
+  - auth=admin:$2y$10$kOyQ3PqVwRbY4JOQgV1WUe3X9hXhNbYoSu2OzSbHE3jrFHvjsYW2W  # admin:admin123
+
+generatorOptions:
+  disableNameSuffixHash: true

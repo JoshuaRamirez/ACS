@@ -1,0 +1,190 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: acs-dashboard
+  namespace: acs-system
+  labels:
+    app.kubernetes.io/name: acs
+    app.kubernetes.io/component: dashboard
+    app.kubernetes.io/version: "1.0.0"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: acs
+      app.kubernetes.io/component: dashboard
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: acs
+        app.kubernetes.io/component: dashboard
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+      - name: dashboard
+        image: acs/dashboard:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+          name: http
+        - containerPort: 8081
+          name: https
+        env:
+        - name: ASPNETCORE_ENVIRONMENT
+          valueFrom:
+            configMapKeyRef:
+              name: acs-config
+              key: ASPNETCORE_ENVIRONMENT
+        - name: ASPNETCORE_URLS
+          value: "https://+:8081;http://+:8080"
+        - name: ConnectionStrings__DefaultConnection
+          value: "Server=sqlserver;Database=ACSDatabase;User Id=sa;Password=$(DB_PASSWORD);TrustServerCertificate=true"
+        - name: ConnectionStrings__Redis
+          value: "redis:6379"
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: acs-secrets
+              key: DB_PASSWORD
+        - name: JwtSettings__SecretKey
+          valueFrom:
+            secretKeyRef:
+              name: acs-secrets
+              key: JWT_SECRET
+        - name: JwtSettings__Issuer
+          valueFrom:
+            configMapKeyRef:
+              name: acs-config
+              key: JwtSettings__Issuer
+        - name: JwtSettings__Audience
+          valueFrom:
+            configMapKeyRef:
+              name: acs-config
+              key: JwtSettings__Audience
+        - name: JwtSettings__ExpiryMinutes
+          valueFrom:
+            configMapKeyRef:
+              name: acs-config
+              key: JwtSettings__ExpiryMinutes
+        - name: OpenTelemetry__ServiceName
+          value: "ACS-Dashboard"
+        - name: OpenTelemetry__Endpoint
+          valueFrom:
+            configMapKeyRef:
+              name: acs-config
+              key: OpenTelemetry__Endpoint
+        - name: Dashboard__RefreshIntervalSeconds
+          value: "30"
+        - name: Dashboard__MetricsRetentionDays
+          value: "90"
+        - name: WebApi__BaseUrl
+          value: "http://acs-webapi:5000"
+        volumeMounts:
+        - name: acs-keys
+          mountPath: /app/keys
+          readOnly: true
+        - name: tmp
+          mountPath: /tmp
+        resources:
+          requests:
+            cpu: 150m
+            memory: 200Mi
+          limits:
+            cpu: 800m
+            memory: 800Mi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 10
+      volumes:
+      - name: acs-keys
+        persistentVolumeClaim:
+          claimName: acs-keys
+      - name: tmp
+        emptyDir: {}
+      initContainers:
+      - name: wait-for-dependencies
+        image: busybox:1.35
+        command: 
+        - sh
+        - -c
+        - |
+          echo "Waiting for WebAPI and dependencies..."
+          until nc -z acs-webapi 5000 && nc -z sqlserver 1433 && nc -z redis 6379; do
+            echo "Dependencies are unavailable - sleeping"
+            sleep 3
+          done
+          echo "All dependencies are ready!"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: acs-dashboard
+  namespace: acs-system
+  labels:
+    app.kubernetes.io/name: acs
+    app.kubernetes.io/component: dashboard
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8080
+    targetPort: 8080
+    name: http
+  - port: 8081
+    targetPort: 8081
+    name: https
+  selector:
+    app.kubernetes.io/name: acs
+    app.kubernetes.io/component: dashboard
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: acs-dashboard-ingress
+  namespace: acs-system
+  labels:
+    app.kubernetes.io/name: acs
+    app.kubernetes.io/component: dashboard
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/auth-type: basic
+    nginx.ingress.kubernetes.io/auth-secret: acs-dashboard-auth
+    nginx.ingress.kubernetes.io/auth-realm: "ACS Dashboard - Admin Access Required"
+spec:
+  tls:
+  - hosts:
+    - dashboard.acs.example.com
+    secretName: acs-dashboard-tls
+  rules:
+  - host: dashboard.acs.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: acs-dashboard
+            port:
+              number: 8081
