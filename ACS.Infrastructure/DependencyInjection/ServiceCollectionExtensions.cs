@@ -196,6 +196,9 @@ public static class ServiceCollectionExtensions
         // Register index analyzer service
         services.AddScoped<IIndexAnalyzer, IndexAnalyzer>();
         
+        // Register database backup service
+        services.AddScoped<IDatabaseBackupService, DatabaseBackupService>();
+        
         return services;
     }
 
@@ -270,6 +273,7 @@ public static class ServiceCollectionExtensions
         services.AddHostedService<DeadLetterQueueService>();
         services.AddHostedService<HealthMonitoringService>();
         services.AddHostedService<IndexMaintenanceService>();
+        services.AddHostedService<ScheduledBackupService>();
         
         // Tenant metrics
         services.AddTenantMetrics();
