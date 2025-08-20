@@ -16,6 +16,7 @@ using ACS.WebApi.Security.Filters;
 using ACS.WebApi.Security.Headers;
 using ACS.WebApi.Security.Validation;
 using ACS.WebApi.Services;
+using ACS.WebApi.Configuration;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -104,6 +105,9 @@ builder.Services.ConfigureRateLimitingPolicies(policies =>
     );
 });
 
+// Add comprehensive Swagger/OpenAPI documentation
+builder.Services.AddSwaggerDocumentation();
+
 var app = builder.Build();
 
 // Validate service registration
@@ -118,6 +122,9 @@ using (var scope = app.Services.CreateScope())
 if (app.Environment.IsDevelopment())
 {
     app.UseDeveloperExceptionPage();
+    
+    // Enable Swagger documentation in development
+    app.UseSwaggerDocumentation(app.Environment);
 }
 else
 {
