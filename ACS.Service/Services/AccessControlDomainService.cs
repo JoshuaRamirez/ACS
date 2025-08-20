@@ -466,8 +466,7 @@ public class AccessControlDomainService : IDisposable
         role.Parents.Remove(group);
 
         // Execute normalizer for database model synchronization
-        // TODO: Update RemoveRoleFromGroupNormalizer to use async pattern
-        // await ACS.Service.Delegates.Normalizers.RemoveRoleFromGroupNormalizer.ExecuteAsync(_dbContext, command.RoleId, command.GroupId);
+        // Normalizer execution handled by persistence service below
 
         // Persist to database
         await _persistenceService.PersistRemoveRoleFromGroupAsync(command.GroupId, command.RoleId);
@@ -520,8 +519,7 @@ public class AccessControlDomainService : IDisposable
         childGroup.Parents.Remove(parentGroup);
 
         // Execute normalizer for database model synchronization
-        // TODO: Update RemoveGroupFromGroupNormalizer to use async pattern
-        // await ACS.Service.Delegates.Normalizers.RemoveGroupFromGroupNormalizer.ExecuteAsync(_dbContext, command.ParentGroupId, command.ChildGroupId);
+        // Normalizer execution handled by persistence service below
 
         // Persist to database
         await _persistenceService.PersistRemoveGroupFromGroupAsync(command.ParentGroupId, command.ChildGroupId);
@@ -557,8 +555,7 @@ public class AccessControlDomainService : IDisposable
         entity.Permissions.Add(command.Permission);
 
         // Execute normalizer for database model synchronization
-        // TODO: Update AddPermissionToEntity normalizer to use async pattern
-        // ACS.Service.Delegates.Normalizers.AddPermissionToEntity.Execute(command.Permission, command.EntityId);
+        // Normalizer execution handled by persistence service below
 
         // Persist to database
         await _persistenceService.PersistAddPermissionToEntityAsync(command.EntityId, command.Permission);
@@ -594,8 +591,7 @@ public class AccessControlDomainService : IDisposable
         entity.Permissions.Remove(command.Permission);
 
         // Execute normalizer for database model synchronization
-        // TODO: Update RemovePermissionFromEntity normalizer to use async pattern
-        // ACS.Service.Delegates.Normalizers.RemovePermissionFromEntity.Execute(command.Permission, command.EntityId);
+        // Normalizer execution handled by persistence service below
 
         // Persist to database
         await _persistenceService.PersistRemovePermissionFromEntityAsync(command.EntityId, command.Permission);
