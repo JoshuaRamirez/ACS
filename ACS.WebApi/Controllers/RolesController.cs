@@ -11,15 +11,18 @@ public class RolesController : ControllerBase
 {
     private readonly TenantGrpcClientService _grpcClientService;
     private readonly GrpcErrorMappingService _errorMapper;
+    private readonly IUserContextService _userContext;
     private readonly ILogger<RolesController> _logger;
 
     public RolesController(
         TenantGrpcClientService grpcClientService,
         GrpcErrorMappingService errorMapper,
+        IUserContextService userContext,
         ILogger<RolesController> logger)
     {
         _grpcClientService = grpcClientService;
         _errorMapper = errorMapper;
+        _userContext = userContext;
         _logger = logger;
     }
 
@@ -34,7 +37,7 @@ public class RolesController : ControllerBase
             var getRolesCommand = new GetRolesCommand(
                 Guid.NewGuid().ToString(),
                 DateTime.UtcNow,
-                "current-user", // TODO: Get from authentication context
+                _userContext.GetCurrentUserId(),
                 request.Page,
                 request.PageSize);
 
@@ -65,7 +68,7 @@ public class RolesController : ControllerBase
             var getRoleCommand = new GetRoleCommand(
                 Guid.NewGuid().ToString(),
                 DateTime.UtcNow,
-                "current-user", // TODO: Get from authentication context
+                _userContext.GetCurrentUserId(),
                 id);
 
             var result = await _grpcClientService.GetRoleAsync(getRoleCommand);
@@ -105,7 +108,7 @@ public class RolesController : ControllerBase
             var createRoleCommand = new CreateRoleCommand(
                 Guid.NewGuid().ToString(),
                 DateTime.UtcNow,
-                "current-user", // TODO: Get from authentication context
+                _userContext.GetCurrentUserId(),
                 request.Name,
                 request.GroupId);
 
@@ -141,7 +144,7 @@ public class RolesController : ControllerBase
             var updateRoleCommand = new UpdateRoleCommand(
                 Guid.NewGuid().ToString(),
                 DateTime.UtcNow,
-                "current-user", // TODO: Get from authentication context
+                _userContext.GetCurrentUserId(),
                 id,
                 request.Name);
 
@@ -177,7 +180,7 @@ public class RolesController : ControllerBase
             var deleteRoleCommand = new DeleteRoleCommand(
                 Guid.NewGuid().ToString(),
                 DateTime.UtcNow,
-                "current-user", // TODO: Get from authentication context
+                _userContext.GetCurrentUserId(),
                 id);
 
             var result = await _grpcClientService.DeleteRoleAsync(deleteRoleCommand);

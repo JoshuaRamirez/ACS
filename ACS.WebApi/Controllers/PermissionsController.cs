@@ -12,15 +12,18 @@ public class PermissionsController : ControllerBase
 {
     private readonly TenantGrpcClientService _grpcClientService;
     private readonly GrpcErrorMappingService _errorMapper;
+    private readonly IUserContextService _userContext;
     private readonly ILogger<PermissionsController> _logger;
 
     public PermissionsController(
         TenantGrpcClientService grpcClientService,
         GrpcErrorMappingService errorMapper,
+        IUserContextService userContext,
         ILogger<PermissionsController> logger)
     {
         _grpcClientService = grpcClientService;
         _errorMapper = errorMapper;
+        _userContext = userContext;
         _logger = logger;
     }
 
@@ -160,7 +163,7 @@ public class PermissionsController : ControllerBase
             var getPermissionsCommand = new GetEntityPermissionsCommand(
                 Guid.NewGuid().ToString(),
                 DateTime.UtcNow,
-                "current-user", // TODO: Get from authentication context
+                _userContext.GetCurrentUserId(),
                 entityId,
                 request.Page,
                 request.PageSize);
@@ -213,7 +216,7 @@ public class PermissionsController : ControllerBase
             var removePermissionCommand = new RemovePermissionCommand(
                 Guid.NewGuid().ToString(),
                 DateTime.UtcNow,
-                "current-user", // TODO: Get from authentication context
+                _userContext.GetCurrentUserId(),
                 entityId,
                 request.Uri,
                 httpVerb);

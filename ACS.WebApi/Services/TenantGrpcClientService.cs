@@ -18,6 +18,7 @@ public class TenantGrpcClientService
 {
     private readonly ILogger<TenantGrpcClientService> _logger;
     private readonly ITenantContextService _tenantContextService;
+    private readonly IUserContextService _userContextService;
     private readonly CircuitBreakerService _circuitBreaker;
     private readonly IConfiguration _configuration;
     private readonly IServiceProvider _serviceProvider;
@@ -25,12 +26,14 @@ public class TenantGrpcClientService
     public TenantGrpcClientService(
         ILogger<TenantGrpcClientService> logger,
         ITenantContextService tenantContextService,
+        IUserContextService userContextService,
         CircuitBreakerService circuitBreaker,
         IConfiguration configuration,
         IServiceProvider serviceProvider)
     {
         _logger = logger;
         _tenantContextService = tenantContextService;
+        _userContextService = userContextService;
         _circuitBreaker = circuitBreaker;
         _configuration = configuration;
         _serviceProvider = serviceProvider;
@@ -718,7 +721,7 @@ public class TenantGrpcClientService
             var addUserToGroupCommand = new Service.Infrastructure.AddUserToGroupCommand(
                 Guid.NewGuid().ToString(),
                 DateTime.UtcNow,
-                "current-user", // TODO: Get from authentication context
+                GetCurrentUserId(),
                 request.UserId,
                 request.GroupId
             );
@@ -740,7 +743,7 @@ public class TenantGrpcClientService
             var assignUserToRoleCommand = new Service.Infrastructure.AssignUserToRoleCommand(
                 Guid.NewGuid().ToString(),
                 DateTime.UtcNow,
-                "current-user", // TODO: Get from authentication context
+                GetCurrentUserId(),
                 request.UserId,
                 request.RoleId
             );
@@ -773,7 +776,7 @@ public class TenantGrpcClientService
             var grantPermissionCommand = new Service.Infrastructure.GrantPermissionCommand(
                 Guid.NewGuid().ToString(),
                 DateTime.UtcNow,
-                "current-user", // TODO: Get from authentication context
+                GetCurrentUserId(),
                 request.EntityId,
                 request.Uri,
                 httpVerb,
@@ -808,7 +811,7 @@ public class TenantGrpcClientService
             var denyPermissionCommand = new Service.Infrastructure.DenyPermissionCommand(
                 Guid.NewGuid().ToString(),
                 DateTime.UtcNow,
-                "current-user", // TODO: Get from authentication context
+                GetCurrentUserId(),
                 request.EntityId,
                 request.Uri,
                 httpVerb,
@@ -832,7 +835,7 @@ public class TenantGrpcClientService
             var addGroupToGroupCommand = new Service.Infrastructure.AddGroupToGroupCommand(
                 Guid.NewGuid().ToString(),
                 DateTime.UtcNow,
-                "current-user", // TODO: Get from authentication context
+                GetCurrentUserId(),
                 request.ParentGroupId,
                 request.ChildGroupId
             );
@@ -854,7 +857,7 @@ public class TenantGrpcClientService
             var addRoleToGroupCommand = new Service.Infrastructure.AddRoleToGroupCommand(
                 Guid.NewGuid().ToString(),
                 DateTime.UtcNow,
-                "current-user", // TODO: Get from authentication context
+                GetCurrentUserId(),
                 request.GroupId,
                 request.RoleId
             );
@@ -867,5 +870,10 @@ public class TenantGrpcClientService
                 throw new RpcException(new Status(StatusCode.Internal, response.ErrorMessage));
             }
         });
+    }
+    
+    private string GetCurrentUserId()
+    {
+        return _userContextService.GetCurrentUserId();
     }
 }

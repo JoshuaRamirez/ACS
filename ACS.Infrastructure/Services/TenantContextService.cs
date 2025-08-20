@@ -173,10 +173,21 @@ public class TenantContextService : ITenantContextService
                 return true;
             }
             
-            // TODO: Implement cross-tenant access validation
-            // This would check if the user has permission to access other tenants
+            // Implement cross-tenant access validation
+            // Check if the user has cross-tenant permissions
             var userId = _userContextService.GetCurrentUserId();
-            _logger.LogWarning("User {UserId} attempted to access tenant {TenantId} but belongs to {UserTenantId}", 
+            
+            // Check for system administrator role or cross-tenant permissions
+            var hasSystemAdminRole = await HasSystemAdministratorRoleAsync(userId);
+            var hasCrossTenantAccess = await HasCrossTenantAccessAsync(userId, tenantId);
+            
+            if (hasSystemAdminRole || hasCrossTenantAccess)
+            {
+                _logger.LogInformation("User {UserId} granted cross-tenant access to {TenantId}", userId, tenantId);
+                return true;
+            }
+            
+            _logger.LogWarning("User {UserId} denied cross-tenant access to {TenantId} (user tenant: {UserTenantId})", 
                 userId, tenantId, userTenantId);
             
             return false;
@@ -184,6 +195,76 @@ public class TenantContextService : ITenantContextService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error validating tenant access");
+            return false;
+        }
+    }
+    
+    /// <summary>
+    /// Checks if the user has system administrator role
+    /// </summary>
+    private async Task<bool> HasSystemAdministratorRoleAsync(string userId)
+    {
+        try
+        {
+            // Implementation would check user roles in database
+            // For now, we check if the user ID matches a known system admin pattern
+            // In production, this should query the actual role assignments
+            
+            // System admins might have a specific claim or role assignment
+            var httpContext = _httpContextAccessor.HttpContext;
+            if (httpContext?.User?.IsInRole("SystemAdministrator") == true ||
+                httpContext?.User?.FindFirst("role")?.Value == "SystemAdministrator")
+            {
+                return true;
+            }
+            
+            // Additional checks could include database queries for user roles
+            return await Task.FromResult(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error checking system administrator role for user {UserId}", userId);
+            return false;
+        }
+    }
+    
+    /// <summary>
+    /// Checks if the user has explicit cross-tenant access to the specified tenant
+    /// </summary>
+    private async Task<bool> HasCrossTenantAccessAsync(string userId, string targetTenantId)
+    {
+        try
+        {
+            // Implementation would check cross-tenant permissions in database
+            // This could include:
+            // - Explicit tenant access grants
+            // - Service account permissions
+            // - Cross-tenant role assignments
+            
+            var httpContext = _httpContextAccessor.HttpContext;
+            
+            // Check for cross-tenant access claims
+            var accessibleTenants = httpContext?.User?.FindAll("accessible_tenant")
+                .Select(c => c.Value)
+                .ToList();
+                
+            if (accessibleTenants?.Contains(targetTenantId) == true)
+            {
+                return true;
+            }
+            
+            // Check for wildcard cross-tenant access
+            if (httpContext?.User?.FindFirst("cross_tenant_access")?.Value == "all")
+            {
+                return true;
+            }
+            
+            return await Task.FromResult(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error checking cross-tenant access for user {UserId} to tenant {TenantId}", 
+                userId, targetTenantId);
             return false;
         }
     }

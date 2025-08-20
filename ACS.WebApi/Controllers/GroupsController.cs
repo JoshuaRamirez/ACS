@@ -11,15 +11,18 @@ public class GroupsController : ControllerBase
 {
     private readonly TenantGrpcClientService _grpcClientService;
     private readonly GrpcErrorMappingService _errorMapper;
+    private readonly IUserContextService _userContext;
     private readonly ILogger<GroupsController> _logger;
 
     public GroupsController(
         TenantGrpcClientService grpcClientService,
         GrpcErrorMappingService errorMapper,
+        IUserContextService userContext,
         ILogger<GroupsController> logger)
     {
         _grpcClientService = grpcClientService;
         _errorMapper = errorMapper;
+        _userContext = userContext;
         _logger = logger;
     }
 
@@ -34,7 +37,7 @@ public class GroupsController : ControllerBase
             var getGroupsCommand = new GetGroupsCommand(
                 Guid.NewGuid().ToString(),
                 DateTime.UtcNow,
-                "current-user", // TODO: Get from authentication context
+                _userContext.GetCurrentUserId(),
                 request.Page,
                 request.PageSize);
 
@@ -65,7 +68,7 @@ public class GroupsController : ControllerBase
             var getGroupCommand = new GetGroupCommand(
                 Guid.NewGuid().ToString(),
                 DateTime.UtcNow,
-                "current-user", // TODO: Get from authentication context
+                _userContext.GetCurrentUserId(),
                 id);
 
             var result = await _grpcClientService.GetGroupAsync(getGroupCommand);
@@ -105,7 +108,7 @@ public class GroupsController : ControllerBase
             var createGroupCommand = new CreateGroupCommand(
                 Guid.NewGuid().ToString(),
                 DateTime.UtcNow,
-                "current-user", // TODO: Get from authentication context
+                _userContext.GetCurrentUserId(),
                 request.Name,
                 request.ParentGroupId);
 
@@ -141,7 +144,7 @@ public class GroupsController : ControllerBase
             var updateGroupCommand = new UpdateGroupCommand(
                 Guid.NewGuid().ToString(),
                 DateTime.UtcNow,
-                "current-user", // TODO: Get from authentication context
+                _userContext.GetCurrentUserId(),
                 id,
                 request.Name);
 
@@ -177,7 +180,7 @@ public class GroupsController : ControllerBase
             var deleteGroupCommand = new DeleteGroupCommand(
                 Guid.NewGuid().ToString(),
                 DateTime.UtcNow,
-                "current-user", // TODO: Get from authentication context
+                _userContext.GetCurrentUserId(),
                 id);
 
             var result = await _grpcClientService.DeleteGroupAsync(deleteGroupCommand);

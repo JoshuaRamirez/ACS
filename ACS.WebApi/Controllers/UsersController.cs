@@ -143,7 +143,7 @@ public class UsersController : ControllerBase
             var updateUserCommand = new Service.Infrastructure.UpdateUserCommand(
                 Guid.NewGuid().ToString(),
                 DateTime.UtcNow,
-                "current-user", // TODO: Get from authentication context
+                _userContext.GetCurrentUserId(),
                 id,
                 request.Name);
 
@@ -174,7 +174,7 @@ public class UsersController : ControllerBase
             var deleteUserCommand = new Service.Infrastructure.DeleteUserCommand(
                 Guid.NewGuid().ToString(),
                 DateTime.UtcNow,
-                "current-user", // TODO: Get from authentication context
+                _userContext.GetCurrentUserId(),
                 id);
 
             var result = await _grpcClientService.DeleteUserAsync(deleteUserCommand);
