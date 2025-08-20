@@ -202,6 +202,9 @@ public static class ServiceCollectionExtensions
         // Register migration validation service
         services.AddScoped<IMigrationValidationService, MigrationValidationService>();
         
+        // Register data archiving service
+        services.AddScoped<IDataArchivingService, DataArchivingService>();
+        
         return services;
     }
 
@@ -277,6 +280,7 @@ public static class ServiceCollectionExtensions
         services.AddHostedService<HealthMonitoringService>();
         services.AddHostedService<IndexMaintenanceService>();
         services.AddHostedService<ScheduledBackupService>();
+        services.AddHostedService<ScheduledArchivingService>();
         
         // Tenant metrics
         services.AddTenantMetrics();
