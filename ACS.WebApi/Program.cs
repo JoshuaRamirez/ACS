@@ -175,6 +175,9 @@ app.UsePerformanceMetrics();
 // 7a. Metrics collection middleware
 app.UseMiddleware<MetricsMiddleware>();
 
+// 7b. Business metrics middleware
+app.UseBusinessMetrics();
+
 // 8. Compliance audit middleware (before auth for comprehensive logging)
 app.UseComplianceAudit(new ComplianceAuditConfiguration
 {

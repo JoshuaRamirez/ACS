@@ -1,7 +1,9 @@
 using ACS.Service.Data;
 using ACS.Service.Domain;
+using ACS.Infrastructure.Telemetry;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using System.Diagnostics;
 
 namespace ACS.Service.Services;
 
@@ -23,29 +25,76 @@ public class UserService : IUserService
 
     public async Task<IEnumerable<Domain.User>> GetAllAsync()
     {
-        // Convert data model users to domain model users
-        var dataUsers = await _dbContext.Users
-            .Include(u => u.Entity)
-            .Include(u => u.UserGroups)
-            .ThenInclude(ug => ug.Group)
-            .Include(u => u.UserRoles)
-            .ThenInclude(ur => ur.Role)
-            .ToListAsync();
+        using var activity = OpenTelemetryConfiguration.ServiceActivitySource.StartActivity("UserService.GetAll");
+        var stopwatch = Stopwatch.StartNew();
 
-        return dataUsers.Select(ConvertToDomainUser);
+        try
+        {
+            // Convert data model users to domain model users
+            var dataUsers = await _dbContext.Users
+                .Include(u => u.Entity)
+                .Include(u => u.UserGroups)
+                .ThenInclude(ug => ug.Group)
+                .Include(u => u.UserRoles)
+                .ThenInclude(ur => ur.Role)
+                .ToListAsync();
+
+            var result = dataUsers.Select(ConvertToDomainUser).ToList();
+
+            // Record metrics
+            activity?.SetTag("operation.success", true);
+            activity?.SetTag("users.count", result.Count);
+            OpenTelemetryConfiguration.RecordDatabaseOperation("GetAllUsers", stopwatch.Elapsed.TotalSeconds, true, "User");
+
+            _logger.LogDebug("Retrieved {UserCount} users in {Duration}ms", result.Count, stopwatch.ElapsedMilliseconds);
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+            OpenTelemetryConfiguration.RecordDatabaseOperation("GetAllUsers", stopwatch.Elapsed.TotalSeconds, false, "User");
+
+            _logger.LogError(ex, "Error retrieving all users in {Duration}ms", stopwatch.ElapsedMilliseconds);
+            throw;
+        }
     }
 
     public async Task<Domain.User?> GetByIdAsync(int id)
     {
-        var dataUser = await _dbContext.Users
-            .Include(u => u.Entity)
-            .Include(u => u.UserGroups)
-            .ThenInclude(ug => ug.Group)
-            .Include(u => u.UserRoles)
-            .ThenInclude(ur => ur.Role)
-            .FirstOrDefaultAsync(u => u.Id == id);
+        using var activity = OpenTelemetryConfiguration.ServiceActivitySource.StartActivity("UserService.GetById");
+        activity?.SetTag("user.id", id);
+        var stopwatch = Stopwatch.StartNew();
 
-        return dataUser != null ? ConvertToDomainUser(dataUser) : null;
+        try
+        {
+            var dataUser = await _dbContext.Users
+                .Include(u => u.Entity)
+                .Include(u => u.UserGroups)
+                .ThenInclude(ug => ug.Group)
+                .Include(u => u.UserRoles)
+                .ThenInclude(ur => ur.Role)
+                .FirstOrDefaultAsync(u => u.Id == id);
+
+            var result = dataUser != null ? ConvertToDomainUser(dataUser) : null;
+
+            // Record metrics
+            activity?.SetTag("operation.success", true);
+            activity?.SetTag("user.found", result != null);
+            OpenTelemetryConfiguration.RecordDatabaseOperation("GetUserById", stopwatch.Elapsed.TotalSeconds, true, "User");
+
+            _logger.LogDebug("Retrieved user {UserId} in {Duration}ms, found: {Found}", id, stopwatch.ElapsedMilliseconds, result != null);
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+            OpenTelemetryConfiguration.RecordDatabaseOperation("GetUserById", stopwatch.Elapsed.TotalSeconds, false, "User");
+
+            _logger.LogError(ex, "Error retrieving user {UserId} in {Duration}ms", id, stopwatch.ElapsedMilliseconds);
+            throw;
+        }
     }
 
     public async Task<Domain.User> AddAsync(Domain.User user, string createdBy)

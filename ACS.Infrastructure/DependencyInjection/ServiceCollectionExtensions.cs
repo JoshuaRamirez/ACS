@@ -267,6 +267,9 @@ public static class ServiceCollectionExtensions
         services.AddHostedService<DeadLetterQueueService>();
         services.AddHostedService<HealthMonitoringService>();
         
+        // Tenant metrics
+        services.AddTenantMetrics();
+        
         // Rate limiting
         services.AddRateLimiting(configuration);
         
