@@ -123,7 +123,6 @@ public class ConsoleDashboardService : BackgroundService
         }
         
         Console.Clear();
-        await Task.CompletedTask;
     }
 
     private async Task CleanupConsoleAsync()
@@ -131,7 +130,6 @@ public class ConsoleDashboardService : BackgroundService
         Console.CursorVisible = true;
         Console.Clear();
         Console.ResetColor();
-        await Task.CompletedTask;
     }
 
     private async Task UpdateMetricsAsync()

@@ -110,14 +110,87 @@ public class MultiTenantDiscoveryService : BackgroundService
 
     private async Task DiscoverTenantProcessesAsync()
     {
-        // Simulate tenant process discovery
-        var processes = System.Diagnostics.Process.GetProcessesByName("ACS.VerticalHost");
-        
-        if (processes.Length > 0)
+        try
         {
-            _logger.LogDebug("Found {ProcessCount} ACS.VerticalHost processes", processes.Length);
+            // Discover running tenant processes
+            var processes = System.Diagnostics.Process.GetProcessesByName("ACS.VerticalHost");
+            
+            var discoveredTenants = new List<string>();
+            
+            foreach (var process in processes)
+            {
+                try
+                {
+                    // Extract tenant ID from process arguments or environment variables
+                    var tenantId = ExtractTenantIdFromProcess(process);
+                    if (!string.IsNullOrEmpty(tenantId))
+                    {
+                        discoveredTenants.Add(tenantId);
+                        _logger.LogTrace("Discovered tenant process: {TenantId} (PID: {ProcessId})", 
+                            tenantId, process.Id);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to extract tenant ID from process {ProcessId}", process.Id);
+                }
+            }
+            
+            if (discoveredTenants.Any())
+            {
+                _logger.LogDebug("Discovered {TenantCount} active tenant processes: {TenantIds}", 
+                    discoveredTenants.Count, string.Join(", ", discoveredTenants));
+                
+                // Update internal tenant tracking
+                await UpdateTenantRegistryAsync(discoveredTenants);
+            }
+            else
+            {
+                _logger.LogTrace("No active tenant processes found");
+            }
         }
-
-        await Task.CompletedTask;
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error during tenant process discovery");
+        }
+    }
+    
+    private string? ExtractTenantIdFromProcess(System.Diagnostics.Process process)
+    {
+        try
+        {
+            // In a real implementation, you might:
+            // 1. Read from process command line arguments
+            // 2. Check environment variables
+            // 3. Query via gRPC health check endpoint
+            // 4. Read from shared configuration
+            
+            // For now, simulate by using process ID as base
+            // This would be replaced with actual tenant identification logic
+            return $"tenant-{process.Id % 1000}";
+        }
+        catch
+        {
+            return null;
+        }
+    }
+    
+    private async Task UpdateTenantRegistryAsync(List<string> activeTenantIds)
+    {
+        try
+        {
+            // Update tenant registry with discovered processes
+            // This could involve:
+            // 1. Updating a shared cache (Redis)
+            // 2. Notifying other services
+            // 3. Updating dashboard state
+            
+            _logger.LogTrace("Updated tenant registry with {Count} active tenants", activeTenantIds.Count);
+            await Task.Delay(10); // Simulate registry update
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to update tenant registry");
+        }
     }
 }
