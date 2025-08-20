@@ -53,101 +53,200 @@ public class RoleService : IRoleService
 
     public async Task<Domain.Role> CreateRoleAsync(string name, string description, string createdBy)
     {
-        // Create entity first
-        var entity = new Data.Models.Entity
+        try
         {
-            EntityType = "Role",
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
-        };
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                throw new ArgumentException("Role name cannot be null or empty", nameof(name));
+            }
 
-        _dbContext.Entities.Add(entity);
-        await _dbContext.SaveChangesAsync();
+            if (string.IsNullOrWhiteSpace(createdBy))
+            {
+                throw new ArgumentException("CreatedBy cannot be null or empty", nameof(createdBy));
+            }
 
-        // Create role
-        var role = new Data.Models.Role
+            // Check if role name already exists
+            var existingRole = await _dbContext.Roles
+                .FirstOrDefaultAsync(r => r.Name == name);
+            if (existingRole != null)
+            {
+                _logger.LogWarning("Attempted to create role with duplicate name: {RoleName}", name);
+                throw new InvalidOperationException($"Role with name '{name}' already exists");
+            }
+
+            // Create entity first
+            var entity = new Data.Models.Entity
+            {
+                EntityType = "Role",
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
+
+            _dbContext.Entities.Add(entity);
+            await _dbContext.SaveChangesAsync();
+
+            // Create role
+            var role = new Data.Models.Role
+            {
+                Name = name,
+                Description = description,
+                EntityId = entity.Id,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
+
+            _dbContext.Roles.Add(role);
+            await _dbContext.SaveChangesAsync();
+
+            // Log audit
+            await LogAuditAsync("CreateRole", "Role", role.Id, createdBy,
+                $"Created role '{name}'");
+
+            _logger.LogInformation("Created role {RoleId} with name {RoleName} by {CreatedBy}",
+                role.Id, name, createdBy);
+
+            return ConvertToDomainRole(role);
+        }
+        catch (ArgumentException ex)
         {
-            Name = name,
-            Description = description,
-            EntityId = entity.Id,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
-        };
-
-        _dbContext.Roles.Add(role);
-        await _dbContext.SaveChangesAsync();
-
-        // Log audit
-        await LogAuditAsync("CreateRole", "Role", role.Id, createdBy,
-            $"Created role '{name}'");
-
-        _logger.LogInformation("Created role {RoleId} with name {RoleName} by {CreatedBy}",
-            role.Id, name, createdBy);
-
-        return ConvertToDomainRole(role);
+            _logger.LogError(ex, "Invalid argument provided for role creation: {RoleName}", name);
+            throw;
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogError(ex, "Invalid operation during role creation: {RoleName}", name);
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error creating role {RoleName}", name);
+            throw new InvalidOperationException($"Failed to create role '{name}': {ex.Message}", ex);
+        }
     }
 
     public async Task<Domain.Role> UpdateRoleAsync(int roleId, string name, string description, string updatedBy)
     {
-        var role = await _dbContext.Roles.FindAsync(roleId);
-        if (role == null)
+        try
         {
-            throw new InvalidOperationException($"Role {roleId} not found");
+            if (roleId <= 0)
+            {
+                throw new ArgumentException("Role ID must be a positive integer", nameof(roleId));
+            }
+
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                throw new ArgumentException("Role name cannot be null or empty", nameof(name));
+            }
+
+            if (string.IsNullOrWhiteSpace(updatedBy))
+            {
+                throw new ArgumentException("UpdatedBy cannot be null or empty", nameof(updatedBy));
+            }
+
+            var role = await _dbContext.Roles.FindAsync(roleId);
+            if (role == null)
+            {
+                _logger.LogWarning("Attempted to update non-existent role {RoleId}", roleId);
+                throw new InvalidOperationException($"Role {roleId} not found");
+            }
+
+            var oldName = role.Name;
+            role.Name = name;
+            role.Description = description;
+            role.UpdatedAt = DateTime.UtcNow;
+
+            _dbContext.Roles.Update(role);
+            await _dbContext.SaveChangesAsync();
+
+            // Log audit
+            await LogAuditAsync("UpdateRole", "Role", role.Id, updatedBy,
+                $"Updated role from '{oldName}' to '{name}'");
+
+            _logger.LogInformation("Updated role {RoleId} with name {RoleName} by {UpdatedBy}",
+                roleId, name, updatedBy);
+
+            return ConvertToDomainRole(role);
         }
-
-        var oldName = role.Name;
-        role.Name = name;
-        role.Description = description;
-        role.UpdatedAt = DateTime.UtcNow;
-
-        _dbContext.Roles.Update(role);
-        await _dbContext.SaveChangesAsync();
-
-        // Log audit
-        await LogAuditAsync("UpdateRole", "Role", role.Id, updatedBy,
-            $"Updated role from '{oldName}' to '{name}'");
-
-        _logger.LogInformation("Updated role {RoleId} with name {RoleName} by {UpdatedBy}",
-            roleId, name, updatedBy);
-
-        return ConvertToDomainRole(role);
+        catch (ArgumentException ex)
+        {
+            _logger.LogError(ex, "Invalid argument provided for role update: {RoleId}", roleId);
+            throw;
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogError(ex, "Invalid operation during role update: {RoleId}", roleId);
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error updating role {RoleId}", roleId);
+            throw new InvalidOperationException($"Failed to update role {roleId}: {ex.Message}", ex);
+        }
     }
 
     public async Task DeleteRoleAsync(int roleId, string deletedBy)
     {
-        var role = await _dbContext.Roles
-            .Include(r => r.Entity)
-            .FirstOrDefaultAsync(r => r.Id == roleId);
-
-        if (role == null)
+        try
         {
-            throw new InvalidOperationException($"Role {roleId} not found");
+            if (roleId <= 0)
+            {
+                throw new ArgumentException("Role ID must be a positive integer", nameof(roleId));
+            }
+
+            if (string.IsNullOrWhiteSpace(deletedBy))
+            {
+                throw new ArgumentException("DeletedBy cannot be null or empty", nameof(deletedBy));
+            }
+
+            var role = await _dbContext.Roles
+                .Include(r => r.Entity)
+                .FirstOrDefaultAsync(r => r.Id == roleId);
+
+            if (role == null)
+            {
+                _logger.LogWarning("Attempted to delete non-existent role {RoleId}", roleId);
+                throw new InvalidOperationException($"Role {roleId} not found");
+            }
+
+            // Check if role is assigned to any users or groups
+            var hasActiveDependencies = await HasActiveDependenciesAsync(roleId);
+            if (hasActiveDependencies)
+            {
+                _logger.LogWarning("Cannot delete role {RoleId} due to active assignments", roleId);
+                throw new InvalidOperationException($"Cannot delete role {roleId} as it is assigned to users or groups. Remove role assignments first.");
+            }
+
+            var roleName = role.Name;
+
+            // Delete role (cascading will handle relationships)
+            _dbContext.Roles.Remove(role);
+            if (role.Entity != null)
+            {
+                _dbContext.Entities.Remove(role.Entity);
+            }
+            await _dbContext.SaveChangesAsync();
+
+            // Log audit
+            await LogAuditAsync("DeleteRole", "Role", roleId, deletedBy,
+                $"Deleted role '{roleName}'");
+
+            _logger.LogInformation("Deleted role {RoleId} by {DeletedBy}", roleId, deletedBy);
         }
-
-        // Check if role is assigned to any users or groups
-        var hasAssignments = await _dbContext.UserRoles.AnyAsync(ur => ur.RoleId == roleId) ||
-                            await _dbContext.GroupRoles.AnyAsync(gr => gr.RoleId == roleId);
-
-        if (hasAssignments)
+        catch (ArgumentException ex)
         {
-            throw new InvalidOperationException($"Cannot delete role {roleId} as it is assigned to users or groups");
+            _logger.LogError(ex, "Invalid argument provided for role deletion: {RoleId}", roleId);
+            throw;
         }
-
-        var roleName = role.Name;
-
-        // Delete role (cascading will handle relationships)
-        _dbContext.Roles.Remove(role);
-        if (role.Entity != null)
+        catch (InvalidOperationException ex)
         {
-            _dbContext.Entities.Remove(role.Entity);
+            _logger.LogError(ex, "Invalid operation during role deletion: {RoleId}", roleId);
+            throw;
         }
-        await _dbContext.SaveChangesAsync();
-
-        // Log audit
-        await LogAuditAsync("DeleteRole", "Role", roleId, deletedBy,
-            $"Deleted role '{roleName}'");
-
-        _logger.LogInformation("Deleted role {RoleId} by {DeletedBy}", roleId, deletedBy);
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error deleting role {RoleId}", roleId);
+            throw new InvalidOperationException($"Failed to delete role {roleId}: {ex.Message}", ex);
+        }
     }
 
     #endregion
@@ -631,6 +730,26 @@ public class RoleService : IRoleService
 
         _dbContext.AuditLogs.Add(auditLog);
         await _dbContext.SaveChangesAsync();
+    }
+
+    private async Task<bool> HasActiveDependenciesAsync(int roleId)
+    {
+        try
+        {
+            // Check for user-role relationships
+            var hasUserRoles = await _dbContext.UserRoles.AnyAsync(ur => ur.RoleId == roleId);
+            
+            // Check for group-role relationships
+            var hasGroupRoles = await _dbContext.GroupRoles.AnyAsync(gr => gr.RoleId == roleId);
+            
+            return hasUserRoles || hasGroupRoles;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error checking dependencies for role {RoleId}", roleId);
+            // Return true to be safe and prevent deletion if we can't verify
+            return true;
+        }
     }
 
     #endregion

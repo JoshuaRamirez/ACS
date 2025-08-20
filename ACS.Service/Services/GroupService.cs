@@ -56,101 +56,200 @@ public class GroupService : IGroupService
 
     public async Task<Domain.Group> CreateGroupAsync(string name, string description, string createdBy)
     {
-        // Create entity first
-        var entity = new Data.Models.Entity
+        try
         {
-            EntityType = "Group",
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
-        };
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                throw new ArgumentException("Group name cannot be null or empty", nameof(name));
+            }
 
-        _dbContext.Entities.Add(entity);
-        await _dbContext.SaveChangesAsync();
+            if (string.IsNullOrWhiteSpace(createdBy))
+            {
+                throw new ArgumentException("CreatedBy cannot be null or empty", nameof(createdBy));
+            }
 
-        // Create group
-        var group = new Data.Models.Group
+            // Check if group name already exists
+            var existingGroup = await _dbContext.Groups
+                .FirstOrDefaultAsync(g => g.Name == name);
+            if (existingGroup != null)
+            {
+                _logger.LogWarning("Attempted to create group with duplicate name: {GroupName}", name);
+                throw new InvalidOperationException($"Group with name '{name}' already exists");
+            }
+
+            // Create entity first
+            var entity = new Data.Models.Entity
+            {
+                EntityType = "Group",
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
+
+            _dbContext.Entities.Add(entity);
+            await _dbContext.SaveChangesAsync();
+
+            // Create group
+            var group = new Data.Models.Group
+            {
+                Name = name,
+                Description = description,
+                EntityId = entity.Id,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
+
+            _dbContext.Groups.Add(group);
+            await _dbContext.SaveChangesAsync();
+
+            // Log audit
+            await LogAuditAsync("CreateGroup", "Group", group.Id, createdBy, 
+                $"Created group '{name}'");
+
+            _logger.LogInformation("Created group {GroupId} with name {GroupName} by {CreatedBy}", 
+                group.Id, name, createdBy);
+
+            return ConvertToDomainGroup(group);
+        }
+        catch (ArgumentException ex)
         {
-            Name = name,
-            Description = description,
-            EntityId = entity.Id,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
-        };
-
-        _dbContext.Groups.Add(group);
-        await _dbContext.SaveChangesAsync();
-
-        // Log audit
-        await LogAuditAsync("CreateGroup", "Group", group.Id, createdBy, 
-            $"Created group '{name}'");
-
-        _logger.LogInformation("Created group {GroupId} with name {GroupName} by {CreatedBy}", 
-            group.Id, name, createdBy);
-
-        return ConvertToDomainGroup(group);
+            _logger.LogError(ex, "Invalid argument provided for group creation: {GroupName}", name);
+            throw;
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogError(ex, "Invalid operation during group creation: {GroupName}", name);
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error creating group {GroupName}", name);
+            throw new InvalidOperationException($"Failed to create group '{name}': {ex.Message}", ex);
+        }
     }
 
     public async Task<Domain.Group> UpdateGroupAsync(int groupId, string name, string description, string updatedBy)
     {
-        var group = await _dbContext.Groups.FindAsync(groupId);
-        if (group == null)
+        try
         {
-            throw new InvalidOperationException($"Group {groupId} not found");
+            if (groupId <= 0)
+            {
+                throw new ArgumentException("Group ID must be a positive integer", nameof(groupId));
+            }
+
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                throw new ArgumentException("Group name cannot be null or empty", nameof(name));
+            }
+
+            if (string.IsNullOrWhiteSpace(updatedBy))
+            {
+                throw new ArgumentException("UpdatedBy cannot be null or empty", nameof(updatedBy));
+            }
+
+            var group = await _dbContext.Groups.FindAsync(groupId);
+            if (group == null)
+            {
+                _logger.LogWarning("Attempted to update non-existent group {GroupId}", groupId);
+                throw new InvalidOperationException($"Group {groupId} not found");
+            }
+
+            var oldName = group.Name;
+            group.Name = name;
+            group.Description = description;
+            group.UpdatedAt = DateTime.UtcNow;
+
+            _dbContext.Groups.Update(group);
+            await _dbContext.SaveChangesAsync();
+
+            // Log audit
+            await LogAuditAsync("UpdateGroup", "Group", group.Id, updatedBy,
+                $"Updated group from '{oldName}' to '{name}'");
+
+            _logger.LogInformation("Updated group {GroupId} with name {GroupName} by {UpdatedBy}",
+                groupId, name, updatedBy);
+
+            return ConvertToDomainGroup(group);
         }
-
-        var oldName = group.Name;
-        group.Name = name;
-        group.Description = description;
-        group.UpdatedAt = DateTime.UtcNow;
-
-        _dbContext.Groups.Update(group);
-        await _dbContext.SaveChangesAsync();
-
-        // Log audit
-        await LogAuditAsync("UpdateGroup", "Group", group.Id, updatedBy,
-            $"Updated group from '{oldName}' to '{name}'");
-
-        _logger.LogInformation("Updated group {GroupId} with name {GroupName} by {UpdatedBy}",
-            groupId, name, updatedBy);
-
-        return ConvertToDomainGroup(group);
+        catch (ArgumentException ex)
+        {
+            _logger.LogError(ex, "Invalid argument provided for group update: {GroupId}", groupId);
+            throw;
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogError(ex, "Invalid operation during group update: {GroupId}", groupId);
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error updating group {GroupId}", groupId);
+            throw new InvalidOperationException($"Failed to update group {groupId}: {ex.Message}", ex);
+        }
     }
 
     public async Task DeleteGroupAsync(int groupId, string deletedBy)
     {
-        var group = await _dbContext.Groups
-            .Include(g => g.Entity)
-            .FirstOrDefaultAsync(g => g.Id == groupId);
-
-        if (group == null)
+        try
         {
-            throw new InvalidOperationException($"Group {groupId} not found");
+            if (groupId <= 0)
+            {
+                throw new ArgumentException("Group ID must be a positive integer", nameof(groupId));
+            }
+
+            if (string.IsNullOrWhiteSpace(deletedBy))
+            {
+                throw new ArgumentException("DeletedBy cannot be null or empty", nameof(deletedBy));
+            }
+
+            var group = await _dbContext.Groups
+                .Include(g => g.Entity)
+                .FirstOrDefaultAsync(g => g.Id == groupId);
+
+            if (group == null)
+            {
+                _logger.LogWarning("Attempted to delete non-existent group {GroupId}", groupId);
+                throw new InvalidOperationException($"Group {groupId} not found");
+            }
+
+            // Check for active dependencies
+            var hasActiveDependencies = await HasActiveDependenciesAsync(groupId);
+            if (hasActiveDependencies)
+            {
+                _logger.LogWarning("Cannot delete group {GroupId} due to active dependencies", groupId);
+                throw new InvalidOperationException($"Cannot delete group {groupId} as it has active dependencies (child groups, users, or role assignments). Remove dependencies first.");
+            }
+
+            var groupName = group.Name;
+
+            // Delete group (cascading will handle relationships)
+            _dbContext.Groups.Remove(group);
+            if (group.Entity != null)
+            {
+                _dbContext.Entities.Remove(group.Entity);
+            }
+            await _dbContext.SaveChangesAsync();
+
+            // Log audit
+            await LogAuditAsync("DeleteGroup", "Group", groupId, deletedBy,
+                $"Deleted group '{groupName}'");
+
+            _logger.LogInformation("Deleted group {GroupId} by {DeletedBy}", groupId, deletedBy);
         }
-
-        // Check if group has children
-        var hasChildren = await _dbContext.GroupHierarchies
-            .AnyAsync(gh => gh.ParentGroupId == groupId);
-
-        if (hasChildren)
+        catch (ArgumentException ex)
         {
-            throw new InvalidOperationException($"Cannot delete group {groupId} as it has child groups");
+            _logger.LogError(ex, "Invalid argument provided for group deletion: {GroupId}", groupId);
+            throw;
         }
-
-        var groupName = group.Name;
-
-        // Delete group (cascading will handle relationships)
-        _dbContext.Groups.Remove(group);
-        if (group.Entity != null)
+        catch (InvalidOperationException ex)
         {
-            _dbContext.Entities.Remove(group.Entity);
+            _logger.LogError(ex, "Invalid operation during group deletion: {GroupId}", groupId);
+            throw;
         }
-        await _dbContext.SaveChangesAsync();
-
-        // Log audit
-        await LogAuditAsync("DeleteGroup", "Group", groupId, deletedBy,
-            $"Deleted group '{groupName}'");
-
-        _logger.LogInformation("Deleted group {GroupId} by {DeletedBy}", groupId, deletedBy);
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error deleting group {GroupId}", groupId);
+            throw new InvalidOperationException($"Failed to delete group {groupId}: {ex.Message}", ex);
+        }
     }
 
     #endregion
@@ -660,6 +759,32 @@ public class GroupService : IGroupService
 
         _dbContext.AuditLogs.Add(auditLog);
         await _dbContext.SaveChangesAsync();
+    }
+    
+    private async Task<bool> HasActiveDependenciesAsync(int groupId)
+    {
+        try
+        {
+            // Check if group has child groups
+            var hasChildGroups = await _dbContext.GroupHierarchies
+                .AnyAsync(gh => gh.ParentGroupId == groupId);
+            
+            // Check if group has users
+            var hasUsers = await _dbContext.UserGroups
+                .AnyAsync(ug => ug.GroupId == groupId);
+            
+            // Check if group has role assignments
+            var hasRoles = await _dbContext.GroupRoles
+                .AnyAsync(gr => gr.GroupId == groupId);
+            
+            return hasChildGroups || hasUsers || hasRoles;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error checking dependencies for group {GroupId}", groupId);
+            // Return true to be safe and prevent deletion if we can't verify
+            return true;
+        }
     }
 
     #endregion

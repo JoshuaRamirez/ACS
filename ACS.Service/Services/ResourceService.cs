@@ -46,78 +46,196 @@ public class ResourceService : IResourceService
 
     public async Task<Domain.Resource> CreateResourceAsync(string uri, string description, string resourceType, string createdBy)
     {
-        var resource = new Data.Models.Resource
+        try
         {
-            Uri = uri,
-            Description = description,
-            ResourceType = resourceType,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
-            Version = "1.0.0",
-            IsActive = true
-        };
+            if (string.IsNullOrWhiteSpace(uri))
+            {
+                throw new ArgumentException("Resource URI cannot be null or empty", nameof(uri));
+            }
 
-        _dbContext.Resources.Add(resource);
-        await _dbContext.SaveChangesAsync();
+            if (string.IsNullOrWhiteSpace(resourceType))
+            {
+                throw new ArgumentException("Resource type cannot be null or empty", nameof(resourceType));
+            }
 
-        await LogAuditAsync("CreateResource", "Resource", resource.Id, createdBy,
-            $"Created resource '{uri}'");
+            if (string.IsNullOrWhiteSpace(createdBy))
+            {
+                throw new ArgumentException("CreatedBy cannot be null or empty", nameof(createdBy));
+            }
 
-        _logger.LogInformation("Created resource {ResourceId} with URI {Uri} by {CreatedBy}",
-            resource.Id, uri, createdBy);
+            // Check if resource URI already exists
+            var existingResource = await _dbContext.Resources
+                .FirstOrDefaultAsync(r => r.Uri == uri);
+            if (existingResource != null)
+            {
+                _logger.LogWarning("Attempted to create resource with duplicate URI: {Uri}", uri);
+                throw new InvalidOperationException($"Resource with URI '{uri}' already exists");
+            }
 
-        return ConvertToDomainResource(resource);
+            var resource = new Data.Models.Resource
+            {
+                Uri = uri,
+                Description = description,
+                ResourceType = resourceType,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+                Version = "1.0.0",
+                IsActive = true
+            };
+
+            _dbContext.Resources.Add(resource);
+            await _dbContext.SaveChangesAsync();
+
+            await LogAuditAsync("CreateResource", "Resource", resource.Id, createdBy,
+                $"Created resource '{uri}'");
+
+            _logger.LogInformation("Created resource {ResourceId} with URI {Uri} by {CreatedBy}",
+                resource.Id, uri, createdBy);
+
+            return ConvertToDomainResource(resource);
+        }
+        catch (ArgumentException ex)
+        {
+            _logger.LogError(ex, "Invalid argument provided for resource creation: {Uri}", uri);
+            throw;
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogError(ex, "Invalid operation during resource creation: {Uri}", uri);
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error creating resource {Uri}", uri);
+            throw new InvalidOperationException($"Failed to create resource '{uri}': {ex.Message}", ex);
+        }
     }
 
     public async Task<Domain.Resource> UpdateResourceAsync(int resourceId, string uri, string description, string resourceType, string updatedBy)
     {
-        var resource = await _dbContext.Resources.FindAsync(resourceId);
-        if (resource == null)
+        try
         {
-            throw new InvalidOperationException($"Resource {resourceId} not found");
+            if (resourceId <= 0)
+            {
+                throw new ArgumentException("Resource ID must be a positive integer", nameof(resourceId));
+            }
+
+            if (string.IsNullOrWhiteSpace(uri))
+            {
+                throw new ArgumentException("Resource URI cannot be null or empty", nameof(uri));
+            }
+
+            if (string.IsNullOrWhiteSpace(resourceType))
+            {
+                throw new ArgumentException("Resource type cannot be null or empty", nameof(resourceType));
+            }
+
+            if (string.IsNullOrWhiteSpace(updatedBy))
+            {
+                throw new ArgumentException("UpdatedBy cannot be null or empty", nameof(updatedBy));
+            }
+
+            var resource = await _dbContext.Resources.FindAsync(resourceId);
+            if (resource == null)
+            {
+                _logger.LogWarning("Attempted to update non-existent resource {ResourceId}", resourceId);
+                throw new InvalidOperationException($"Resource {resourceId} not found");
+            }
+
+            var oldUri = resource.Uri;
+            resource.Uri = uri;
+            resource.Description = description;
+            resource.ResourceType = resourceType;
+            resource.UpdatedAt = DateTime.UtcNow;
+
+            _dbContext.Resources.Update(resource);
+            await _dbContext.SaveChangesAsync();
+
+            await LogAuditAsync("UpdateResource", "Resource", resource.Id, updatedBy,
+                $"Updated resource from '{oldUri}' to '{uri}'");
+
+            _logger.LogInformation("Updated resource {ResourceId} with URI {Uri} by {UpdatedBy}",
+                resourceId, uri, updatedBy);
+
+            return ConvertToDomainResource(resource);
         }
-
-        var oldUri = resource.Uri;
-        resource.Uri = uri;
-        resource.Description = description;
-        resource.ResourceType = resourceType;
-        resource.UpdatedAt = DateTime.UtcNow;
-
-        _dbContext.Resources.Update(resource);
-        await _dbContext.SaveChangesAsync();
-
-        await LogAuditAsync("UpdateResource", "Resource", resource.Id, updatedBy,
-            $"Updated resource from '{oldUri}' to '{uri}'");
-
-        _logger.LogInformation("Updated resource {ResourceId} with URI {Uri} by {UpdatedBy}",
-            resourceId, uri, updatedBy);
-
-        return ConvertToDomainResource(resource);
+        catch (ArgumentException ex)
+        {
+            _logger.LogError(ex, "Invalid argument provided for resource update: {ResourceId}", resourceId);
+            throw;
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogError(ex, "Invalid operation during resource update: {ResourceId}", resourceId);
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error updating resource {ResourceId}", resourceId);
+            throw new InvalidOperationException($"Failed to update resource {resourceId}: {ex.Message}", ex);
+        }
     }
 
     public async Task DeleteResourceAsync(int resourceId, string deletedBy)
     {
-        var resource = await _dbContext.Resources.FindAsync(resourceId);
-        if (resource == null)
+        try
         {
-            throw new InvalidOperationException($"Resource {resourceId} not found");
+            if (resourceId <= 0)
+            {
+                throw new ArgumentException("Resource ID must be a positive integer", nameof(resourceId));
+            }
+
+            if (string.IsNullOrWhiteSpace(deletedBy))
+            {
+                throw new ArgumentException("DeletedBy cannot be null or empty", nameof(deletedBy));
+            }
+
+            var resource = await _dbContext.Resources.FindAsync(resourceId);
+            if (resource == null)
+            {
+                _logger.LogWarning("Attempted to delete non-existent resource {ResourceId}", resourceId);
+                throw new InvalidOperationException($"Resource {resourceId} not found");
+            }
+
+            var uri = resource.Uri;
+
+            // Check for active dependencies
+            var hasActiveDependencies = await HasActiveDependenciesAsync(resourceId);
+            if (hasActiveDependencies)
+            {
+                _logger.LogWarning("Cannot delete resource {ResourceId} due to active URI access permissions", resourceId);
+                throw new InvalidOperationException($"Cannot delete resource {resourceId} as it has active URI access permissions. Remove permissions first.");
+            }
+
+            // Delete all permissions associated with this resource
+            var uriAccesses = await _dbContext.UriAccesses
+                .Where(ua => ua.ResourceId == resourceId)
+                .ToListAsync();
+
+            _dbContext.UriAccesses.RemoveRange(uriAccesses);
+            _dbContext.Resources.Remove(resource);
+            await _dbContext.SaveChangesAsync();
+
+            await LogAuditAsync("DeleteResource", "Resource", resourceId, deletedBy,
+                $"Deleted resource '{uri}'");
+
+            _logger.LogInformation("Deleted resource {ResourceId} by {DeletedBy}", resourceId, deletedBy);
         }
-
-        var uri = resource.Uri;
-
-        // Delete all permissions associated with this resource
-        var uriAccesses = await _dbContext.UriAccesses
-            .Where(ua => ua.ResourceId == resourceId)
-            .ToListAsync();
-
-        _dbContext.UriAccesses.RemoveRange(uriAccesses);
-        _dbContext.Resources.Remove(resource);
-        await _dbContext.SaveChangesAsync();
-
-        await LogAuditAsync("DeleteResource", "Resource", resourceId, deletedBy,
-            $"Deleted resource '{uri}'");
-
-        _logger.LogInformation("Deleted resource {ResourceId} by {DeletedBy}", resourceId, deletedBy);
+        catch (ArgumentException ex)
+        {
+            _logger.LogError(ex, "Invalid argument provided for resource deletion: {ResourceId}", resourceId);
+            throw;
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogError(ex, "Invalid operation during resource deletion: {ResourceId}", resourceId);
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error deleting resource {ResourceId}", resourceId);
+            throw new InvalidOperationException($"Failed to delete resource {resourceId}: {ex.Message}", ex);
+        }
     }
 
     #endregion
@@ -1185,6 +1303,24 @@ public class ResourceService : IResourceService
 
         _dbContext.AuditLogs.Add(auditLog);
         await _dbContext.SaveChangesAsync();
+    }
+    
+    private async Task<bool> HasActiveDependenciesAsync(int resourceId)
+    {
+        try
+        {
+            // Check if resource has URI access permissions
+            var hasUriAccesses = await _dbContext.UriAccesses
+                .AnyAsync(ua => ua.ResourceId == resourceId);
+            
+            return hasUriAccesses;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error checking dependencies for resource {ResourceId}", resourceId);
+            // Return true to be safe and prevent deletion if we can't verify
+            return true;
+        }
     }
 
     #endregion

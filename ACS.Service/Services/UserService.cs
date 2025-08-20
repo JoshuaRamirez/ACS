@@ -82,42 +82,124 @@ public class UserService : IUserService
 
     public async Task<Domain.User> UpdateAsync(Domain.User user)
     {
-        var dataUser = await _dbContext.Users.FindAsync(user.Id);
-        if (dataUser == null)
+        try
         {
-            throw new InvalidOperationException($"User {user.Id} not found");
+            if (user == null)
+            {
+                throw new ArgumentNullException(nameof(user), "User cannot be null");
+            }
+            
+            if (string.IsNullOrWhiteSpace(user.Name))
+            {
+                throw new ArgumentException("User name cannot be null or empty", nameof(user));
+            }
+
+            var dataUser = await _dbContext.Users.FindAsync(user.Id);
+            if (dataUser == null)
+            {
+                _logger.LogWarning("Attempted to update non-existent user {UserId}", user.Id);
+                throw new InvalidOperationException($"User {user.Id} not found");
+            }
+
+            dataUser.Name = user.Name;
+            dataUser.UpdatedAt = DateTime.UtcNow;
+            _dbContext.Users.Update(dataUser);
+            
+            await _dbContext.SaveChangesAsync();
+
+            _logger.LogInformation("Successfully updated user {UserId} with name {UserName}", user.Id, user.Name);
+            return user;
         }
-
-        dataUser.Name = user.Name;
-        dataUser.UpdatedAt = DateTime.UtcNow;
-        _dbContext.Users.Update(dataUser);
-        await _dbContext.SaveChangesAsync();
-
-        _logger.LogInformation("Updated user {UserId} with name {UserName}", user.Id, user.Name);
-
-        return user;
+        catch (ArgumentException ex)
+        {
+            _logger.LogError(ex, "Invalid argument provided for user update: {UserId}", user?.Id);
+            throw;
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogError(ex, "Invalid operation during user update: {UserId}", user?.Id);
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error updating user {UserId}", user?.Id);
+            throw new InvalidOperationException($"Failed to update user {user?.Id}: {ex.Message}", ex);
+        }
     }
 
     public async Task DeleteAsync(int id)
     {
-        var dataUser = await _dbContext.Users
-            .Include(u => u.Entity)
-            .FirstOrDefaultAsync(u => u.Id == id);
-        
-        if (dataUser == null)
+        try
         {
-            throw new InvalidOperationException($"User {id} not found");
-        }
+            if (id <= 0)
+            {
+                throw new ArgumentException("User ID must be a positive integer", nameof(id));
+            }
 
-        // Cascading delete will handle relationships due to foreign key constraints
-        _dbContext.Users.Remove(dataUser);
-        if (dataUser.Entity != null)
+            var dataUser = await _dbContext.Users
+                .Include(u => u.Entity)
+                .FirstOrDefaultAsync(u => u.Id == id);
+            
+            if (dataUser == null)
+            {
+                _logger.LogWarning("Attempted to delete non-existent user {UserId}", id);
+                throw new InvalidOperationException($"User {id} not found");
+            }
+
+            // Check for dependencies before deletion
+            var hasActiveRelationships = await HasActiveDependenciesAsync(id);
+            if (hasActiveRelationships)
+            {
+                _logger.LogWarning("Cannot delete user {UserId} due to active relationships", id);
+                throw new InvalidOperationException($"Cannot delete user {id} with active relationships. Remove user from groups and roles first.");
+            }
+
+            // Cascading delete will handle relationships due to foreign key constraints
+            _dbContext.Users.Remove(dataUser);
+            if (dataUser.Entity != null)
+            {
+                _dbContext.Entities.Remove(dataUser.Entity);
+            }
+            
+            await _dbContext.SaveChangesAsync();
+
+            _logger.LogInformation("Successfully deleted user {UserId}", id);
+        }
+        catch (ArgumentException ex)
         {
-            _dbContext.Entities.Remove(dataUser.Entity);
+            _logger.LogError(ex, "Invalid argument provided for user deletion: {UserId}", id);
+            throw;
         }
-        await _dbContext.SaveChangesAsync();
-
-        _logger.LogInformation("Deleted user {UserId}", id);
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogError(ex, "Invalid operation during user deletion: {UserId}", id);
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error deleting user {UserId}", id);
+            throw new InvalidOperationException($"Failed to delete user {id}: {ex.Message}", ex);
+        }
+    }
+    
+    private async Task<bool> HasActiveDependenciesAsync(int userId)
+    {
+        try
+        {
+            // Check for user-group relationships
+            var hasGroups = await _dbContext.UserGroups.AnyAsync(ug => ug.UserId == userId);
+            
+            // Check for user-role relationships  
+            var hasRoles = await _dbContext.UserRoles.AnyAsync(ur => ur.UserId == userId);
+            
+            return hasGroups || hasRoles;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error checking dependencies for user {UserId}", userId);
+            // Return true to be safe and prevent deletion if we can't verify
+            return true;
+        }
     }
 
     // Legacy methods for backward compatibility - these should be deprecated
