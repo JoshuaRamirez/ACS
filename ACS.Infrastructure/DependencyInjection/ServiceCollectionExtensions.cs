@@ -199,6 +199,9 @@ public static class ServiceCollectionExtensions
         // Register database backup service
         services.AddScoped<IDatabaseBackupService, DatabaseBackupService>();
         
+        // Register migration validation service
+        services.AddScoped<IMigrationValidationService, MigrationValidationService>();
+        
         return services;
     }
 
