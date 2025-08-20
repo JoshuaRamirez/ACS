@@ -6,6 +6,7 @@ using ACS.Infrastructure.Monitoring;
 using ACS.Infrastructure.Optimization;
 using ACS.Infrastructure.RateLimiting;
 using ACS.Infrastructure.Security.KeyVault;
+using ACS.Infrastructure.Telemetry;
 using static ACS.Infrastructure.DependencyInjection.ServiceCollectionExtensions;
 using ACS.Service.Compliance;
 using ACS.Service.Data;
@@ -52,6 +53,9 @@ builder.Host.ConfigureKeyVault((context, options) =>
 // Configure all services using centralized registration
 var logger = LoggerFactory.Create(builder => builder.AddConsole()).CreateLogger<Program>();
 builder.Services.ConfigureServices(builder.Configuration, logger, "WebApi");
+
+// Configure comprehensive OpenTelemetry for distributed tracing, metrics, and logging
+builder.Services.ConfigureOpenTelemetryForWebApi(builder.Configuration, builder.Environment);
 
 // Add comprehensive health checks
 builder.Services.AddHealthChecks(builder.Configuration);

@@ -4,6 +4,7 @@ using ACS.Infrastructure.DependencyInjection;
 using ACS.Infrastructure.Extensions;
 using ACS.Infrastructure.Security;
 using ACS.Infrastructure.Services;
+using ACS.Infrastructure.Telemetry;
 using ACS.Service.Data;
 using ACS.Service.Infrastructure;
 using ACS.Service.Services;
@@ -66,6 +67,9 @@ public class Program
         // Configure all services using centralized registration
         var logger = builder.Services.BuildServiceProvider().GetRequiredService<ILogger<Program>>();
         builder.Services.ConfigureServices(builder.Configuration, logger, "VerticalHost");
+        
+        // Configure comprehensive OpenTelemetry for distributed tracing, metrics, and logging
+        builder.Services.ConfigureOpenTelemetryForVerticalHost(builder.Configuration, builder.Environment);
         
         // Add VerticalHost-specific services
         builder.Services.AddHostedService<TenantAccessControlHostedService>();

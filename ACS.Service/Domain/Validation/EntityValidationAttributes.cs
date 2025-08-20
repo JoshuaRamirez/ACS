@@ -301,36 +301,3 @@ public class ValidEntityRelationshipAttribute : DomainValidationAttribute
     }
 }
 
-/// <summary>
-/// Validates that entity invariants are maintained during operations
-/// </summary>
-[AttributeUsage(AttributeTargets.Method)]
-public class MaintainsInvariantsAttribute : Attribute
-{
-    public string[] InvariantIds { get; }
-
-    public MaintainsInvariantsAttribute(params string[] invariantIds)
-    {
-        InvariantIds = invariantIds ?? Array.Empty<string>();
-    }
-}
-
-/// <summary>
-/// Custom exception for domain invariant violations
-/// </summary>
-public class DomainInvariantViolationException : Exception
-{
-    public string InvariantId { get; }
-
-    public DomainInvariantViolationException(string invariantId, string message) 
-        : base(message)
-    {
-        InvariantId = invariantId;
-    }
-
-    public DomainInvariantViolationException(string invariantId, string message, Exception innerException) 
-        : base(message, innerException)
-    {
-        InvariantId = invariantId;
-    }
-}

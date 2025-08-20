@@ -15,6 +15,7 @@ public class PermissionEvaluationService : IPermissionEvaluationService
     private readonly ILogger<PermissionEvaluationService> _logger;
     private readonly IMemoryCache _cache;
     private readonly IAuditService _auditService;
+    private readonly ActivitySource _activitySource = new("ACS.PermissionEvaluation");
     
     // In-memory stores for advanced features
     private readonly Dictionary<int, List<ConditionalPermission>> _conditionalPermissions = new();
@@ -54,6 +55,11 @@ public class PermissionEvaluationService : IPermissionEvaluationService
 
     public async Task<bool> HasPermissionAsync(int entityId, string uri, Domain.HttpVerb httpVerb)
     {
+        using var activity = _activitySource.StartActivity("permission.evaluate");
+        activity?.SetTag("permission.entity_id", entityId);
+        activity?.SetTag("permission.uri", uri);
+        activity?.SetTag("permission.verb", httpVerb.ToString());
+        
         var stopwatch = Stopwatch.StartNew();
         
         try
@@ -66,12 +72,16 @@ public class PermissionEvaluationService : IPermissionEvaluationService
             if (_cache.TryGetValue<bool>(cacheKey, out var cachedResult))
             {
                 _cacheStats.HitCount++;
+                activity?.SetTag("permission.cache_hit", true);
+                activity?.SetTag("permission.result", cachedResult);
+                
                 _logger.LogDebug("Permission check cache HIT for Entity:{EntityId}, URI:{Uri}, Result:{Result} in {ElapsedMs}ms", 
                     entityId, uri, cachedResult, stopwatch.ElapsedMilliseconds);
                 return cachedResult;
             }
             
             _cacheStats.MissCount++;
+            activity?.SetTag("permission.cache_hit", false);
             _logger.LogDebug("Permission check cache MISS for Entity:{EntityId}, URI:{Uri}", entityId, uri);
 
             var result = await EvaluatePermissionAsync(entityId, uri, httpVerb);
@@ -79,12 +89,16 @@ public class PermissionEvaluationService : IPermissionEvaluationService
             // Cache the result
             _cache.Set(cacheKey, result.IsAllowed, TimeSpan.FromMinutes(5));
             
+            activity?.SetTag("permission.result", result.IsAllowed);
+            activity?.SetTag("permission.evaluation_time_ms", stopwatch.ElapsedMilliseconds);
+            
             _logger.LogInformation("Permission evaluation completed for Entity:{EntityId}, URI:{Uri}, Verb:{HttpVerb}, Result:{Result} in {ElapsedMs}ms", 
                 entityId, uri, httpVerb, result.IsAllowed, stopwatch.ElapsedMilliseconds);
 
             // Log security-relevant denials
             if (!result.IsAllowed)
             {
+                activity?.SetTag("permission.denial_reason", result.DenialReason ?? "Insufficient permissions");
                 _logger.LogWarning("PERMISSION DENIED: Entity:{EntityId} attempted access to URI:{Uri} with verb:{HttpVerb}. Reason:{Reason}", 
                     entityId, uri, httpVerb, result.DenialReason ?? "Insufficient permissions");
             }
@@ -93,6 +107,10 @@ public class PermissionEvaluationService : IPermissionEvaluationService
         }
         catch (Exception ex)
         {
+            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+            activity?.SetTag("error.type", ex.GetType().Name);
+            activity?.SetTag("error.message", ex.Message);
+            
             _logger.LogError(ex, "Error evaluating permission for Entity:{EntityId}, URI:{Uri}, Verb:{HttpVerb} in {ElapsedMs}ms", 
                 entityId, uri, httpVerb, stopwatch.ElapsedMilliseconds);
             // Fail-safe: deny access on error
