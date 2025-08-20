@@ -1,5 +1,6 @@
 using ACS.Infrastructure;
 using ACS.Infrastructure.Authentication;
+using ACS.Infrastructure.DependencyInjection;
 using ACS.Infrastructure.Extensions;
 using ACS.Infrastructure.Security;
 using ACS.Infrastructure.Services;
@@ -59,92 +60,24 @@ public class Program
             });
         });
 
-        // Single-tenant service infrastructure
-        builder.Services.AddSingleton<TenantConfiguration>(provider => 
-            new TenantConfiguration { TenantId = tenantId });
-
-        // Domain services
-        builder.Services.AddScoped<InMemoryEntityGraph>();
-        builder.Services.AddSingleton<TenantDatabasePersistenceService>();
-        builder.Services.AddSingleton<EventPersistenceService>();
-        builder.Services.AddSingleton<DeadLetterQueueService>();
-        builder.Services.AddSingleton<ErrorRecoveryService>();
-        builder.Services.AddSingleton<HealthMonitoringService>();
+        // Set tenant ID in configuration for service registration
+        builder.Configuration["TenantId"] = tenantId;
         
-        // Caching services
-        builder.Services.AddMemoryCache();
-        builder.Services.AddSingleton<ACS.Service.Caching.IEntityCache, ACS.Service.Caching.MemoryEntityCache>();
+        // Configure all services using centralized registration
+        var logger = builder.Services.BuildServiceProvider().GetRequiredService<ILogger<Program>>();
+        builder.Services.ConfigureServices(builder.Configuration, logger, "VerticalHost");
         
-        builder.Services.AddSingleton<AccessControlDomainService>();
-        builder.Services.AddSingleton<CommandTranslationService>();
-        
-        // Batch processing service
-        builder.Services.AddSingleton<BatchProcessingService>();
-
-        // Background services
-        builder.Services.AddSingleton<TenantRingBuffer>();
+        // Add VerticalHost-specific services
         builder.Services.AddHostedService<TenantAccessControlHostedService>();
-        builder.Services.AddHostedService<DeadLetterQueueService>();
-        builder.Services.AddHostedService<HealthMonitoringService>();
         
-        // Add performance metrics service
-        builder.Services.AddPerformanceMetrics(builder.Configuration);
-        
-        // Add console dashboard (optional)
-        builder.Services.AddConsoleDashboard(builder.Configuration);
-
-        // Configure OpenTelemetry for distributed tracing
-        builder.Services.ConfigureOpenTelemetry(builder.Configuration);
-
-        // Configure gRPC compression options
-        builder.Services.ConfigureGrpcCompression(builder.Configuration);
-        
-        // Add response compression middleware for gRPC
-        builder.Services.AddResponseCompression(options =>
-        {
-            options.EnableForHttps = true;
-            options.Providers.Add<Microsoft.AspNetCore.ResponseCompression.GzipCompressionProvider>();
-            options.Providers.Add<Microsoft.AspNetCore.ResponseCompression.BrotliCompressionProvider>();
-            
-            // Configure MIME types for gRPC compression
-            options.MimeTypes = new[]
-            {
-                "application/grpc",
-                "application/grpc-web",
-                "application/grpc-web-text"
-            };
-        });
-        
-        // Configure compression provider levels
-        builder.Services.Configure<Microsoft.AspNetCore.ResponseCompression.GzipCompressionProviderOptions>(options =>
-        {
-            options.Level = builder.Configuration.GetValue<System.IO.Compression.CompressionLevel>("Compression:Gzip:Level", System.IO.Compression.CompressionLevel.Optimal);
-        });
-        
-        builder.Services.Configure<Microsoft.AspNetCore.ResponseCompression.BrotliCompressionProviderOptions>(options =>
-        {
-            options.Level = builder.Configuration.GetValue<System.IO.Compression.CompressionLevel>("Compression:Brotli:Level", System.IO.Compression.CompressionLevel.Optimal);
-        });
-        
-        // Add gRPC authentication
-        builder.Services.AddGrpcAuthentication();
-        
-        // Add encryption services for tenant data protection
-        builder.Services.AddEncryptionServices(builder.Configuration);
-        
-        // Add compression metrics interceptor
-        builder.Services.AddSingleton<ACS.Infrastructure.Services.CompressionMetricsInterceptor>();
+        // Add gRPC service with interceptors
         builder.Services.AddGrpc().AddServiceOptions<VerticalGrpcService>(options =>
         {
             options.Interceptors.Add<ACS.Infrastructure.Authentication.GrpcAuthenticationInterceptor>();
             options.Interceptors.Add<ACS.Infrastructure.Services.CompressionMetricsInterceptor>();
         });
 
-        // Add encryption interceptors to Entity Framework
-        builder.Services.AddSingleton<EncryptionInterceptor>();
-        builder.Services.AddSingleton<DecryptionInterceptor>();
-        
-        // Tenant-specific database context with optimized connection pooling and encryption
+        // Override DbContext configuration for tenant-specific connection
         var connectionString = GetTenantConnectionString(tenantId);
         builder.Services.AddDbContextPool<ApplicationDbContext>((serviceProvider, optionsBuilder) =>
         {
@@ -159,7 +92,7 @@ public class Program
         }, 
         poolSize: builder.Configuration.GetValue<int>("Database:DbContextPoolSize", 128));
         
-        // Add health checks for database connection pooling
+        // Add tenant-specific health checks
         builder.Services.AddHealthChecks()
             .AddConnectionPoolHealthCheck(
                 connectionString, 
@@ -168,6 +101,13 @@ public class Program
 
         // Build and configure the application
         var app = builder.Build();
+
+        // Validate service registration
+        using (var scope = app.Services.CreateScope())
+        {
+            var serviceLogger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+            ServiceRegistrationValidator.ValidateServices(scope.ServiceProvider, serviceLogger);
+        }
 
         // Enable response compression middleware
         app.UseResponseCompression();

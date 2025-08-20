@@ -1,8 +1,12 @@
 ﻿using System.Collections.ObjectModel;
+using System.ComponentModel.DataAnnotations;
 using ACS.Service.Delegates.Normalizers;
+using ACS.Service.Domain.Validation;
 
 namespace ACS.Service.Domain;
 
+[GroupMemberLimitsBusinessRule(MaxUsers = 1000, MaxGroups = 100, MaxTotalMembers = 1500)]
+[NoCyclicHierarchy(MaxDepth = 20)]
 public class Group : Entity
 {
     public ReadOnlyCollection<Group> Groups => Children.OfType<Group>().ToList().AsReadOnly();

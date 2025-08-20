@@ -1,0 +1,209 @@
+{
+  "environment": "staging",
+  "version": "latest",
+  "deployment": {
+    "strategy": "RollingUpdate",
+    "maxUnavailable": 1,
+    "maxSurge": 1,
+    "progressDeadlineSeconds": 600,
+    "revisionHistoryLimit": 5
+  },
+  "services": {
+    "webapi": {
+      "replicas": 2,
+      "resources": {
+        "requests": {
+          "cpu": "250m",
+          "memory": "512Mi"
+        },
+        "limits": {
+          "cpu": "1000m",
+          "memory": "2Gi"
+        }
+      },
+      "autoscaling": {
+        "enabled": true,
+        "minReplicas": 2,
+        "maxReplicas": 5,
+        "targetCPUUtilizationPercentage": 70,
+        "targetMemoryUtilizationPercentage": 80
+      },
+      "healthCheck": {
+        "path": "/health",
+        "port": 80,
+        "initialDelaySeconds": 20,
+        "periodSeconds": 10,
+        "timeoutSeconds": 5,
+        "failureThreshold": 3
+      }
+    },
+    "verticalhost": {
+      "replicas": 1,
+      "resources": {
+        "requests": {
+          "cpu": "125m",
+          "memory": "256Mi"
+        },
+        "limits": {
+          "cpu": "500m",
+          "memory": "1Gi"
+        }
+      },
+      "autoscaling": {
+        "enabled": false
+      }
+    },
+    "dashboard": {
+      "replicas": 1,
+      "resources": {
+        "requests": {
+          "cpu": "50m",
+          "memory": "128Mi"
+        },
+        "limits": {
+          "cpu": "250m",
+          "memory": "512Mi"
+        }
+      }
+    }
+  },
+  "database": {
+    "type": "sqlserver",
+    "resources": {
+      "requests": {
+        "cpu": "500m",
+        "memory": "1Gi"
+      },
+      "limits": {
+        "cpu": "2000m",
+        "memory": "4Gi"
+      }
+    },
+    "storage": {
+      "size": "50Gi",
+      "storageClass": "standard-ssd"
+    },
+    "backup": {
+      "enabled": true,
+      "schedule": "0 3 * * *",
+      "retentionDays": 7
+    }
+  },
+  "redis": {
+    "resources": {
+      "requests": {
+        "cpu": "50m",
+        "memory": "256Mi"
+      },
+      "limits": {
+        "cpu": "250m",
+        "memory": "1Gi"
+      }
+    },
+    "storage": {
+      "size": "5Gi",
+      "storageClass": "standard"
+    }
+  },
+  "ingress": {
+    "enabled": true,
+    "className": "nginx",
+    "tls": {
+      "enabled": false
+    },
+    "annotations": {
+      "nginx.ingress.kubernetes.io/ssl-redirect": "false",
+      "nginx.ingress.kubernetes.io/backend-protocol": "HTTP",
+      "nginx.ingress.kubernetes.io/rate-limit": "50",
+      "nginx.ingress.kubernetes.io/rate-limit-window": "1m"
+    }
+  },
+  "monitoring": {
+    "prometheus": {
+      "enabled": true,
+      "scrapeInterval": "60s",
+      "retentionTime": "7d"
+    },
+    "grafana": {
+      "enabled": true,
+      "persistence": {
+        "enabled": false
+      }
+    },
+    "alerts": {
+      "enabled": false
+    }
+  },
+  "security": {
+    "networkPolicies": {
+      "enabled": false
+    },
+    "podSecurityPolicy": {
+      "enabled": false
+    },
+    "secrets": {
+      "management": "kubernetes",
+      "rotation": {
+        "enabled": false
+      }
+    }
+  },
+  "logging": {
+    "level": "Debug",
+    "structured": {
+      "enabled": true,
+      "format": "json"
+    },
+    "destinations": [
+      {
+        "type": "console",
+        "format": "structured"
+      }
+    ]
+  },
+  "backup": {
+    "schedule": "0 2 * * *",
+    "retentionDays": 7,
+    "destinations": [
+      {
+        "type": "local-storage",
+        "path": "/backups"
+      }
+    ]
+  },
+  "notifications": {
+    "slack": {
+      "enabled": true,
+      "webhook": "${SLACK_WEBHOOK_URL}",
+      "channels": {
+        "alerts": "#acs-staging-alerts",
+        "deployments": "#acs-staging"
+      }
+    },
+    "email": {
+      "enabled": false
+    }
+  },
+  "testing": {
+    "smokeTests": {
+      "enabled": true,
+      "endpoints": [
+        "/health",
+        "/health/ready",
+        "/health/live",
+        "/api/users",
+        "/api/groups",
+        "/api/roles"
+      ]
+    },
+    "loadTests": {
+      "enabled": false,
+      "duration": "5m",
+      "virtualUsers": 10
+    },
+    "securityTests": {
+      "enabled": true,
+      "tools": ["zap", "nuclei"]
+    }
+  }
+}

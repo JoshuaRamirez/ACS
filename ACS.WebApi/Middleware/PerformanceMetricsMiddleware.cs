@@ -1,6 +1,6 @@
 using System.Diagnostics;
 using ACS.Infrastructure.Services;
-using ACS.WebApi.Services;
+using ACS.Infrastructure.Services;
 
 namespace ACS.WebApi.Middleware;
 

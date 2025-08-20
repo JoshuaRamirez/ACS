@@ -1,0 +1,43 @@
+{
+  "EntityFramework": {
+    "EnableLazyLoading": false,
+    "DefaultTrackingBehavior": "NoTracking",
+    "EnableRetryOnFailure": true,
+    "EnableSensitiveDataLogging": false,
+    "EnableDetailedErrors": false,
+    "DefaultSplitQueryBehavior": "SplitQuery",
+    "ValidateScopes": false,
+    "ChangeTrackerClearInterval": 100,
+    "PoolSize": 128,
+    "QueryCacheSize": 1024
+  },
+  "Performance": {
+    "DefaultPageSize": 20,
+    "MaxPageSize": 100,
+    "EnableQueryCache": true,
+    "QueryCacheTimeoutMinutes": 5,
+    "EnableN1Detection": true,
+    "SlowQueryThresholdMs": 1000,
+    "EnableQueryOptimization": true,
+    "DefaultIncludeDepth": 3,
+    "EnableAutomaticIncludes": false,
+    "PreferSplitQueries": true
+  },
+  "Database": {
+    "CommandTimeout": 30,
+    "ConnectionTimeout": 15,
+    "PoolSize": 100,
+    "MaxRetryCount": 5,
+    "MaxRetryDelay": "00:00:30",
+    "EnableConnectionPooling": true,
+    "EnableCommandBatching": true,
+    "BatchSize": 100
+  },
+  "Logging": {
+    "LogLevel": {
+      "Microsoft.EntityFrameworkCore.Database.Command": "Warning",
+      "Microsoft.EntityFrameworkCore.Query": "Warning",
+      "Microsoft.EntityFrameworkCore.Update": "Warning"
+    }
+  }
+}

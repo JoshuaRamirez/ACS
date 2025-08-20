@@ -1,11 +1,25 @@
+using System.ComponentModel.DataAnnotations;
+using ACS.Service.Domain.Validation;
+
 namespace ACS.Service.Domain;
 
+[UniqueEntityName(EntityType = typeof(Entity), CaseInsensitive = true)]
+[MaxChildren(100)]
+[AuditTrailBusinessRule(RequiresJustification = true, AuditableActions = new[] { "Create", "Delete", "ModifyPermissions" })]
 public abstract class Entity
 {
     public int Id { get; set; }
+    
+    [Required]
+    [StringLength(255, MinimumLength = 1)]
     public string Name { get; set; } = string.Empty;
+    [ValidEntityRelationship("child", MaxRelationships = 100)]
     public List<Entity> Children { get; set; } = new List<Entity>();
+    
+    [ValidEntityRelationship("parent", MaxRelationships = 10)]
     public List<Entity> Parents { get; set; } = new List<Entity>();
+    
+    [ValidPermissionCombination]
     public List<Permission> Permissions { get; set; } = new List<Permission>();
 
     public void AddPermission(Permission permission)
@@ -24,14 +38,24 @@ public abstract class Entity
         }
     }
 
+    [MaintainsInvariants("INV004", "INV006")]
     protected void AddChild(Entity child)
     {
+        if (child == null)
+            throw new ArgumentNullException(nameof(child));
+        if (child.Id == this.Id && this.Id > 0)
+            throw new DomainInvariantViolationException("INV004", "Entity cannot be its own child");
+            
         Children.Add(child);
         child.Parents.Add(this);
     }
 
+    [MaintainsInvariants("INV006")]
     protected void RemoveChild(Entity child)
     {
+        if (child == null)
+            return;
+            
         Children.Remove(child);
         child.Parents.Remove(this);
     }

@@ -1,5 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using ACS.Service.Data.Models;
+using ACS.Service.Data.Configuration;
 
 namespace ACS.Service.Data
 {
@@ -262,6 +263,9 @@ namespace ACS.Service.Data
                 entity.Property(al => al.ChangeDate).IsRequired();
                 entity.Property(al => al.ChangeDetails).IsRequired().HasMaxLength(4000);
             });
+
+            // Apply index configuration for query performance optimization
+            modelBuilder.ApplyIndexConfiguration();
         }
     }
 }

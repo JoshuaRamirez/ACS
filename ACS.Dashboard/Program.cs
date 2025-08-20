@@ -1,3 +1,4 @@
+using ACS.Infrastructure.DependencyInjection;
 using ACS.Infrastructure.Extensions;
 using ACS.Infrastructure.Services;
 using ACS.Service.Infrastructure;
@@ -53,19 +54,11 @@ public class Program
             });
         });
 
-        // Add tenant configuration (for demo purposes, use a default tenant)
-        services.AddSingleton<TenantConfiguration>(_ => new TenantConfiguration 
-        { 
-            TenantId = "dashboard-monitor" 
-        });
+        // Configure all services using centralized registration
+        var logger = services.BuildServiceProvider().GetRequiredService<ILogger<Program>>();
+        services.ConfigureServices(configuration, logger, "Dashboard");
 
-        // Add performance metrics (simplified for dashboard)
-        services.AddPerformanceMetrics(configuration);
-
-        // Add console dashboard
-        services.AddConsoleDashboard(configuration);
-
-        // Add multi-tenant discovery service (mock for now)
+        // Add dashboard-specific services
         services.AddSingleton<MultiTenantDiscoveryService>();
         services.AddHostedService<MultiTenantDiscoveryService>(provider => 
             provider.GetRequiredService<MultiTenantDiscoveryService>());

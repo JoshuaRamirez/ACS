@@ -1,8 +1,13 @@
 ﻿using System.Collections.ObjectModel;
+using System.ComponentModel.DataAnnotations;
 using ACS.Service.Delegates.Normalizers;
+using ACS.Service.Domain.Validation;
 
 namespace ACS.Service.Domain;
 
+[LeastPrivilegeBusinessRule(
+    ProhibitedCombinations = new[] { "/admin/users,/admin/system", "/finance/payments,/finance/approve" },
+    RequiresJustification = new[] { "/admin/system", "/security/keys", "/config/secrets" })]
 public class Role : Entity
 {
     public ReadOnlyCollection<Group> GroupMemberships => Parents.OfType<Group>().ToList().AsReadOnly();

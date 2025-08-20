@@ -1,0 +1,233 @@
+{
+  "loadTestConfig": {
+    "environments": {
+      "development": {
+        "baseUrl": "https://localhost:7001",
+        "maxVirtualUsers": 20,
+        "testDurationMinutes": 1,
+        "rampUpDurationSeconds": 10,
+        "enableDetailedLogging": true,
+        "useInMemoryDatabase": true
+      },
+      "staging": {
+        "baseUrl": "https://acs-staging.example.com",
+        "maxVirtualUsers": 50,
+        "testDurationMinutes": 3,
+        "rampUpDurationSeconds": 30,
+        "enableDetailedLogging": false,
+        "useInMemoryDatabase": false
+      },
+      "production": {
+        "baseUrl": "https://acs.example.com",
+        "maxVirtualUsers": 100,
+        "testDurationMinutes": 10,
+        "rampUpDurationSeconds": 60,
+        "enableDetailedLogging": false,
+        "useInMemoryDatabase": false
+      }
+    },
+    "scenarios": {
+      "userOperations": {
+        "weight": 40,
+        "operations": [
+          {
+            "name": "GetUsers",
+            "method": "GET",
+            "endpoint": "/api/users?page=1&size=20",
+            "weight": 60,
+            "requiresAuth": true
+          },
+          {
+            "name": "CreateUser",
+            "method": "POST",
+            "endpoint": "/api/users",
+            "weight": 20,
+            "requiresAuth": true,
+            "requiresAdmin": true,
+            "payload": {
+              "name": "LoadTestUser_{id}",
+              "email": "loadtest{id}@example.com",
+              "password": "Password123!"
+            }
+          },
+          {
+            "name": "UpdateUser",
+            "method": "PUT",
+            "endpoint": "/api/users/{id}",
+            "weight": 15,
+            "requiresAuth": true,
+            "requiresAdmin": true,
+            "payload": {
+              "name": "UpdatedUser_{id}",
+              "email": "updated{id}@example.com"
+            }
+          },
+          {
+            "name": "DeleteUser",
+            "method": "DELETE",
+            "endpoint": "/api/users/{id}",
+            "weight": 5,
+            "requiresAuth": true,
+            "requiresAdmin": true
+          }
+        ]
+      },
+      "groupOperations": {
+        "weight": 25,
+        "operations": [
+          {
+            "name": "GetGroups",
+            "method": "GET",
+            "endpoint": "/api/groups",
+            "weight": 70,
+            "requiresAuth": true
+          },
+          {
+            "name": "CreateGroup",
+            "method": "POST",
+            "endpoint": "/api/groups",
+            "weight": 20,
+            "requiresAuth": true,
+            "requiresAdmin": true,
+            "payload": {
+              "name": "LoadTestGroup_{id}",
+              "description": "Load test group {id}"
+            }
+          },
+          {
+            "name": "GetGroupHierarchy",
+            "method": "GET",
+            "endpoint": "/api/groups/{id}/hierarchy",
+            "weight": 10,
+            "requiresAuth": true
+          }
+        ]
+      },
+      "roleOperations": {
+        "weight": 20,
+        "operations": [
+          {
+            "name": "GetRoles",
+            "method": "GET",
+            "endpoint": "/api/roles",
+            "weight": 70,
+            "requiresAuth": true
+          },
+          {
+            "name": "CreateRole",
+            "method": "POST",
+            "endpoint": "/api/roles",
+            "weight": 25,
+            "requiresAuth": true,
+            "requiresAdmin": true,
+            "payload": {
+              "name": "LoadTestRole_{id}",
+              "description": "Load test role {id}"
+            }
+          },
+          {
+            "name": "GetRolePermissions",
+            "method": "GET",
+            "endpoint": "/api/roles/{id}/permissions",
+            "weight": 5,
+            "requiresAuth": true
+          }
+        ]
+      },
+      "searchOperations": {
+        "weight": 10,
+        "searchTerms": ["User", "Group", "Role", "Test", "Admin", "LoadTest"],
+        "operations": [
+          {
+            "name": "SearchUsers",
+            "method": "GET",
+            "endpoint": "/api/users?search={searchTerm}&page=1&size=10",
+            "weight": 50,
+            "requiresAuth": true
+          },
+          {
+            "name": "SearchGroups",
+            "method": "GET",
+            "endpoint": "/api/groups?search={searchTerm}",
+            "weight": 30,
+            "requiresAuth": true
+          },
+          {
+            "name": "SearchRoles",
+            "method": "GET",
+            "endpoint": "/api/roles?search={searchTerm}",
+            "weight": 20,
+            "requiresAuth": true
+          }
+        ]
+      },
+      "adminOperations": {
+        "weight": 5,
+        "operations": [
+          {
+            "name": "GetAuditLogs",
+            "method": "GET",
+            "endpoint": "/api/audit?limit=20",
+            "weight": 40,
+            "requiresAuth": true,
+            "requiresAdmin": true
+          },
+          {
+            "name": "GetSystemHealth",
+            "method": "GET",
+            "endpoint": "/api/health",
+            "weight": 30,
+            "requiresAuth": false
+          },
+          {
+            "name": "GetUserReports",
+            "method": "GET",
+            "endpoint": "/api/reports/user-activity?format=summary",
+            "weight": 20,
+            "requiresAuth": true,
+            "requiresAdmin": true
+          },
+          {
+            "name": "BulkUserOperations",
+            "method": "POST",
+            "endpoint": "/api/bulk/users",
+            "weight": 10,
+            "requiresAuth": true,
+            "requiresAdmin": true,
+            "payload": [
+              {
+                "name": "BulkUser1_{id}",
+                "email": "bulk1{id}@example.com"
+              },
+              {
+                "name": "BulkUser2_{id}",
+                "email": "bulk2{id}@example.com"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "performanceThresholds": {
+      "maxMeanLatencyMs": 1000,
+      "maxP95LatencyMs": 2000,
+      "maxP99LatencyMs": 5000,
+      "minSuccessRate": 0.95,
+      "maxErrorRate": 0.05,
+      "minThroughputRps": 10
+    },
+    "testData": {
+      "userCount": 1000,
+      "groupCount": 100,
+      "roleCount": 50,
+      "adminCredentials": {
+        "email": "admin@test.com",
+        "password": "Admin123!"
+      },
+      "userCredentials": {
+        "email": "user{id}@test.com",
+        "password": "Password123!"
+      }
+    }
+  }
+}

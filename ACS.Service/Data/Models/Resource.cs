@@ -8,6 +8,23 @@ public class Resource
     public int Id { get; set; }
 
     [Required]
-    [MaxLength(255)]
+    [MaxLength(500)]
     public string Uri { get; set; } = string.Empty;
+
+    [MaxLength(1000)]
+    public string? Description { get; set; }
+
+    [MaxLength(100)]
+    public string? ResourceType { get; set; }
+
+    [MaxLength(50)]
+    public string? Version { get; set; }
+
+    public int? ParentResourceId { get; set; }
+
+    public bool IsActive { get; set; } = true;
+
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 }

@@ -1,0 +1,232 @@
+{
+  "environment": "production",
+  "version": "latest",
+  "deployment": {
+    "strategy": "RollingUpdate",
+    "maxUnavailable": 1,
+    "maxSurge": 1,
+    "progressDeadlineSeconds": 600,
+    "revisionHistoryLimit": 10
+  },
+  "services": {
+    "webapi": {
+      "replicas": 3,
+      "resources": {
+        "requests": {
+          "cpu": "500m",
+          "memory": "1Gi"
+        },
+        "limits": {
+          "cpu": "2000m",
+          "memory": "4Gi"
+        }
+      },
+      "autoscaling": {
+        "enabled": true,
+        "minReplicas": 3,
+        "maxReplicas": 10,
+        "targetCPUUtilizationPercentage": 70,
+        "targetMemoryUtilizationPercentage": 80
+      },
+      "healthCheck": {
+        "path": "/health",
+        "port": 80,
+        "initialDelaySeconds": 30,
+        "periodSeconds": 10,
+        "timeoutSeconds": 5,
+        "failureThreshold": 3
+      }
+    },
+    "verticalhost": {
+      "replicas": 2,
+      "resources": {
+        "requests": {
+          "cpu": "250m",
+          "memory": "512Mi"
+        },
+        "limits": {
+          "cpu": "1000m",
+          "memory": "2Gi"
+        }
+      },
+      "autoscaling": {
+        "enabled": true,
+        "minReplicas": 2,
+        "maxReplicas": 6,
+        "targetCPUUtilizationPercentage": 70
+      }
+    },
+    "dashboard": {
+      "replicas": 2,
+      "resources": {
+        "requests": {
+          "cpu": "100m",
+          "memory": "256Mi"
+        },
+        "limits": {
+          "cpu": "500m",
+          "memory": "1Gi"
+        }
+      }
+    }
+  },
+  "database": {
+    "type": "sqlserver",
+    "resources": {
+      "requests": {
+        "cpu": "1000m",
+        "memory": "2Gi"
+      },
+      "limits": {
+        "cpu": "4000m",
+        "memory": "8Gi"
+      }
+    },
+    "storage": {
+      "size": "100Gi",
+      "storageClass": "premium-ssd"
+    },
+    "backup": {
+      "enabled": true,
+      "schedule": "0 2 * * *",
+      "retentionDays": 30
+    }
+  },
+  "redis": {
+    "resources": {
+      "requests": {
+        "cpu": "100m",
+        "memory": "512Mi"
+      },
+      "limits": {
+        "cpu": "500m",
+        "memory": "2Gi"
+      }
+    },
+    "storage": {
+      "size": "10Gi",
+      "storageClass": "standard-ssd"
+    }
+  },
+  "ingress": {
+    "enabled": true,
+    "className": "nginx",
+    "tls": {
+      "enabled": true,
+      "secretName": "acs-tls-cert"
+    },
+    "annotations": {
+      "nginx.ingress.kubernetes.io/ssl-redirect": "true",
+      "nginx.ingress.kubernetes.io/force-ssl-redirect": "true",
+      "nginx.ingress.kubernetes.io/backend-protocol": "HTTP",
+      "nginx.ingress.kubernetes.io/rate-limit": "100",
+      "nginx.ingress.kubernetes.io/rate-limit-window": "1m"
+    }
+  },
+  "monitoring": {
+    "prometheus": {
+      "enabled": true,
+      "scrapeInterval": "30s",
+      "retentionTime": "15d"
+    },
+    "grafana": {
+      "enabled": true,
+      "persistence": {
+        "enabled": true,
+        "size": "10Gi"
+      }
+    },
+    "alerts": {
+      "enabled": true,
+      "rules": [
+        {
+          "name": "HighErrorRate",
+          "expression": "rate(http_requests_total{status=~\"5..\"}[5m]) > 0.1",
+          "for": "5m",
+          "severity": "critical"
+        },
+        {
+          "name": "HighResponseTime",
+          "expression": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 1",
+          "for": "5m",
+          "severity": "warning"
+        },
+        {
+          "name": "HighMemoryUsage",
+          "expression": "container_memory_usage_bytes / container_spec_memory_limit_bytes > 0.9",
+          "for": "10m",
+          "severity": "warning"
+        }
+      ]
+    }
+  },
+  "security": {
+    "networkPolicies": {
+      "enabled": true,
+      "denyAll": false
+    },
+    "podSecurityPolicy": {
+      "enabled": true,
+      "runAsNonRoot": true,
+      "readOnlyRootFilesystem": true
+    },
+    "secrets": {
+      "management": "azure-keyvault",
+      "rotation": {
+        "enabled": true,
+        "intervalDays": 90
+      }
+    }
+  },
+  "logging": {
+    "level": "Information",
+    "structured": {
+      "enabled": true,
+      "format": "json"
+    },
+    "destinations": [
+      {
+        "type": "elasticsearch",
+        "endpoint": "https://elasticsearch.production.internal",
+        "index": "acs-logs-production"
+      },
+      {
+        "type": "azure-monitor",
+        "workspaceId": "${AZURE_LOG_ANALYTICS_WORKSPACE_ID}"
+      }
+    ]
+  },
+  "backup": {
+    "schedule": "0 1 * * *",
+    "retentionDays": 30,
+    "destinations": [
+      {
+        "type": "azure-storage",
+        "account": "${AZURE_STORAGE_ACCOUNT}",
+        "container": "acs-backups-production"
+      }
+    ]
+  },
+  "notifications": {
+    "slack": {
+      "enabled": true,
+      "webhook": "${SLACK_WEBHOOK_URL}",
+      "channels": {
+        "alerts": "#acs-alerts",
+        "deployments": "#acs-deployments"
+      }
+    },
+    "email": {
+      "enabled": true,
+      "smtp": {
+        "server": "${SMTP_SERVER}",
+        "port": 587,
+        "useTLS": true
+      },
+      "recipients": [
+        "devops@company.com",
+        "acs-team@company.com"
+      ]
+    }
+  }
+}

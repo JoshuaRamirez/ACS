@@ -1,8 +1,13 @@
 ﻿using System.Collections.ObjectModel;
+using System.ComponentModel.DataAnnotations;
 using ACS.Service.Delegates.Normalizers;
+using ACS.Service.Domain.Validation;
 
 namespace ACS.Service.Domain;
 
+[MaxUserRolesBusinessRule(5)]
+[SegregationOfDutiesBusinessRule("Administrator")]
+[DataRetentionBusinessRule(RequiresConsentForStorage = true, PersonalDataFields = new[] { "Name", "Email" })]
 public class User : Entity
 {
     public ReadOnlyCollection<Group> GroupMemberships => Parents.OfType<Group>().ToList().AsReadOnly();

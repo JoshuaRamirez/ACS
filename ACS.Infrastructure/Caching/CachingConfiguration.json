@@ -1,0 +1,107 @@
+{
+  "Caching": {
+    "User": {
+      "AbsoluteExpiration": "00:30:00",
+      "SlidingExpiration": "00:10:00",
+      "Priority": "High",
+      "EnableCompression": false,
+      "MaxItems": 1000,
+      "MaxSizeBytes": 5242880
+    },
+    "Group": {
+      "AbsoluteExpiration": "00:30:00",
+      "SlidingExpiration": "00:10:00",
+      "Priority": "Normal",
+      "EnableCompression": false,
+      "MaxItems": 500,
+      "MaxSizeBytes": 2097152
+    },
+    "Role": {
+      "AbsoluteExpiration": "00:30:00",
+      "SlidingExpiration": "00:10:00",
+      "Priority": "Normal",
+      "EnableCompression": false,
+      "MaxItems": 200,
+      "MaxSizeBytes": 1048576
+    },
+    "Permission": {
+      "AbsoluteExpiration": "00:15:00",
+      "SlidingExpiration": "00:05:00",
+      "Priority": "High",
+      "EnableCompression": true,
+      "MaxItems": 2000,
+      "MaxSizeBytes": 10485760
+    },
+    "PermissionEvaluation": {
+      "AbsoluteExpiration": "00:10:00",
+      "SlidingExpiration": "00:03:00",
+      "Priority": "High",
+      "EnableCompression": true,
+      "MaxItems": 5000,
+      "MaxSizeBytes": 20971520
+    },
+    "UserGroups": {
+      "AbsoluteExpiration": "00:20:00",
+      "SlidingExpiration": "00:08:00",
+      "Priority": "Normal",
+      "EnableCompression": false,
+      "MaxItems": 1000,
+      "MaxSizeBytes": 2097152
+    },
+    "UserRoles": {
+      "AbsoluteExpiration": "00:20:00",
+      "SlidingExpiration": "00:08:00",
+      "Priority": "Normal",
+      "EnableCompression": false,
+      "MaxItems": 1000,
+      "MaxSizeBytes": 2097152
+    },
+    "Resource": {
+      "AbsoluteExpiration": "01:00:00",
+      "SlidingExpiration": "00:15:00",
+      "Priority": "Normal",
+      "EnableCompression": false,
+      "MaxItems": 300,
+      "MaxSizeBytes": 1048576
+    },
+    "Session": {
+      "AbsoluteExpiration": "08:00:00",
+      "SlidingExpiration": "00:30:00",
+      "Priority": "Critical",
+      "EnableCompression": false,
+      "MaxItems": 10000,
+      "MaxSizeBytes": 52428800
+    },
+    "Configuration": {
+      "AbsoluteExpiration": "02:00:00",
+      "SlidingExpiration": "00:30:00",
+      "Priority": "High",
+      "EnableCompression": false,
+      "MaxItems": 100,
+      "MaxSizeBytes": 524288
+    },
+    "Metadata": {
+      "AbsoluteExpiration": "04:00:00",
+      "SlidingExpiration": "00:45:00",
+      "Priority": "Low",
+      "EnableCompression": true,
+      "MaxItems": 500,
+      "MaxSizeBytes": 1048576
+    },
+    "AuditLog": {
+      "AbsoluteExpiration": "24:00:00",
+      "SlidingExpiration": "02:00:00",
+      "Priority": "Low",
+      "EnableCompression": true,
+      "MaxItems": 1000,
+      "MaxSizeBytes": 10485760
+    }
+  },
+  "ConnectionStrings": {
+    "Redis": null,
+    "DefaultConnection": "Server=(localdb)\\MSSQLLocalDB;Database=ACS_Development;Trusted_Connection=true;MultipleActiveResultSets=true"
+  },
+  "Redis": {
+    "InstanceName": "ACS"
+  }
+}
