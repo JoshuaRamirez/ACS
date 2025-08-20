@@ -107,6 +107,21 @@ public static class HealthCheckExtensions
             }
         }
 
+        // Add advanced health checks
+        healthChecksBuilder
+            .AddBusinessLogicHealthCheck(
+                name: "business_logic",
+                failureStatus: HealthStatus.Unhealthy,
+                tags: new[] { "business", "domain", "services" })
+            .AddTenantHealthCheck(
+                name: "tenants",
+                failureStatus: HealthStatus.Degraded,
+                tags: new[] { "tenants", "processes", "multi-tenant" })
+            .AddIntegrationHealthCheck(
+                name: "integration",
+                failureStatus: HealthStatus.Degraded,
+                tags: new[] { "integration", "connectivity", "cross-component" });
+
         return services;
     }
 
