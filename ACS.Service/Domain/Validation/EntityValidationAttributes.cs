@@ -113,34 +113,6 @@ public class NoCyclicHierarchyAttribute : DomainValidationAttribute
 }
 
 /// <summary>
-/// Validates temporal permissions have proper time constraints
-/// </summary>
-public class TemporalPermissionBusinessRuleAttribute : DomainValidationAttribute
-{
-    public TimeSpan MaxDuration { get; set; } = TimeSpan.FromDays(365);
-    public TimeSpan MinDuration { get; set; } = TimeSpan.FromMinutes(5);
-
-    public override ValidationResult? ValidateInDomain(object? value, ValidationContext validationContext, IDomainValidationContext domainContext)
-    {
-        if (validationContext.ObjectInstance is not TemporaryPermission tempPerm)
-            return ValidationResult.Success;
-
-        var duration = tempPerm.ExpiresAt - tempPerm.GrantedAt;
-
-        if (duration < MinDuration)
-            return new ValidationResult($"Permission duration must be at least {MinDuration.TotalMinutes} minutes");
-
-        if (duration > MaxDuration)
-            return new ValidationResult($"Permission duration cannot exceed {MaxDuration.TotalDays} days");
-
-        if (tempPerm.ExpiresAt <= DateTime.UtcNow)
-            return new ValidationResult("Permission cannot expire in the past");
-
-        return ValidationResult.Success;
-    }
-}
-
-/// <summary>
 /// Validates maximum number of children for an entity
 /// </summary>
 public class MaxChildrenAttribute : DomainValidationAttribute
@@ -160,34 +132,6 @@ public class MaxChildrenAttribute : DomainValidationAttribute
 
         if (entity.Children.Count >= Maximum)
             return new ValidationResult($"Entity cannot have more than {Maximum} children");
-
-        return ValidationResult.Success;
-    }
-}
-
-/// <summary>
-/// Validates temporal permissions have proper time constraints
-/// </summary>
-public class TemporalPermissionBusinessRuleAttribute : DomainValidationAttribute
-{
-    public TimeSpan MaxDuration { get; set; } = TimeSpan.FromDays(365);
-    public TimeSpan MinDuration { get; set; } = TimeSpan.FromMinutes(5);
-
-    public override ValidationResult? ValidateInDomain(object? value, ValidationContext validationContext, IDomainValidationContext domainContext)
-    {
-        if (validationContext.ObjectInstance is not TemporaryPermission tempPerm)
-            return ValidationResult.Success;
-
-        var duration = tempPerm.ExpiresAt - tempPerm.GrantedAt;
-
-        if (duration < MinDuration)
-            return new ValidationResult($"Permission duration must be at least {MinDuration.TotalMinutes} minutes");
-
-        if (duration > MaxDuration)
-            return new ValidationResult($"Permission duration cannot exceed {MaxDuration.TotalDays} days");
-
-        if (tempPerm.ExpiresAt <= DateTime.UtcNow)
-            return new ValidationResult("Permission cannot expire in the past");
 
         return ValidationResult.Success;
     }
@@ -252,34 +196,6 @@ public class ValidUriPatternAttribute : DomainValidationAttribute
 }
 
 /// <summary>
-/// Validates temporal permissions have proper time constraints
-/// </summary>
-public class TemporalPermissionBusinessRuleAttribute : DomainValidationAttribute
-{
-    public TimeSpan MaxDuration { get; set; } = TimeSpan.FromDays(365);
-    public TimeSpan MinDuration { get; set; } = TimeSpan.FromMinutes(5);
-
-    public override ValidationResult? ValidateInDomain(object? value, ValidationContext validationContext, IDomainValidationContext domainContext)
-    {
-        if (validationContext.ObjectInstance is not TemporaryPermission tempPerm)
-            return ValidationResult.Success;
-
-        var duration = tempPerm.ExpiresAt - tempPerm.GrantedAt;
-
-        if (duration < MinDuration)
-            return new ValidationResult($"Permission duration must be at least {MinDuration.TotalMinutes} minutes");
-
-        if (duration > MaxDuration)
-            return new ValidationResult($"Permission duration cannot exceed {MaxDuration.TotalDays} days");
-
-        if (tempPerm.ExpiresAt <= DateTime.UtcNow)
-            return new ValidationResult("Permission cannot expire in the past");
-
-        return ValidationResult.Success;
-    }
-}
-
-/// <summary>
 /// Validates that permission combinations are valid
 /// </summary>
 public class ValidPermissionCombinationAttribute : DomainValidationAttribute
@@ -297,34 +213,6 @@ public class ValidPermissionCombinationAttribute : DomainValidationAttribute
         // Must have either grant or deny set
         if (!permission.Grant && !permission.Deny)
             return new ValidationResult("Permission must either grant or deny access");
-
-        return ValidationResult.Success;
-    }
-}
-
-/// <summary>
-/// Validates temporal permissions have proper time constraints
-/// </summary>
-public class TemporalPermissionBusinessRuleAttribute : DomainValidationAttribute
-{
-    public TimeSpan MaxDuration { get; set; } = TimeSpan.FromDays(365);
-    public TimeSpan MinDuration { get; set; } = TimeSpan.FromMinutes(5);
-
-    public override ValidationResult? ValidateInDomain(object? value, ValidationContext validationContext, IDomainValidationContext domainContext)
-    {
-        if (validationContext.ObjectInstance is not TemporaryPermission tempPerm)
-            return ValidationResult.Success;
-
-        var duration = tempPerm.ExpiresAt - tempPerm.GrantedAt;
-
-        if (duration < MinDuration)
-            return new ValidationResult($"Permission duration must be at least {MinDuration.TotalMinutes} minutes");
-
-        if (duration > MaxDuration)
-            return new ValidationResult($"Permission duration cannot exceed {MaxDuration.TotalDays} days");
-
-        if (tempPerm.ExpiresAt <= DateTime.UtcNow)
-            return new ValidationResult("Permission cannot expire in the past");
 
         return ValidationResult.Success;
     }
@@ -359,34 +247,6 @@ public class RequiresPermissionAttribute : DomainValidationAttribute
             if (!hasPermission)
                 return new ValidationResult($"Insufficient permissions. Required: {Verb} on {Resource}");
         }
-
-        return ValidationResult.Success;
-    }
-}
-
-/// <summary>
-/// Validates temporal permissions have proper time constraints
-/// </summary>
-public class TemporalPermissionBusinessRuleAttribute : DomainValidationAttribute
-{
-    public TimeSpan MaxDuration { get; set; } = TimeSpan.FromDays(365);
-    public TimeSpan MinDuration { get; set; } = TimeSpan.FromMinutes(5);
-
-    public override ValidationResult? ValidateInDomain(object? value, ValidationContext validationContext, IDomainValidationContext domainContext)
-    {
-        if (validationContext.ObjectInstance is not TemporaryPermission tempPerm)
-            return ValidationResult.Success;
-
-        var duration = tempPerm.ExpiresAt - tempPerm.GrantedAt;
-
-        if (duration < MinDuration)
-            return new ValidationResult($"Permission duration must be at least {MinDuration.TotalMinutes} minutes");
-
-        if (duration > MaxDuration)
-            return new ValidationResult($"Permission duration cannot exceed {MaxDuration.TotalDays} days");
-
-        if (tempPerm.ExpiresAt <= DateTime.UtcNow)
-            return new ValidationResult("Permission cannot expire in the past");
 
         return ValidationResult.Success;
     }
@@ -442,29 +302,35 @@ public class ValidEntityRelationshipAttribute : DomainValidationAttribute
 }
 
 /// <summary>
-/// Validates temporal permissions have proper time constraints
+/// Validates that entity invariants are maintained during operations
 /// </summary>
-public class TemporalPermissionBusinessRuleAttribute : DomainValidationAttribute
+[AttributeUsage(AttributeTargets.Method)]
+public class MaintainsInvariantsAttribute : Attribute
 {
-    public TimeSpan MaxDuration { get; set; } = TimeSpan.FromDays(365);
-    public TimeSpan MinDuration { get; set; } = TimeSpan.FromMinutes(5);
+    public string[] InvariantIds { get; }
 
-    public override ValidationResult? ValidateInDomain(object? value, ValidationContext validationContext, IDomainValidationContext domainContext)
+    public MaintainsInvariantsAttribute(params string[] invariantIds)
     {
-        if (validationContext.ObjectInstance is not TemporaryPermission tempPerm)
-            return ValidationResult.Success;
+        InvariantIds = invariantIds ?? Array.Empty<string>();
+    }
+}
 
-        var duration = tempPerm.ExpiresAt - tempPerm.GrantedAt;
+/// <summary>
+/// Custom exception for domain invariant violations
+/// </summary>
+public class DomainInvariantViolationException : Exception
+{
+    public string InvariantId { get; }
 
-        if (duration < MinDuration)
-            return new ValidationResult($"Permission duration must be at least {MinDuration.TotalMinutes} minutes");
+    public DomainInvariantViolationException(string invariantId, string message) 
+        : base(message)
+    {
+        InvariantId = invariantId;
+    }
 
-        if (duration > MaxDuration)
-            return new ValidationResult($"Permission duration cannot exceed {MaxDuration.TotalDays} days");
-
-        if (tempPerm.ExpiresAt <= DateTime.UtcNow)
-            return new ValidationResult("Permission cannot expire in the past");
-
-        return ValidationResult.Success;
+    public DomainInvariantViolationException(string invariantId, string message, Exception innerException) 
+        : base(message, innerException)
+    {
+        InvariantId = invariantId;
     }
 }
