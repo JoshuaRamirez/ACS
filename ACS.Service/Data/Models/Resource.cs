@@ -27,4 +27,9 @@ public class Resource
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+
+    // Navigation properties
+    public virtual ICollection<UriAccess> UriAccesses { get; set; } = new List<UriAccess>();
+    public virtual Resource? ParentResource { get; set; }
+    public virtual ICollection<Resource> ChildResources { get; set; } = new List<Resource>();
 }

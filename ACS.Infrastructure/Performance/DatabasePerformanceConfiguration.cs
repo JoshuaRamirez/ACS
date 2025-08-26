@@ -72,7 +72,9 @@ public static class DatabasePerformanceConfiguration
         // Configure EF Core performance options
         if (perfSettings.EnableQuerySplitting)
         {
-            optionsBuilder.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery);
+            // TODO: UseQuerySplittingBehavior is not available in this EF Core version
+            // Query splitting should be configured per query or in model configuration
+            // optionsBuilder.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery);
         }
 
         if (!perfSettings.EnableChangeTracking)

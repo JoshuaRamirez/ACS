@@ -399,6 +399,47 @@ public class DataQualityMetrics
 }
 
 /// <summary>
+/// Result of a bulk import operation
+/// </summary>
+public class BulkImportResult
+{
+    /// <summary>
+    /// Import operation status
+    /// </summary>
+    public bool Success { get; set; }
+    
+    /// <summary>
+    /// Number of records processed
+    /// </summary>
+    public int ProcessedCount { get; set; }
+    
+    /// <summary>
+    /// Number of records successfully imported
+    /// </summary>
+    public int SuccessCount { get; set; }
+    
+    /// <summary>
+    /// Number of records that failed to import
+    /// </summary>
+    public int FailureCount { get; set; }
+    
+    /// <summary>
+    /// Import errors encountered
+    /// </summary>
+    public List<string> Errors { get; set; } = new();
+    
+    /// <summary>
+    /// Import warnings
+    /// </summary>
+    public List<string> Warnings { get; set; } = new();
+    
+    /// <summary>
+    /// Duration of the import operation
+    /// </summary>
+    public TimeSpan Duration { get; set; }
+}
+
+/// <summary>
 /// Response model for bulk operation status
 /// </summary>
 public class BulkOperationStatusResponse

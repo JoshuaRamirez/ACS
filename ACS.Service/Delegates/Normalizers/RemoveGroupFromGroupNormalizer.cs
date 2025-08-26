@@ -1,35 +1,42 @@
-using System;
-using System.Linq;
 using ACS.Service.Domain;
 
 namespace ACS.Service.Delegates.Normalizers
 {
-    internal static class RemoveGroupFromGroupNormalizer
+    /// <summary>
+    /// Pure behavioral transformation for removing a child group from a parent group
+    /// LMAX ARCHITECTURE: This is a pure static method that only manipulates in-memory object graph
+    /// NO DATABASE OPERATIONS - NO VALIDATION - NO SIDE EFFECTS
+    /// Domain objects handle business rules, this normalizer only handles behavioral consistency
+    /// </summary>
+    public static class RemoveGroupFromGroupNormalizer
     {
-        // These now reference the same Domain objects as the entity graph
-        public static List<Group> Groups { get; set; } = null!;
-        
-        public static void Execute(int childGroupId, int parentGroupId)
+        /// <summary>
+        /// Removes bidirectional parent-child relationship between groups in memory only
+        /// </summary>
+        /// <param name="childGroup">The child group being removed</param>
+        /// <param name="parentGroup">The parent group to remove from</param>
+        public static void Execute(Group childGroup, Group parentGroup)
         {
-            if (Groups is null)
+            // Remove child from parent's children collection
+            if (parentGroup.Children.Contains(childGroup))
             {
-                throw new InvalidOperationException("Groups collection has not been initialized.");
+                parentGroup.Children.Remove(childGroup);
             }
 
-            var parent = Groups.SingleOrDefault(x => x.Id == parentGroupId)
-                ?? throw new InvalidOperationException($"Parent group {parentGroupId} not found.");
-
-            var child = Groups.SingleOrDefault(x => x.Id == childGroupId)
-                ?? throw new InvalidOperationException($"Child group {childGroupId} not found.");
-
-            if (!parent.Children.Contains(child))
+            // Remove parent from child's parents collection
+            if (childGroup.Parents.Contains(parentGroup))
             {
-                throw new InvalidOperationException($"Child group {childGroupId} is not a member of parent group {parentGroupId}.");
+                childGroup.Parents.Remove(parentGroup);
             }
+        }
 
-            // Update the domain object collections directly
-            parent.Children.Remove(child);
-            child.Parents.Remove(parent);
+        /// <summary>
+        /// Async version for orchestration service compatibility
+        /// </summary>
+        public static Task ExecuteAsync(Group childGroup, Group parentGroup)
+        {
+            Execute(childGroup, parentGroup);
+            return Task.CompletedTask;
         }
     }
 }

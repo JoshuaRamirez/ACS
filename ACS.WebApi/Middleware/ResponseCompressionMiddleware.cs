@@ -62,16 +62,16 @@ public class ResponseCompressionMiddleware
                 
                 // Minify if applicable
                 if (_options.EnableMinification && 
-                    _minificationService.ShouldMinify(context.Response.ContentType, !_options.IsDevelopment))
+                    _minificationService.ShouldMinify(context.Response.ContentType ?? "", !_options.IsDevelopment))
                 {
                     responseContent = await _minificationService.MinifyAsync(
                         responseContent, 
-                        context.Response.ContentType);
+                        context.Response.ContentType ?? string.Empty);
                 }
 
                 // Compress if beneficial
                 var contentBytes = Encoding.UTF8.GetBytes(responseContent);
-                if (_compressionService.ShouldCompress(context.Response.ContentType, contentBytes.Length))
+                if (_compressionService.ShouldCompress(context.Response.ContentType ?? "", contentBytes.Length))
                 {
                     var algorithm = SelectCompressionAlgorithm(acceptEncoding);
                     if (algorithm != CompressionAlgorithm.None)
@@ -193,7 +193,7 @@ public class ResponseCompressionMiddleware
         if (encoding != null)
         {
             context.Response.Headers["Content-Encoding"] = encoding;
-            context.Response.Headers.Add("Vary", "Accept-Encoding");
+            context.Response.Headers.Append("Vary", "Accept-Encoding");
         }
     }
 }
@@ -208,7 +208,7 @@ public class ResponseCompressionOptions
     public bool EnableBrotli { get; set; } = true;
     public bool EnableGzip { get; set; } = true;
     public bool EnableDeflate { get; set; } = false;
-    public CompressionLevel CompressionLevel { get; set; } = CompressionLevel.Optimal;
+    public System.IO.Compression.CompressionLevel CompressionLevel { get; set; } = System.IO.Compression.CompressionLevel.Optimal;
     public bool IsDevelopment { get; set; }
     public List<string> ExcludedPaths { get; set; } = new()
     {

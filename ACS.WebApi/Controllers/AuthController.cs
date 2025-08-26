@@ -84,14 +84,14 @@ public class AuthController : ControllerBase
     /// </summary>
     [HttpPost("refresh")]
     [Authorize]
-    public async Task<ActionResult<LoginResponse>> RefreshToken()
+    public Task<ActionResult<LoginResponse>> RefreshToken()
     {
         try
         {
             var authContext = HttpContext.Items["AuthContext"] as AuthenticationContext;
             if (authContext == null)
             {
-                return Unauthorized(new { Message = "Invalid authentication context" });
+                return Task.FromResult<ActionResult<LoginResponse>>(Unauthorized(new { Message = "Invalid authentication context" }));
             }
 
             // Generate new token with existing claims
@@ -116,12 +116,12 @@ public class AuthController : ControllerBase
             };
 
             _logger.LogInformation("Token refreshed for user {UserId} in tenant {TenantId}", authContext.UserId, authContext.TenantId);
-            return Ok(response);
+            return Task.FromResult<ActionResult<LoginResponse>>(Ok(response));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error during token refresh");
-            return StatusCode(500, new { Message = "Token refresh error" });
+            return Task.FromResult<ActionResult<LoginResponse>>(StatusCode(500, new { Message = "Token refresh error" }));
         }
     }
 

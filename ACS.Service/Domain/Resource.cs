@@ -28,9 +28,10 @@ public class Resource : Entity
     public DateTime UpdatedAt { get; set; }
 
     // Navigation properties
-    public List<Permission> Permissions { get; set; } = new();
+    public new List<Permission> Permissions { get; set; } = new();
     public Resource? ParentResource { get; set; }
     public List<Resource> ChildResources { get; set; } = new();
+    public List<Data.Models.UriAccess> UriAccesses { get; set; } = new();
 
     // Pattern matching methods
     public bool MatchesUri(string requestUri)

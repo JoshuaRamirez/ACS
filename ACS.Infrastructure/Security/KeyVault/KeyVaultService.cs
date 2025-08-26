@@ -1,3 +1,4 @@
+using Azure;
 using Azure.Core;
 using Azure.Identity;
 using Azure.Security.KeyVault.Certificates;
@@ -24,7 +25,7 @@ public class KeyVaultService : IKeyVaultService
     private readonly IMemoryCache _cache;
     private readonly SecretClient? _secretClient;
     private readonly CertificateClient? _certificateClient;
-    private readonly IAsyncPolicy<Response<KeyVaultSecret>> _retryPolicy;
+    private readonly IAsyncPolicy<Azure.Response<KeyVaultSecret>> _retryPolicy;
     private readonly SemaphoreSlim _cacheLock = new(1, 1);
 
     public KeyVaultService(
@@ -69,7 +70,7 @@ public class KeyVaultService : IKeyVaultService
     private IAsyncPolicy<Response<KeyVaultSecret>> CreateRetryPolicy()
     {
         var retryPolicy = Policy
-            .HandleResult<Response<KeyVaultSecret>>(r => !IsSuccessStatusCode(r.GetRawResponse().Status))
+            .HandleResult<Azure.Response<KeyVaultSecret>>(r => !IsSuccessStatusCode(r.GetRawResponse().Status))
             .OrResult(r => r.Value == null)
             .WaitAndRetryAsync(
                 _options.RetryPolicy.MaxRetries,
@@ -251,7 +252,7 @@ public class KeyVaultService : IKeyVaultService
                 return null;
             }
 
-            return new X509Certificate2(response.Value.Cer);
+            return X509CertificateLoader.LoadCertificate(response.Value.Cer);
         }
         catch (Exception ex)
         {
@@ -410,7 +411,7 @@ public class KeyVaultService : IKeyVaultService
                 ExpirationDate = properties.ExpiresOn?.DateTime,
                 Enabled = properties.Enabled ?? false,
                 ContentType = properties.ContentType,
-                Tags = properties.Tags ?? new Dictionary<string, string>(),
+                Tags = properties.Tags?.ToDictionary(x => x.Key, x => x.Value) ?? new Dictionary<string, string>(),
                 Version = properties.Version
             };
         }
@@ -518,7 +519,7 @@ public class KeyVaultService : IKeyVaultService
         if (File.Exists(certPath))
         {
             var certBytes = await File.ReadAllBytesAsync(certPath, cancellationToken);
-            return new X509Certificate2(certBytes);
+            return X509CertificateLoader.LoadCertificate(certBytes);
         }
         return null;
     }

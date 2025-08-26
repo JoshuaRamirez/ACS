@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Hosting;
@@ -335,8 +336,9 @@ public class HealthCheckService : IHealthCheckService, IHostedService
     {
         try
         {
-            var gcInfo = GC.GetMemoryInfo();
-            return gcInfo.TotalAvailableMemoryBytes;
+            // GC.GetMemoryInfo() is not available in this .NET version
+            // Return total memory as approximation
+            return GC.GetTotalMemory(false);
         }
         catch
         {

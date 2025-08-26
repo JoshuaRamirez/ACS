@@ -181,7 +181,7 @@ public class SystemHealthController : ControllerBase
             var response = CreateDetailedHealthResponse(healthReport, filteredEntries);
             response.FilteredBy = tagList.ToArray();
 
-            var overallStatus = DetermineOverallStatus(filteredEntries.Values);
+            var overallStatus = DetermineOverallStatus(filteredEntries.Values.Select(entry => new HealthCheckResult(entry.Status, entry.Description, entry.Exception, entry.Data)).ToList());
 
             return overallStatus switch
             {
@@ -238,8 +238,8 @@ public class SystemHealthController : ControllerBase
         {
             // Check only critical systems required for readiness
             var criticalHealthReport = await _healthCheckService.CheckHealthAsync(
-                HttpContext.RequestAborted,
-                check => check.Tags.Contains("database") || check.Tags.Contains("business"));
+                check => check.Tags.Contains("database") || check.Tags.Contains("business"), 
+                HttpContext.RequestAborted);
 
             var isReady = criticalHealthReport.Status != HealthStatus.Unhealthy;
             var response = new ReadinessResponse
@@ -288,9 +288,9 @@ public class SystemHealthController : ControllerBase
     }
 
     private static DetailedHealthResponse CreateDetailedHealthResponse(HealthReport healthReport, 
-        Dictionary<string, HealthCheckResult>? filteredEntries = null)
+        Dictionary<string, HealthReportEntry>? filteredEntries = null)
     {
-        var entries = filteredEntries ?? healthReport.Entries;
+        var entries = filteredEntries ?? healthReport.Entries.ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
         
         return new DetailedHealthResponse
         {
@@ -310,7 +310,7 @@ public class SystemHealthController : ControllerBase
         };
     }
 
-    private static DetailedHealthCheckEntry CreateDetailedHealthCheckEntry(string name, HealthCheckResult result)
+    private static DetailedHealthCheckEntry CreateDetailedHealthCheckEntry(string name, HealthReportEntry result)
     {
         return new DetailedHealthCheckEntry
         {

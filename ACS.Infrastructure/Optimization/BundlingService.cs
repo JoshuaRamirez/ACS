@@ -106,7 +106,7 @@ public class BundlingService : IBundlingService
     {
         var cacheKey = GetBundleCacheKey(name);
         
-        if (_cache.TryGetValue<Bundle>(cacheKey, out var cachedBundle))
+        if (_cache.TryGetValue<Bundle>(cacheKey, out var cachedBundle) && cachedBundle != null)
         {
             return cachedBundle;
         }
@@ -175,14 +175,15 @@ public class BundlingService : IBundlingService
         return $"/bundles/{name}?v={bundle.Hash}";
     }
 
-    private async Task<string> MinifyContentAsync(string content, BundleType type)
+    private Task<string> MinifyContentAsync(string content, BundleType type)
     {
-        return type switch
+        var result = type switch
         {
             BundleType.JavaScript => _minificationService.MinifyJavaScript(content),
             BundleType.Css => _minificationService.MinifyCss(content),
             _ => content
         };
+        return Task.FromResult(result);
     }
 
     private bool ShouldMinify()

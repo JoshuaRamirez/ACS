@@ -19,14 +19,13 @@ public static class PerformanceMetricsExtensions
         this IServiceCollection services, 
         IConfiguration configuration)
     {
-        // Register the performance metrics service
-        services.AddSingleton<PerformanceMetricsService>();
-        services.AddHostedService<PerformanceMetricsService>(provider => 
-            provider.GetRequiredService<PerformanceMetricsService>());
-        
-        // Configure performance metrics settings
+        // TODO: Implement PerformanceMetricsService when requirements are defined
+        // For now, configure performance metrics settings only
         services.Configure<PerformanceMetricsOptions>(
             configuration.GetSection("PerformanceMetrics"));
+            
+        // Log that performance metrics service is not yet implemented
+        services.AddLogging();
         
         return services;
     }

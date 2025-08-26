@@ -1,67 +1,53 @@
 namespace ACS.WebApi.DTOs;
 
-public record ApiResponse<T>(
-    bool Success,
-    T? Data,
-    string? Message = null,
-    List<string>? Errors = null
-);
-
-public record ErrorResponse(
-    string Message,
-    string? Details = null,
-    int StatusCode = 500,
-    DateTime Timestamp = default
-)
+/// <summary>
+/// Standard API response wrapper
+/// </summary>
+/// <typeparam name="T">The response data type</typeparam>
+public record ApiResponse<T>
 {
-    public ErrorResponse(string message, string? details = null, int statusCode = 500) 
-        : this(message, details, statusCode, DateTime.UtcNow) { }
+    public bool Success { get; init; }
+    public T? Data { get; init; }
+    public string Message { get; init; } = string.Empty;
+    public IList<string> Errors { get; init; } = new List<string>();
+
+    public ApiResponse(bool success, T? data, string message = "", IList<string>? errors = null)
+    {
+        Success = success;
+        Data = data;
+        Message = message;
+        Errors = errors ?? new List<string>();
+    }
 }
 
-public record ValidationError(
-    string Field,
-    string Message
-);
-
-public record PagedRequest(
-    int Page = 1,
-    int PageSize = 20,
-    string? Search = null,
-    string? SortBy = null,
-    bool SortDescending = false
-);
-
-public record HealthCheckResponse(
-    string Status,
-    Dictionary<string, object> Details,
-    DateTime Timestamp = default
-)
+/// <summary>
+/// Bulk operation result wrapper
+/// </summary>
+/// <typeparam name="T">The resource type</typeparam>
+public record BulkOperationResultResource<T>
 {
-    public HealthCheckResponse(string status, Dictionary<string, object> details) 
-        : this(status, details, DateTime.UtcNow) { }
-};
+    public IList<T> SuccessfulItems { get; init; } = new List<T>();
+    public IList<BulkOperationError> FailedItems { get; init; } = new List<BulkOperationError>();
+    public int TotalProcessed { get; init; }
+    public int SuccessCount { get; init; }
+    public int FailureCount { get; init; }
+}
 
-public record TenantHealthResponse(
-    string TenantId,
-    bool IsHealthy,
-    DateTime CheckTime,
-    long UptimeSeconds,
-    int ActiveConnections,
-    long CommandsProcessed,
-    string? Message = null
-);
+/// <summary>
+/// Bulk operation error details
+/// </summary>
+public record BulkOperationError
+{
+    public int Index { get; init; }
+    public string Item { get; init; } = string.Empty;
+    public IList<string> Errors { get; init; } = new List<string>();
+}
 
-public record HealthStatusResponse(
-    string Component,
-    bool IsHealthy,
-    DateTime CheckTime,
-    string? Message = null,
-    Dictionary<string, object>? Details = null
-);
-
-public record DetailedHealthResponse(
-    bool OverallHealthy,
-    DateTime CheckTime,
-    HealthStatusResponse WebApiHealth,
-    List<TenantHealthResponse> TenantHealths
-);
+/// <summary>
+/// Bulk operation request wrapper
+/// </summary>
+/// <typeparam name="T">The resource type</typeparam>
+public record BulkOperationResource<T>
+{
+    public IList<T> Items { get; init; } = new List<T>();
+}

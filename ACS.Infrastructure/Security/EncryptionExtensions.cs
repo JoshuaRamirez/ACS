@@ -183,7 +183,7 @@ public class EncryptionConfigurationService
         }
     }
 
-    private async Task<TenantEncryptionConfiguration> LoadTenantConfigurationAsync(string tenantId)
+    private Task<TenantEncryptionConfiguration> LoadTenantConfigurationAsync(string tenantId)
     {
         // In a real implementation, this would load from database
         // For now, return default configuration with tenant-specific overrides
@@ -199,6 +199,6 @@ public class EncryptionConfigurationService
         };
 
         _logger.LogDebug("Loaded encryption configuration for tenant {TenantId}", tenantId);
-        return config;
+        return Task.FromResult(config);
     }
 }

@@ -159,7 +159,7 @@ public static class SwaggerConfiguration
             options.InjectStylesheet("/swagger-ui/custom.css");
             
             // Custom JavaScript for enhanced functionality
-            options.InjectJavaScript("/swagger-ui/custom.js");
+            options.InjectJavascript("/swagger-ui/custom.js");
 
             if (env.IsDevelopment())
             {
@@ -215,7 +215,9 @@ public class SwaggerDefaultValues : IOperationFilter
     {
         var apiDescription = context.ApiDescription;
 
-        operation.Deprecated |= apiDescription.IsDeprecated();
+        // Check for deprecated attribute on the action method
+        var deprecatedAttribute = apiDescription.ActionDescriptor?.EndpointMetadata?.OfType<ObsoleteAttribute>().FirstOrDefault();
+        operation.Deprecated |= deprecatedAttribute != null;
 
         foreach (var responseType in context.ApiDescription.SupportedResponseTypes)
         {

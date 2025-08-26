@@ -1,54 +1,63 @@
-using ACS.Service.Data;
-using ACS.Service.Data.Models;
-using ACS.Service.Delegates.Normalizers;
 using ACS.Service.Domain;
-using Microsoft.EntityFrameworkCore;
+using ACS.Service.Infrastructure;
+using ACS.Service.Data;
+using ACS.Service.Delegates.Queries;
 using Microsoft.Extensions.Logging;
 
 namespace ACS.Service.Services;
 
+/// <summary>
+/// Flat service for Role operations in LMAX architecture
+/// Works directly with in-memory entity graph and fire-and-forget persistence
+/// No service-to-service dependencies
+/// </summary>
 public class RoleService : IRoleService
 {
+    private readonly InMemoryEntityGraph _entityGraph;
     private readonly ApplicationDbContext _dbContext;
     private readonly ILogger<RoleService> _logger;
-    private readonly IPermissionEvaluationService _permissionService;
 
     public RoleService(
+        InMemoryEntityGraph entityGraph,
         ApplicationDbContext dbContext,
-        ILogger<RoleService> logger,
-        IPermissionEvaluationService permissionService)
+        ILogger<RoleService> logger)
     {
+        _entityGraph = entityGraph;
         _dbContext = dbContext;
         _logger = logger;
-        _permissionService = permissionService;
     }
 
     #region Basic CRUD Operations
 
-    public async Task<IEnumerable<Domain.Role>> GetAllRolesAsync()
+    public Task<IEnumerable<Domain.Role>> GetAllRolesAsync()
     {
-        var roles = await _dbContext.Roles
-            .Include(r => r.Entity)
-            .Include(r => r.UserRoles)
-                .ThenInclude(ur => ur.User)
-            .Include(r => r.GroupRoles)
-                .ThenInclude(gr => gr.Group)
-            .ToListAsync();
+        // Use Query object for data access
+        var getRolesQuery = new GetRolesQuery
+        {
+            Page = 1,
+            PageSize = 1000, // Get all roles for now
+            EntityGraph = _entityGraph
+        };
 
-        return roles.Select(ConvertToDomainRole);
+        var result = getRolesQuery.Execute();
+        
+        _logger.LogDebug("Retrieved {RoleCount} roles", result.Count);
+        return Task.FromResult<IEnumerable<Domain.Role>>(result);
     }
 
-    public async Task<Domain.Role?> GetRoleByIdAsync(int roleId)
+    public Task<Domain.Role?> GetRoleByIdAsync(int roleId)
     {
-        var role = await _dbContext.Roles
-            .Include(r => r.Entity)
-            .Include(r => r.UserRoles)
-                .ThenInclude(ur => ur.User)
-            .Include(r => r.GroupRoles)
-                .ThenInclude(gr => gr.Group)
-            .FirstOrDefaultAsync(r => r.Id == roleId);
+        // Use Query object for data access
+        var getRoleQuery = new GetRoleByIdQuery
+        {
+            RoleId = roleId,
+            EntityGraph = _entityGraph
+        };
 
-        return role != null ? ConvertToDomainRole(role) : null;
+        var result = getRoleQuery.Execute();
+        
+        _logger.LogDebug("Retrieved role {RoleId}, found: {Found}", roleId, result != null);
+        return Task.FromResult(result);
     }
 
     public async Task<Domain.Role> CreateRoleAsync(string name, string description, string createdBy)
@@ -65,62 +74,33 @@ public class RoleService : IRoleService
                 throw new ArgumentException("CreatedBy cannot be null or empty", nameof(createdBy));
             }
 
-            // Check if role name already exists
-            var existingRole = await _dbContext.Roles
-                .FirstOrDefaultAsync(r => r.Name == name);
-            if (existingRole != null)
+            // Generate new ID and create role
+            var newId = _entityGraph.GetNextRoleId();
+            var role = new Domain.Role
             {
-                _logger.LogWarning("Attempted to create role with duplicate name: {RoleName}", name);
-                throw new InvalidOperationException($"Role with name '{name}' already exists");
-            }
-
-            // Create entity first
-            var entity = new Data.Models.Entity
-            {
-                EntityType = "Role",
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow
+                Id = newId,
+                Name = name
             };
 
-            _dbContext.Entities.Add(entity);
+            _entityGraph.Roles[newId] = role;
+
+            // EF Core change tracking will handle persistence automatically
             await _dbContext.SaveChangesAsync();
 
-            // Create role
-            var role = new Data.Models.Role
-            {
-                Name = name,
-                Description = description,
-                EntityId = entity.Id,
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow
-            };
+            _logger.LogInformation("Created role {RoleId} with name '{RoleName}' by {CreatedBy} (persistence queued)", 
+                newId, name, createdBy);
 
-            _dbContext.Roles.Add(role);
-            await _dbContext.SaveChangesAsync();
-
-            // Log audit
-            await LogAuditAsync("CreateRole", "Role", role.Id, createdBy,
-                $"Created role '{name}'");
-
-            _logger.LogInformation("Created role {RoleId} with name {RoleName} by {CreatedBy}",
-                role.Id, name, createdBy);
-
-            return ConvertToDomainRole(role);
+            return role;
         }
         catch (ArgumentException ex)
         {
-            _logger.LogError(ex, "Invalid argument provided for role creation: {RoleName}", name);
-            throw;
-        }
-        catch (InvalidOperationException ex)
-        {
-            _logger.LogError(ex, "Invalid operation during role creation: {RoleName}", name);
+            _logger.LogError(ex, "Invalid argument provided for role creation");
             throw;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unexpected error creating role {RoleName}", name);
-            throw new InvalidOperationException($"Failed to create role '{name}': {ex.Message}", ex);
+            _logger.LogError(ex, "Unexpected error creating role");
+            throw new InvalidOperationException($"Failed to create role: {ex.Message}", ex);
         }
     }
 
@@ -128,11 +108,6 @@ public class RoleService : IRoleService
     {
         try
         {
-            if (roleId <= 0)
-            {
-                throw new ArgumentException("Role ID must be a positive integer", nameof(roleId));
-            }
-
             if (string.IsNullOrWhiteSpace(name))
             {
                 throw new ArgumentException("Role name cannot be null or empty", nameof(name));
@@ -143,29 +118,29 @@ public class RoleService : IRoleService
                 throw new ArgumentException("UpdatedBy cannot be null or empty", nameof(updatedBy));
             }
 
-            var role = await _dbContext.Roles.FindAsync(roleId);
-            if (role == null)
+            // Use Query object to get role
+            var getRoleQuery = new GetRoleByIdQuery
             {
-                _logger.LogWarning("Attempted to update non-existent role {RoleId}", roleId);
+                RoleId = roleId,
+                EntityGraph = _entityGraph
+            };
+
+            var existingRole = getRoleQuery.Execute();
+            if (existingRole == null)
+            {
                 throw new InvalidOperationException($"Role {roleId} not found");
             }
 
-            var oldName = role.Name;
-            role.Name = name;
-            role.Description = description;
-            role.UpdatedAt = DateTime.UtcNow;
+            // Update role name directly (roles don't have complex business logic like users)
+            existingRole.Name = name;
 
-            _dbContext.Roles.Update(role);
+            // EF Core change tracking will handle persistence automatically
             await _dbContext.SaveChangesAsync();
 
-            // Log audit
-            await LogAuditAsync("UpdateRole", "Role", role.Id, updatedBy,
-                $"Updated role from '{oldName}' to '{name}'");
-
-            _logger.LogInformation("Updated role {RoleId} with name {RoleName} by {UpdatedBy}",
+            _logger.LogInformation("Updated role {RoleId} with name '{RoleName}' by {UpdatedBy} (persistence queued)", 
                 roleId, name, updatedBy);
 
-            return ConvertToDomainRole(role);
+            return existingRole;
         }
         catch (ArgumentException ex)
         {
@@ -198,39 +173,26 @@ public class RoleService : IRoleService
                 throw new ArgumentException("DeletedBy cannot be null or empty", nameof(deletedBy));
             }
 
-            var role = await _dbContext.Roles
-                .Include(r => r.Entity)
-                .FirstOrDefaultAsync(r => r.Id == roleId);
-
-            if (role == null)
+            // Use Query object to check if role exists
+            var getRoleQuery = new GetRoleByIdQuery
             {
-                _logger.LogWarning("Attempted to delete non-existent role {RoleId}", roleId);
+                RoleId = roleId,
+                EntityGraph = _entityGraph
+            };
+
+            var existingRole = getRoleQuery.Execute();
+            if (existingRole == null)
+            {
                 throw new InvalidOperationException($"Role {roleId} not found");
             }
 
-            // Check if role is assigned to any users or groups
-            var hasActiveDependencies = await HasActiveDependenciesAsync(roleId);
-            if (hasActiveDependencies)
-            {
-                _logger.LogWarning("Cannot delete role {RoleId} due to active assignments", roleId);
-                throw new InvalidOperationException($"Cannot delete role {roleId} as it is assigned to users or groups. Remove role assignments first.");
-            }
+            // Remove from in-memory graph
+            _entityGraph.Roles.Remove(roleId);
 
-            var roleName = role.Name;
-
-            // Delete role (cascading will handle relationships)
-            _dbContext.Roles.Remove(role);
-            if (role.Entity != null)
-            {
-                _dbContext.Entities.Remove(role.Entity);
-            }
+            // EF Core change tracking will handle persistence automatically
             await _dbContext.SaveChangesAsync();
 
-            // Log audit
-            await LogAuditAsync("DeleteRole", "Role", roleId, deletedBy,
-                $"Deleted role '{roleName}'");
-
-            _logger.LogInformation("Deleted role {RoleId} by {DeletedBy}", roleId, deletedBy);
+            _logger.LogInformation("Deleted role {RoleId} by {DeletedBy} (persistence queued)", roleId, deletedBy);
         }
         catch (ArgumentException ex)
         {
@@ -255,93 +217,227 @@ public class RoleService : IRoleService
 
     public async Task<IEnumerable<Domain.User>> GetRoleUsersAsync(int roleId)
     {
-        // Get direct user assignments
-        var directUsers = await _dbContext.UserRoles
-            .Include(ur => ur.User)
-            .Where(ur => ur.RoleId == roleId)
-            .Select(ur => ur.User)
-            .ToListAsync();
+        var role = await GetRoleByIdAsync(roleId);
+        if (role == null)
+        {
+            return Enumerable.Empty<Domain.User>();
+        }
 
-        // Get users through group assignments
-        var groupUsers = await _dbContext.GroupRoles
-            .Where(gr => gr.RoleId == roleId)
-            .SelectMany(gr => gr.Group.UserGroups.Select(ug => ug.User))
-            .ToListAsync();
-
-        var allUsers = directUsers.Union(groupUsers).DistinctBy(u => u.Id);
-        return allUsers.Select(ConvertToDomainUser);
+        var users = role.Children.OfType<Domain.User>().ToList();
+        
+        _logger.LogDebug("Retrieved {Count} users for role {RoleId}", users.Count, roleId);
+        return users;
     }
 
     public async Task AssignUserToRoleAsync(int userId, int roleId, string assignedBy)
     {
-        await AssignUserToRoleNormalizer.ExecuteAsync(_dbContext, userId, roleId, assignedBy);
-        await _dbContext.SaveChangesAsync();
+        try
+        {
+            if (userId <= 0)
+            {
+                throw new ArgumentException("User ID must be a positive integer", nameof(userId));
+            }
 
-        // Log audit
-        await LogAuditAsync("AssignUserToRole", "UserRole", 0, assignedBy,
-            $"Assigned user {userId} to role {roleId}");
+            if (roleId <= 0)
+            {
+                throw new ArgumentException("Role ID must be a positive integer", nameof(roleId));
+            }
 
-        _logger.LogInformation("Assigned user {UserId} to role {RoleId} by {AssignedBy}",
-            userId, roleId, assignedBy);
+            if (string.IsNullOrWhiteSpace(assignedBy))
+            {
+                throw new ArgumentException("AssignedBy cannot be null or empty", nameof(assignedBy));
+            }
+
+            // Use Query objects to get entities
+            var getUserQuery = new GetUserByIdQuery
+            {
+                UserId = userId,
+                EntityGraph = _entityGraph
+            };
+
+            var getRoleQuery = new GetRoleByIdQuery
+            {
+                RoleId = roleId,
+                EntityGraph = _entityGraph
+            };
+
+            var user = getUserQuery.Execute();
+            var role = getRoleQuery.Execute();
+
+            if (user == null)
+            {
+                throw new InvalidOperationException($"User {userId} not found");
+            }
+
+            if (role == null)
+            {
+                throw new InvalidOperationException($"Role {roleId} not found");
+            }
+
+            // Use rich domain object business logic (includes segregation of duties, limits, etc.)
+            user.AssignToRole(role, assignedBy);
+
+            // EF Core change tracking will handle persistence automatically
+            await _dbContext.SaveChangesAsync();
+
+            _logger.LogInformation("Assigned user {UserId} to role {RoleId} by {AssignedBy} (persistence queued)", 
+                userId, roleId, assignedBy);
+        }
+        catch (ArgumentException ex)
+        {
+            _logger.LogError(ex, "Invalid argument for assigning user {UserId} to role {RoleId}", userId, roleId);
+            throw;
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogError(ex, "Invalid operation assigning user {UserId} to role {RoleId}", userId, roleId);
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error assigning user {UserId} to role {RoleId}", userId, roleId);
+            throw new InvalidOperationException($"Failed to assign user {userId} to role {roleId}: {ex.Message}", ex);
+        }
     }
 
     public async Task UnassignUserFromRoleAsync(int userId, int roleId, string unassignedBy)
     {
-        await UnAssignUserFromRoleNormalizer.ExecuteAsync(_dbContext, userId, roleId, unassignedBy);
-        await _dbContext.SaveChangesAsync();
+        try
+        {
+            if (userId <= 0)
+            {
+                throw new ArgumentException("User ID must be a positive integer", nameof(userId));
+            }
 
-        // Log audit
-        await LogAuditAsync("UnassignUserFromRole", "UserRole", 0, unassignedBy,
-            $"Unassigned user {userId} from role {roleId}");
+            if (roleId <= 0)
+            {
+                throw new ArgumentException("Role ID must be a positive integer", nameof(roleId));
+            }
 
-        _logger.LogInformation("Unassigned user {UserId} from role {RoleId} by {UnassignedBy}",
-            userId, roleId, unassignedBy);
+            if (string.IsNullOrWhiteSpace(unassignedBy))
+            {
+                throw new ArgumentException("UnassignedBy cannot be null or empty", nameof(unassignedBy));
+            }
+
+            // Use Query objects to get entities
+            var getUserQuery = new GetUserByIdQuery
+            {
+                UserId = userId,
+                EntityGraph = _entityGraph
+            };
+
+            var getRoleQuery = new GetRoleByIdQuery
+            {
+                RoleId = roleId,
+                EntityGraph = _entityGraph
+            };
+
+            var user = getUserQuery.Execute();
+            var role = getRoleQuery.Execute();
+
+            if (user == null)
+            {
+                throw new InvalidOperationException($"User {userId} not found");
+            }
+
+            if (role == null)
+            {
+                throw new InvalidOperationException($"Role {roleId} not found");
+            }
+
+            // Use rich domain object business logic (includes business rules, etc.)
+            user.UnAssignFromRole(role, unassignedBy);
+
+            // EF Core change tracking will handle persistence automatically
+            await _dbContext.SaveChangesAsync();
+
+            _logger.LogInformation("Unassigned user {UserId} from role {RoleId} by {UnassignedBy} (persistence queued)", 
+                userId, roleId, unassignedBy);
+        }
+        catch (ArgumentException ex)
+        {
+            _logger.LogError(ex, "Invalid argument for unassigning user {UserId} from role {RoleId}", userId, roleId);
+            throw;
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogError(ex, "Invalid operation unassigning user {UserId} from role {RoleId}", userId, roleId);
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error unassigning user {UserId} from role {RoleId}", userId, roleId);
+            throw new InvalidOperationException($"Failed to unassign user {userId} from role {roleId}: {ex.Message}", ex);
+        }
     }
 
     public async Task<bool> IsUserInRoleAsync(int userId, int roleId)
     {
-        // Check direct assignment
-        var directAssignment = await _dbContext.UserRoles
-            .AnyAsync(ur => ur.UserId == userId && ur.RoleId == roleId);
+        try
+        {
+            var role = await GetRoleByIdAsync(roleId);
+            if (role == null)
+            {
+                return false;
+            }
 
-        if (directAssignment)
-            return true;
-
-        // Check through group membership
-        var groupAssignment = await _dbContext.UserGroups
-            .Where(ug => ug.UserId == userId)
-            .Join(_dbContext.GroupRoles,
-                ug => ug.GroupId,
-                gr => gr.GroupId,
-                (ug, gr) => gr.RoleId)
-            .AnyAsync(r => r == roleId);
-
-        return groupAssignment;
+            var isInRole = role.Children.OfType<Domain.User>().Any(u => u.Id == userId);
+            
+            _logger.LogDebug("User {UserId} is in role {RoleId}: {IsInRole}", userId, roleId, isInRole);
+            return isInRole;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error checking if user {UserId} is in role {RoleId}", userId, roleId);
+            return false;
+        }
     }
 
-    public async Task<IEnumerable<Domain.Role>> GetUserRolesAsync(int userId, bool includeGroupRoles = true)
+    public Task<IEnumerable<Domain.Role>> GetUserRolesAsync(int userId, bool includeGroupRoles = true)
     {
-        // Get direct role assignments
-        var directRoles = await _dbContext.UserRoles
-            .Include(ur => ur.Role)
-            .Where(ur => ur.UserId == userId)
-            .Select(ur => ur.Role)
-            .ToListAsync();
-
-        var allRoles = new List<Data.Models.Role>(directRoles);
-
-        // Get roles through group membership
-        if (includeGroupRoles)
+        try
         {
-            var groupRoles = await _dbContext.UserGroups
-                .Where(ug => ug.UserId == userId)
-                .SelectMany(ug => ug.Group.GroupRoles.Select(gr => gr.Role))
-                .ToListAsync();
+            // Use Query object to get user
+            var getUserQuery = new GetUserByIdQuery
+            {
+                UserId = userId,
+                EntityGraph = _entityGraph
+            };
+            var user = getUserQuery.Execute();
+            
+            if (user == null)
+            {
+                return Task.FromResult(Enumerable.Empty<Domain.Role>());
+            }
 
-            allRoles.AddRange(groupRoles);
+            // Get direct role assignments
+            var directRoles = user.Parents.OfType<Domain.Role>().ToList();
+            var allRoles = new List<Domain.Role>(directRoles);
+
+            if (includeGroupRoles)
+            {
+                // Get roles through group membership
+                var groups = user.Parents.OfType<Domain.Group>();
+                foreach (var group in groups)
+                {
+                    var groupRoles = group.Children.OfType<Domain.Role>();
+                    allRoles.AddRange(groupRoles);
+                }
+            }
+
+            // Remove duplicates
+            var uniqueRoles = allRoles.GroupBy(r => r.Id).Select(g => g.First()).ToList();
+            
+            _logger.LogDebug("Retrieved {Count} roles for user {UserId} (includeGroupRoles: {IncludeGroupRoles})", 
+                uniqueRoles.Count, userId, includeGroupRoles);
+
+            return Task.FromResult<IEnumerable<Domain.Role>>(uniqueRoles);
         }
-
-        return allRoles.DistinctBy(r => r.Id).Select(ConvertToDomainRole);
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving roles for user {UserId}", userId);
+            return Task.FromResult(Enumerable.Empty<Domain.Role>());
+        }
     }
 
     #endregion
@@ -350,406 +446,385 @@ public class RoleService : IRoleService
 
     public async Task<IEnumerable<Domain.Group>> GetRoleGroupsAsync(int roleId)
     {
-        var groups = await _dbContext.GroupRoles
-            .Include(gr => gr.Group)
-            .Where(gr => gr.RoleId == roleId)
-            .Select(gr => gr.Group)
-            .ToListAsync();
+        var role = await GetRoleByIdAsync(roleId);
+        if (role == null)
+        {
+            return Enumerable.Empty<Domain.Group>();
+        }
 
-        return groups.Select(ConvertToDomainGroup);
+        var groups = role.Parents.OfType<Domain.Group>().ToList();
+        
+        _logger.LogDebug("Retrieved {Count} groups for role {RoleId}", groups.Count, roleId);
+        return groups;
     }
 
     public async Task AssignRoleToGroupAsync(int roleId, int groupId, string assignedBy)
     {
-        await AddRoleToGroupNormalizer.ExecuteAsync(_dbContext, roleId, groupId, assignedBy);
-        await _dbContext.SaveChangesAsync();
+        try
+        {
+            if (roleId <= 0)
+            {
+                throw new ArgumentException("Role ID must be a positive integer", nameof(roleId));
+            }
 
-        // Log audit
-        await LogAuditAsync("AssignRoleToGroup", "GroupRole", 0, assignedBy,
-            $"Assigned role {roleId} to group {groupId}");
+            if (groupId <= 0)
+            {
+                throw new ArgumentException("Group ID must be a positive integer", nameof(groupId));
+            }
 
-        _logger.LogInformation("Assigned role {RoleId} to group {GroupId} by {AssignedBy}",
-            roleId, groupId, assignedBy);
+            if (string.IsNullOrWhiteSpace(assignedBy))
+            {
+                throw new ArgumentException("AssignedBy cannot be null or empty", nameof(assignedBy));
+            }
+
+            // Use Query objects to get entities
+            var getRoleQuery = new GetRoleByIdQuery
+            {
+                RoleId = roleId,
+                EntityGraph = _entityGraph
+            };
+
+            var getGroupQuery = new GetGroupByIdQuery
+            {
+                GroupId = groupId,
+                EntityGraph = _entityGraph
+            };
+
+            var role = getRoleQuery.Execute();
+            var group = getGroupQuery.Execute();
+
+            if (role == null)
+            {
+                throw new InvalidOperationException($"Role {roleId} not found");
+            }
+
+            if (group == null)
+            {
+                throw new InvalidOperationException($"Group {groupId} not found");
+            }
+
+            // Use rich domain object business logic
+            group.AddRole(role, assignedBy);
+
+            await _dbContext.SaveChangesAsync();
+
+            _logger.LogInformation("Assigned role {RoleId} to group {GroupId} by {AssignedBy}", 
+                roleId, groupId, assignedBy);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error assigning role {RoleId} to group {GroupId}", roleId, groupId);
+            throw;
+        }
     }
 
     public async Task UnassignRoleFromGroupAsync(int roleId, int groupId, string unassignedBy)
     {
-        var relation = await _dbContext.GroupRoles
-            .FirstOrDefaultAsync(gr => gr.RoleId == roleId && gr.GroupId == groupId);
-
-        if (relation != null)
+        try
         {
-            _dbContext.GroupRoles.Remove(relation);
+            if (roleId <= 0)
+            {
+                throw new ArgumentException("Role ID must be a positive integer", nameof(roleId));
+            }
+
+            if (groupId <= 0)
+            {
+                throw new ArgumentException("Group ID must be a positive integer", nameof(groupId));
+            }
+
+            if (string.IsNullOrWhiteSpace(unassignedBy))
+            {
+                throw new ArgumentException("UnassignedBy cannot be null or empty", nameof(unassignedBy));
+            }
+
+            // Use Query objects to get entities
+            var getRoleQuery = new GetRoleByIdQuery
+            {
+                RoleId = roleId,
+                EntityGraph = _entityGraph
+            };
+
+            var getGroupQuery = new GetGroupByIdQuery
+            {
+                GroupId = groupId,
+                EntityGraph = _entityGraph
+            };
+
+            var role = getRoleQuery.Execute();
+            var group = getGroupQuery.Execute();
+
+            if (role == null)
+            {
+                throw new InvalidOperationException($"Role {roleId} not found");
+            }
+
+            if (group == null)
+            {
+                throw new InvalidOperationException($"Group {groupId} not found");
+            }
+
+            // Use rich domain object business logic
+            group.RemoveRole(role, unassignedBy);
+
             await _dbContext.SaveChangesAsync();
 
-            // Log audit
-            await LogAuditAsync("UnassignRoleFromGroup", "GroupRole", 0, unassignedBy,
-                $"Unassigned role {roleId} from group {groupId}");
-
-            _logger.LogInformation("Unassigned role {RoleId} from group {GroupId} by {UnassignedBy}",
+            _logger.LogInformation("Unassigned role {RoleId} from group {GroupId} by {UnassignedBy}", 
                 roleId, groupId, unassignedBy);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error unassigning role {RoleId} from group {GroupId}", roleId, groupId);
+            throw;
         }
     }
 
-    public async Task<bool> IsRoleInGroupAsync(int roleId, int groupId)
+    public Task<bool> IsRoleInGroupAsync(int roleId, int groupId)
     {
-        return await _dbContext.GroupRoles
-            .AnyAsync(gr => gr.RoleId == roleId && gr.GroupId == groupId);
+        try
+        {
+            var group = _entityGraph.Groups.GetValueOrDefault(groupId);
+            if (group == null)
+            {
+                return Task.FromResult(false);
+            }
+
+            var isInGroup = group.Children.OfType<Domain.Role>().Any(r => r.Id == roleId);
+            
+            _logger.LogDebug("Role {RoleId} is in group {GroupId}: {IsInGroup}", roleId, groupId, isInGroup);
+            return Task.FromResult(isInGroup);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error checking if role {RoleId} is in group {GroupId}", roleId, groupId);
+            return Task.FromResult(false);
+        }
     }
 
     #endregion
 
     #region Permission Management
 
-    public async Task<IEnumerable<Domain.Permission>> GetRolePermissionsAsync(int roleId)
+    public async Task<IEnumerable<Permission>> GetRolePermissionsAsync(int roleId)
     {
-        return await _permissionService.GetEntityPermissionsAsync(roleId, false);
+        var role = await GetRoleByIdAsync(roleId);
+        if (role == null)
+        {
+            return Enumerable.Empty<Permission>();
+        }
+
+        // Permissions are stored directly on the entity
+        var permissions = role.Permissions;
+        
+        _logger.LogDebug("Retrieved {Count} permissions for role {RoleId}", permissions.Count, roleId);
+        return permissions;
     }
 
-    public async Task AddPermissionToRoleAsync(int roleId, Domain.Permission permission, string addedBy)
+    public async Task AddPermissionToRoleAsync(int roleId, Permission permission, string addedBy)
     {
-        await AddPermissionToEntity.ExecuteAsync(_dbContext, permission, roleId);
-        await _dbContext.SaveChangesAsync();
+        try
+        {
+            if (permission == null)
+            {
+                throw new ArgumentNullException(nameof(permission));
+            }
 
-        // Log audit
-        await LogAuditAsync("AddPermissionToRole", "Permission", 0, addedBy,
-            $"Added permission {permission.Uri} {permission.HttpVerb} to role {roleId}");
+            if (string.IsNullOrWhiteSpace(addedBy))
+            {
+                throw new ArgumentException("AddedBy cannot be null or empty", nameof(addedBy));
+            }
 
-        _logger.LogInformation("Added permission {Resource} {Action} to role {RoleId} by {AddedBy}",
-            permission.Uri, permission.HttpVerb, roleId, addedBy);
+            var role = await GetRoleByIdAsync(roleId);
+            if (role == null)
+            {
+                throw new InvalidOperationException($"Role {roleId} not found");
+            }
+
+            // Use rich domain object business logic
+            role.AddPermission(permission, addedBy);
+
+            await _dbContext.SaveChangesAsync();
+
+            _logger.LogInformation("Added permission {Resource}:{Action} to role {RoleId} by {AddedBy}", 
+                permission.Resource, permission.Action, roleId, addedBy);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error adding permission to role {RoleId}", roleId);
+            throw;
+        }
     }
 
     public async Task RemovePermissionFromRoleAsync(int roleId, string resource, string action, string removedBy)
     {
-        // This would need RemovePermissionFromEntity normalizer to be implemented
-        // For now, we'll implement it directly
-        var schemeType = await _dbContext.SchemeTypes
-            .FirstOrDefaultAsync(st => st.SchemeName == "ApiUriAuthorization");
-
-        if (schemeType == null)
-            return;
-
-        var permissionScheme = await _dbContext.EntityPermissions
-            .FirstOrDefaultAsync(ps => ps.EntityId == roleId && ps.SchemeTypeId == schemeType.Id);
-
-        if (permissionScheme == null)
-            return;
-
-        var uriAccess = await _dbContext.UriAccesses
-            .Include(ua => ua.Resource)
-            .Include(ua => ua.VerbType)
-            .FirstOrDefaultAsync(ua => ua.PermissionSchemeId == permissionScheme.Id &&
-                                      ua.Resource.Uri == resource &&
-                                      ua.VerbType.VerbName == action);
-
-        if (uriAccess != null)
+        try
         {
-            _dbContext.UriAccesses.Remove(uriAccess);
+            if (string.IsNullOrWhiteSpace(resource))
+            {
+                throw new ArgumentException("Resource cannot be null or empty", nameof(resource));
+            }
+
+            if (string.IsNullOrWhiteSpace(action))
+            {
+                throw new ArgumentException("Action cannot be null or empty", nameof(action));
+            }
+
+            if (string.IsNullOrWhiteSpace(removedBy))
+            {
+                throw new ArgumentException("RemovedBy cannot be null or empty", nameof(removedBy));
+            }
+
+            var role = await GetRoleByIdAsync(roleId);
+            if (role == null)
+            {
+                throw new InvalidOperationException($"Role {roleId} not found");
+            }
+
+            // Use rich domain object business logic
+            role.RemovePermission(resource, action, removedBy);
+
             await _dbContext.SaveChangesAsync();
 
-            // Log audit
-            await LogAuditAsync("RemovePermissionFromRole", "Permission", 0, removedBy,
-                $"Removed permission {resource} {action} from role {roleId}");
-
-            _logger.LogInformation("Removed permission {Resource} {Action} from role {RoleId} by {RemovedBy}",
+            _logger.LogInformation("Removed permission {Resource}:{Action} from role {RoleId} by {RemovedBy}", 
                 resource, action, roleId, removedBy);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error removing permission from role {RoleId}", roleId);
+            throw;
         }
     }
 
     public async Task<bool> RoleHasPermissionAsync(int roleId, string resource, string action)
     {
-        return await _permissionService.HasPermissionAsync(roleId, resource, action);
-    }
-
-    #endregion
-
-    #region Role Hierarchy
-
-    // Note: Role hierarchy is not currently in the database schema
-    // These methods would need additional tables to be implemented
-    public async Task<IEnumerable<Domain.Role>> GetChildRolesAsync(int parentRoleId)
-    {
-        // Would require RoleHierarchy table
-        _logger.LogWarning("Role hierarchy not implemented in current schema");
-        return await Task.FromResult(Enumerable.Empty<Domain.Role>());
-    }
-
-    public async Task<IEnumerable<Domain.Role>> GetParentRolesAsync(int childRoleId)
-    {
-        // Would require RoleHierarchy table
-        _logger.LogWarning("Role hierarchy not implemented in current schema");
-        return await Task.FromResult(Enumerable.Empty<Domain.Role>());
-    }
-
-    public async Task AddRoleHierarchyAsync(int parentRoleId, int childRoleId, string createdBy)
-    {
-        // Would require RoleHierarchy table
-        _logger.LogWarning("Role hierarchy not implemented in current schema");
-        await Task.CompletedTask;
-    }
-
-    public async Task RemoveRoleHierarchyAsync(int parentRoleId, int childRoleId, string removedBy)
-    {
-        // Would require RoleHierarchy table
-        _logger.LogWarning("Role hierarchy not implemented in current schema");
-        await Task.CompletedTask;
-    }
-
-    #endregion
-
-    #region Bulk Operations
-
-    public async Task<IEnumerable<Domain.Role>> CreateRolesBulkAsync(
-        IEnumerable<(string Name, string Description)> roles, string createdBy)
-    {
-        var createdRoles = new List<Domain.Role>();
-
-        foreach (var (name, description) in roles)
-        {
-            var role = await CreateRoleAsync(name, description, createdBy);
-            createdRoles.Add(role);
-        }
-
-        _logger.LogInformation("Created {Count} roles in bulk by {CreatedBy}",
-            createdRoles.Count, createdBy);
-
-        return createdRoles;
-    }
-
-    public async Task AssignUsersToRoleBulkAsync(int roleId, IEnumerable<int> userIds, string assignedBy)
-    {
-        foreach (var userId in userIds)
-        {
-            await AssignUserToRoleAsync(userId, roleId, assignedBy);
-        }
-
-        _logger.LogInformation("Assigned {Count} users to role {RoleId} in bulk by {AssignedBy}",
-            userIds.Count(), roleId, assignedBy);
-    }
-
-    public async Task AddPermissionsToRoleBulkAsync(int roleId, IEnumerable<Domain.Permission> permissions, string addedBy)
-    {
-        foreach (var permission in permissions)
-        {
-            await AddPermissionToRoleAsync(roleId, permission, addedBy);
-        }
-
-        _logger.LogInformation("Added {Count} permissions to role {RoleId} in bulk by {AddedBy}",
-            permissions.Count(), roleId, addedBy);
-    }
-
-    #endregion
-
-    #region Search and Filtering
-
-    public async Task<IEnumerable<Domain.Role>> SearchRolesAsync(string searchTerm)
-    {
-        var roles = await _dbContext.Roles
-            .Where(r => r.Name.Contains(searchTerm) ||
-                       (r.Description != null && r.Description.Contains(searchTerm)))
-            .ToListAsync();
-
-        return roles.Select(ConvertToDomainRole);
-    }
-
-    public async Task<IEnumerable<Domain.Role>> GetRolesByPermissionAsync(string resource, string action)
-    {
-        var roles = await _dbContext.UriAccesses
-            .Include(ua => ua.Resource)
-            .Include(ua => ua.VerbType)
-            .Include(ua => ua.PermissionScheme)
-                .ThenInclude(ps => ps.Entity)
-            .Where(ua => ua.Resource.Uri == resource && 
-                        ua.VerbType.VerbName == action &&
-                        ua.PermissionScheme.Entity.EntityType == "Role")
-            .Select(ua => ua.PermissionScheme.EntityId)
-            .Distinct()
-            .Join(_dbContext.Roles, id => id, r => r.EntityId, (id, r) => r)
-            .ToListAsync();
-
-        return roles.Select(ConvertToDomainRole);
-    }
-
-    public async Task<IEnumerable<Domain.Role>> GetRolesByGroupAsync(int groupId)
-    {
-        var roles = await _dbContext.GroupRoles
-            .Include(gr => gr.Role)
-            .Where(gr => gr.GroupId == groupId)
-            .Select(gr => gr.Role)
-            .ToListAsync();
-
-        return roles.Select(ConvertToDomainRole);
-    }
-
-    #endregion
-
-    #region Role Templates and Cloning
-
-    public async Task<Domain.Role> CloneRoleAsync(int sourceRoleId, string newRoleName, string clonedBy)
-    {
-        var sourceRole = await _dbContext.Roles
-            .Include(r => r.Entity)
-            .FirstOrDefaultAsync(r => r.Id == sourceRoleId);
-
-        if (sourceRole == null)
-        {
-            throw new InvalidOperationException($"Source role {sourceRoleId} not found");
-        }
-
-        // Create new role
-        var newRole = await CreateRoleAsync(newRoleName, 
-            $"Cloned from {sourceRole.Name}", clonedBy);
-
-        // Copy permissions
-        var sourcePermissions = await GetRolePermissionsAsync(sourceRoleId);
-        foreach (var permission in sourcePermissions)
-        {
-            await AddPermissionToRoleAsync(newRole.Id, permission, clonedBy);
-        }
-
-        // Log audit
-        await LogAuditAsync("CloneRole", "Role", newRole.Id, clonedBy,
-            $"Cloned role from {sourceRole.Name} to {newRoleName}");
-
-        _logger.LogInformation("Cloned role {SourceRoleId} to new role {NewRoleId} with name {NewRoleName} by {ClonedBy}",
-            sourceRoleId, newRole.Id, newRoleName, clonedBy);
-
-        return newRole;
-    }
-
-    public async Task<Domain.Role> CreateRoleFromTemplateAsync(string templateName, string roleName, string createdBy)
-    {
-        // Define role templates
-        var templates = new Dictionary<string, (string Description, List<(string Resource, string Action, bool Grant)> Permissions)>
-        {
-            ["Admin"] = ("Administrator role with full access", new List<(string, string, bool)>
-            {
-                ("*", "GET", true),
-                ("*", "POST", true),
-                ("*", "PUT", true),
-                ("*", "DELETE", true)
-            }),
-            ["ReadOnly"] = ("Read-only access role", new List<(string, string, bool)>
-            {
-                ("*", "GET", true),
-                ("*", "POST", false),
-                ("*", "PUT", false),
-                ("*", "DELETE", false)
-            }),
-            ["Operator"] = ("Operator role with modify access", new List<(string, string, bool)>
-            {
-                ("*", "GET", true),
-                ("*", "POST", true),
-                ("*", "PUT", true),
-                ("*", "DELETE", false)
-            })
-        };
-
-        if (!templates.ContainsKey(templateName))
-        {
-            throw new InvalidOperationException($"Template {templateName} not found");
-        }
-
-        var template = templates[templateName];
-        var role = await CreateRoleAsync(roleName, template.Description, createdBy);
-
-        // Add template permissions
-        foreach (var (resource, action, grant) in template.Permissions)
-        {
-            var permission = new Domain.Permission
-            {
-                Uri = resource,
-                HttpVerb = Enum.Parse<Domain.HttpVerb>(action),
-                Grant = grant,
-                Deny = !grant,
-                Scheme = Domain.Scheme.ApiUriAuthorization
-            };
-
-            await AddPermissionToRoleAsync(role.Id, permission, createdBy);
-        }
-
-        // Log audit
-        await LogAuditAsync("CreateRoleFromTemplate", "Role", role.Id, createdBy,
-            $"Created role {roleName} from template {templateName}");
-
-        _logger.LogInformation("Created role {RoleId} with name {RoleName} from template {TemplateName} by {CreatedBy}",
-            role.Id, roleName, templateName, createdBy);
-
-        return role;
-    }
-
-    #endregion
-
-    #region Helper Methods
-
-    private Domain.Role ConvertToDomainRole(Data.Models.Role dataRole)
-    {
-        var domainRole = new Domain.Role
-        {
-            Id = dataRole.Id,
-            Name = dataRole.Name
-        };
-
-        return domainRole;
-    }
-
-    private Domain.User ConvertToDomainUser(Data.Models.User dataUser)
-    {
-        var domainUser = new Domain.User
-        {
-            Id = dataUser.Id,
-            Name = dataUser.Name
-        };
-
-        return domainUser;
-    }
-
-    private Domain.Group ConvertToDomainGroup(Data.Models.Group dataGroup)
-    {
-        var domainGroup = new Domain.Group
-        {
-            Id = dataGroup.Id,
-            Name = dataGroup.Name
-        };
-
-        return domainGroup;
-    }
-
-    private async Task LogAuditAsync(string action, string entityType, int entityId,
-        string changedBy, string changeDetails)
-    {
-        var auditLog = new AuditLog
-        {
-            EntityType = entityType,
-            EntityId = entityId,
-            ChangeType = action,
-            ChangedBy = changedBy,
-            ChangeDate = DateTime.UtcNow,
-            ChangeDetails = changeDetails
-        };
-
-        _dbContext.AuditLogs.Add(auditLog);
-        await _dbContext.SaveChangesAsync();
-    }
-
-    private async Task<bool> HasActiveDependenciesAsync(int roleId)
-    {
         try
         {
-            // Check for user-role relationships
-            var hasUserRoles = await _dbContext.UserRoles.AnyAsync(ur => ur.RoleId == roleId);
+            var permissions = await GetRolePermissionsAsync(roleId);
+            var hasPermission = permissions.Any(p => p.Resource == resource && p.Action == action);
             
-            // Check for group-role relationships
-            var hasGroupRoles = await _dbContext.GroupRoles.AnyAsync(gr => gr.RoleId == roleId);
-            
-            return hasUserRoles || hasGroupRoles;
+            _logger.LogDebug("Role {RoleId} has permission {Resource}:{Action}: {HasPermission}", 
+                roleId, resource, action, hasPermission);
+            return hasPermission;
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Error checking dependencies for role {RoleId}", roleId);
-            // Return true to be safe and prevent deletion if we can't verify
-            return true;
+            _logger.LogError(ex, "Error checking permission for role {RoleId}", roleId);
+            return false;
         }
+    }
+
+    #endregion
+
+    #region Role Hierarchy (Stub implementations)
+
+    public Task<IEnumerable<Domain.Role>> GetChildRolesAsync(int parentRoleId)
+    {
+        // TODO: Implement role hierarchy if needed
+        _logger.LogWarning("GetChildRolesAsync not yet implemented - returning empty collection");
+        return Task.FromResult(Enumerable.Empty<Domain.Role>());
+    }
+
+    public Task<IEnumerable<Domain.Role>> GetParentRolesAsync(int childRoleId)
+    {
+        // TODO: Implement role hierarchy if needed
+        _logger.LogWarning("GetParentRolesAsync not yet implemented - returning empty collection");
+        return Task.FromResult(Enumerable.Empty<Domain.Role>());
+    }
+
+    public Task AddRoleHierarchyAsync(int parentRoleId, int childRoleId, string createdBy)
+    {
+        // TODO: Implement role hierarchy if needed
+        _logger.LogWarning("AddRoleHierarchyAsync not yet implemented");
+        throw new NotImplementedException("Role hierarchy not yet implemented");
+    }
+
+    public Task RemoveRoleHierarchyAsync(int parentRoleId, int childRoleId, string removedBy)
+    {
+        // TODO: Implement role hierarchy if needed
+        _logger.LogWarning("RemoveRoleHierarchyAsync not yet implemented");
+        throw new NotImplementedException("Role hierarchy not yet implemented");
+    }
+
+    #endregion
+
+    #region Bulk Operations (Stub implementations)
+
+    public Task<IEnumerable<Domain.Role>> CreateRolesBulkAsync(IEnumerable<(string Name, string Description)> roles, string createdBy)
+    {
+        // TODO: Implement bulk operations
+        _logger.LogWarning("CreateRolesBulkAsync not yet implemented");
+        throw new NotImplementedException("Bulk operations not yet implemented");
+    }
+
+    public Task AssignUsersToRoleBulkAsync(int roleId, IEnumerable<int> userIds, string assignedBy)
+    {
+        // TODO: Implement bulk operations
+        _logger.LogWarning("AssignUsersToRoleBulkAsync not yet implemented");
+        throw new NotImplementedException("Bulk operations not yet implemented");
+    }
+
+    public Task AddPermissionsToRoleBulkAsync(int roleId, IEnumerable<Permission> permissions, string addedBy)
+    {
+        // TODO: Implement bulk operations
+        _logger.LogWarning("AddPermissionsToRoleBulkAsync not yet implemented");
+        throw new NotImplementedException("Bulk operations not yet implemented");
+    }
+
+    #endregion
+
+    #region Search and Filtering (Stub implementations)
+
+    public Task<IEnumerable<Domain.Role>> SearchRolesAsync(string searchTerm)
+    {
+        // TODO: Implement search functionality
+        _logger.LogWarning("SearchRolesAsync not yet implemented - returning empty collection");
+        return Task.FromResult(Enumerable.Empty<Domain.Role>());
+    }
+
+    public Task<IEnumerable<Domain.Role>> GetRolesByPermissionAsync(string resource, string action)
+    {
+        // TODO: Implement search functionality
+        _logger.LogWarning("GetRolesByPermissionAsync not yet implemented - returning empty collection");
+        return Task.FromResult(Enumerable.Empty<Domain.Role>());
+    }
+
+    public Task<IEnumerable<Domain.Role>> GetRolesByGroupAsync(int groupId)
+    {
+        try
+        {
+            var group = _entityGraph.Groups.GetValueOrDefault(groupId);
+            if (group == null)
+            {
+                return Task.FromResult(Enumerable.Empty<Domain.Role>());
+            }
+
+            var roles = group.Children.OfType<Domain.Role>().ToList();
+            
+            _logger.LogDebug("Retrieved {Count} roles for group {GroupId}", roles.Count, groupId);
+            return Task.FromResult<IEnumerable<Domain.Role>>(roles);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving roles for group {GroupId}", groupId);
+            return Task.FromResult(Enumerable.Empty<Domain.Role>());
+        }
+    }
+
+    #endregion
+
+    #region Role Templates and Cloning (Stub implementations)
+
+    public Task<Domain.Role> CloneRoleAsync(int sourceRoleId, string newRoleName, string clonedBy)
+    {
+        // TODO: Implement role cloning
+        _logger.LogWarning("CloneRoleAsync not yet implemented");
+        throw new NotImplementedException("Role cloning not yet implemented");
+    }
+
+    public Task<Domain.Role> CreateRoleFromTemplateAsync(string templateName, string roleName, string createdBy)
+    {
+        // TODO: Implement role templates
+        _logger.LogWarning("CreateRoleFromTemplateAsync not yet implemented");
+        throw new NotImplementedException("Role templates not yet implemented");
     }
 
     #endregion

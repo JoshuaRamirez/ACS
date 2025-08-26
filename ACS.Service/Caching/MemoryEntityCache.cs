@@ -47,7 +47,7 @@ public class MemoryEntityCache : IEntityCache
     }
     
     // User caching
-    public async Task<User?> GetUserAsync(int userId)
+    public Task<User?> GetUserAsync(int userId)
     {
         using var activity = _activitySource.StartActivity("GetUser");
         activity?.SetTag("user.id", userId);
@@ -58,16 +58,16 @@ public class MemoryEntityCache : IEntityCache
             IncrementHit("User");
             activity?.SetTag("cache.hit", true);
             _logger.LogTrace("Cache hit for user {UserId}", userId);
-            return user;
+            return Task.FromResult<User?>(user);
         }
         
         IncrementMiss("User");
         activity?.SetTag("cache.hit", false);
         _logger.LogTrace("Cache miss for user {UserId}", userId);
-        return null;
+        return Task.FromResult<User?>(null);
     }
     
-    public async Task SetUserAsync(User user)
+    public Task SetUserAsync(User user)
     {
         using var activity = _activitySource.StartActivity("SetUser");
         activity?.SetTag("user.id", user.Id);
@@ -75,9 +75,10 @@ public class MemoryEntityCache : IEntityCache
         var key = $"{USER_PREFIX}{user.Id}";
         _cache.Set(key, user, _defaultOptions);
         _logger.LogTrace("Cached user {UserId}", user.Id);
+        return Task.CompletedTask;
     }
     
-    public async Task InvalidateUserAsync(int userId)
+    public Task InvalidateUserAsync(int userId)
     {
         using var activity = _activitySource.StartActivity("InvalidateUser");
         activity?.SetTag("user.id", userId);
@@ -86,14 +87,15 @@ public class MemoryEntityCache : IEntityCache
         _cache.Remove(key);
         
         // Also invalidate related caches
-        await InvalidateUserGroupsAsync(userId);
-        await InvalidateUserRolesAsync(userId);
+        _ = InvalidateUserGroupsAsync(userId);
+        _ = InvalidateUserRolesAsync(userId);
         
         _logger.LogTrace("Invalidated cache for user {UserId}", userId);
+        return Task.CompletedTask;
     }
     
     // Group caching
-    public async Task<Group?> GetGroupAsync(int groupId)
+    public Task<Group?> GetGroupAsync(int groupId)
     {
         using var activity = _activitySource.StartActivity("GetGroup");
         activity?.SetTag("group.id", groupId);
@@ -103,24 +105,25 @@ public class MemoryEntityCache : IEntityCache
         {
             IncrementHit("Group");
             activity?.SetTag("cache.hit", true);
-            return group;
+            return Task.FromResult<Group?>(group);
         }
         
         IncrementMiss("Group");
         activity?.SetTag("cache.hit", false);
-        return null;
+        return Task.FromResult<Group?>(null);
     }
     
-    public async Task SetGroupAsync(Group group)
+    public Task SetGroupAsync(Group group)
     {
         using var activity = _activitySource.StartActivity("SetGroup");
         activity?.SetTag("group.id", group.Id);
         
         var key = $"{GROUP_PREFIX}{group.Id}";
         _cache.Set(key, group, _defaultOptions);
+        return Task.CompletedTask;
     }
     
-    public async Task InvalidateGroupAsync(int groupId)
+    public Task InvalidateGroupAsync(int groupId)
     {
         using var activity = _activitySource.StartActivity("InvalidateGroup");
         activity?.SetTag("group.id", groupId);
@@ -130,10 +133,11 @@ public class MemoryEntityCache : IEntityCache
         
         // Invalidate parent and child group caches if needed
         // This would require tracking relationships, skipping for simplicity
+        return Task.CompletedTask;
     }
     
     // Role caching
-    public async Task<Role?> GetRoleAsync(int roleId)
+    public Task<Role?> GetRoleAsync(int roleId)
     {
         using var activity = _activitySource.StartActivity("GetRole");
         activity?.SetTag("role.id", roleId);
@@ -143,47 +147,49 @@ public class MemoryEntityCache : IEntityCache
         {
             IncrementHit("Role");
             activity?.SetTag("cache.hit", true);
-            return role;
+            return Task.FromResult<Role?>(role);
         }
         
         IncrementMiss("Role");
         activity?.SetTag("cache.hit", false);
-        return null;
+        return Task.FromResult<Role?>(null);
     }
     
-    public async Task SetRoleAsync(Role role)
+    public Task SetRoleAsync(Role role)
     {
         using var activity = _activitySource.StartActivity("SetRole");
         activity?.SetTag("role.id", role.Id);
         
         var key = $"{ROLE_PREFIX}{role.Id}";
         _cache.Set(key, role, _defaultOptions);
+        return Task.CompletedTask;
     }
     
-    public async Task InvalidateRoleAsync(int roleId)
+    public Task InvalidateRoleAsync(int roleId)
     {
         using var activity = _activitySource.StartActivity("InvalidateRole");
         activity?.SetTag("role.id", roleId);
         
         var key = $"{ROLE_PREFIX}{roleId}";
         _cache.Remove(key);
+        return Task.CompletedTask;
     }
     
     // Permission caching
-    public async Task<List<Permission>?> GetEntityPermissionsAsync(int entityId)
+    public Task<List<Permission>?> GetEntityPermissionsAsync(int entityId)
     {
         var key = $"{PERMISSIONS_PREFIX}{entityId}";
         if (_cache.TryGetValue<List<Permission>>(key, out var permissions))
         {
             IncrementHit("Permissions");
-            return permissions;
+            return Task.FromResult<List<Permission>?>(permissions);
         }
         
         IncrementMiss("Permissions");
-        return null;
+        return Task.FromResult<List<Permission>?>(null);
     }
     
-    public async Task SetEntityPermissionsAsync(int entityId, List<Permission> permissions)
+    public Task SetEntityPermissionsAsync(int entityId, List<Permission> permissions)
     {
         var key = $"{PERMISSIONS_PREFIX}{entityId}";
         // Permissions might change more frequently, use shorter expiration
@@ -194,67 +200,73 @@ public class MemoryEntityCache : IEntityCache
             Priority = CacheItemPriority.Normal
         };
         _cache.Set(key, permissions, options);
+        return Task.CompletedTask;
     }
     
-    public async Task InvalidateEntityPermissionsAsync(int entityId)
+    public Task InvalidateEntityPermissionsAsync(int entityId)
     {
         var key = $"{PERMISSIONS_PREFIX}{entityId}";
         _cache.Remove(key);
+        return Task.CompletedTask;
     }
     
     // Relationship caching
-    public async Task<List<int>?> GetUserGroupsAsync(int userId)
+    public Task<List<int>?> GetUserGroupsAsync(int userId)
     {
         var key = $"{USER_GROUPS_PREFIX}{userId}";
         if (_cache.TryGetValue<List<int>>(key, out var groupIds))
         {
             IncrementHit("UserGroups");
-            return groupIds;
+            return Task.FromResult<List<int>?>(groupIds);
         }
         
         IncrementMiss("UserGroups");
-        return null;
+        return Task.FromResult<List<int>?>(null);
     }
     
-    public async Task SetUserGroupsAsync(int userId, List<int> groupIds)
+    public Task SetUserGroupsAsync(int userId, List<int> groupIds)
     {
         var key = $"{USER_GROUPS_PREFIX}{userId}";
         _cache.Set(key, groupIds, _defaultOptions);
+        return Task.CompletedTask;
     }
     
-    public async Task InvalidateUserGroupsAsync(int userId)
+    public Task InvalidateUserGroupsAsync(int userId)
     {
         var key = $"{USER_GROUPS_PREFIX}{userId}";
         _cache.Remove(key);
+        return Task.CompletedTask;
     }
     
-    public async Task<List<int>?> GetUserRolesAsync(int userId)
+    public Task<List<int>?> GetUserRolesAsync(int userId)
     {
         var key = $"{USER_ROLES_PREFIX}{userId}";
         if (_cache.TryGetValue<List<int>>(key, out var roleIds))
         {
             IncrementHit("UserRoles");
-            return roleIds;
+            return Task.FromResult<List<int>?>(roleIds);
         }
         
         IncrementMiss("UserRoles");
-        return null;
+        return Task.FromResult<List<int>?>(null);
     }
     
-    public async Task SetUserRolesAsync(int userId, List<int> roleIds)
+    public Task SetUserRolesAsync(int userId, List<int> roleIds)
     {
         var key = $"{USER_ROLES_PREFIX}{userId}";
         _cache.Set(key, roleIds, _defaultOptions);
+        return Task.CompletedTask;
     }
     
-    public async Task InvalidateUserRolesAsync(int userId)
+    public Task InvalidateUserRolesAsync(int userId)
     {
         var key = $"{USER_ROLES_PREFIX}{userId}";
         _cache.Remove(key);
+        return Task.CompletedTask;
     }
     
     // Cache management
-    public async Task<CacheStatistics> GetStatisticsAsync()
+    public Task<CacheStatistics> GetStatisticsAsync()
     {
         var stats = new CacheStatistics
         {
@@ -270,10 +282,10 @@ public class MemoryEntityCache : IEntityCache
         stats.ItemCount = -1;
         stats.MemoryUsageBytes = -1;
         
-        return stats;
+        return Task.FromResult(stats);
     }
     
-    public async Task ClearAsync()
+    public Task ClearAsync()
     {
         using var activity = _activitySource.StartActivity("ClearCache");
         
@@ -286,15 +298,19 @@ public class MemoryEntityCache : IEntityCache
         Interlocked.Exchange(ref _totalMisses, 0);
         _hitsByType.Clear();
         _missesByType.Clear();
+        
+        return Task.CompletedTask;
     }
     
-    public async Task WarmupAsync()
+    public Task WarmupAsync()
     {
         using var activity = _activitySource.StartActivity("WarmupCache");
         
         // In production, this would preload frequently accessed entities
         // For now, just log the warmup request
         _logger.LogInformation("Cache warmup requested");
+        
+        return Task.CompletedTask;
     }
     
     private void IncrementHit(string entityType)

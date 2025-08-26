@@ -50,46 +50,34 @@ public static class HealthCheckExtensions
         // Add ASP.NET Core health checks integration
         var healthChecksBuilder = services.AddHealthChecks();
 
-        // Add database health check
+        // Add database health check using custom implementation
         var connectionString = configuration.GetConnectionString("DefaultConnection");
         if (!string.IsNullOrEmpty(connectionString))
         {
-            healthChecksBuilder.AddSqlServer(
-                connectionString,
-                name: "database",
-                failureStatus: HealthStatus.Unhealthy,
-                tags: new[] { "database", "sql" },
-                timeout: TimeSpan.FromSeconds(5));
+            healthChecksBuilder.AddCheck<DatabaseHealthCheck>("database", HealthStatus.Unhealthy, new[] { "database", "sql" });
         }
 
         // Add Redis health check if configured
         var redisConnectionString = configuration.GetConnectionString("Redis");
         if (!string.IsNullOrEmpty(redisConnectionString))
         {
-            healthChecksBuilder.AddRedis(
-                redisConnectionString,
-                name: "redis",
-                failureStatus: HealthStatus.Degraded,
-                tags: new[] { "cache", "redis" },
-                timeout: TimeSpan.FromSeconds(3));
+            // TODO: AddRedis extension method requires AspNetCore.HealthChecks.Redis package
+            // healthChecksBuilder.AddRedis(
+            //     redisConnectionString,
+            //     name: "redis",
+            //     failureStatus: HealthStatus.Degraded,
+            //     tags: new[] { "cache", "redis" },
+            //     timeout: TimeSpan.FromSeconds(3));
+            healthChecksBuilder.AddCheck<RedisHealthCheck>("redis", HealthStatus.Degraded, new[] { "cache", "redis" });
         }
 
-        // Add disk space health check
-        healthChecksBuilder.AddDiskStorageHealthCheck(
-            setup =>
-            {
-                setup.AddDrive("C:\\", configuration.GetValue<long>("HealthChecks:DiskSpace:MinimumFreeMB", 1024));
-            },
-            name: "disk_space",
-            failureStatus: HealthStatus.Unhealthy,
-            tags: new[] { "infrastructure", "disk" });
+        // TODO: AddDiskStorageHealthCheck requires AspNetCore.HealthChecks.System package
+        // Add disk space health check using custom implementation
+        healthChecksBuilder.AddCheck<DiskSpaceHealthCheck>("disk_space", HealthStatus.Unhealthy, new[] { "infrastructure", "disk" });
 
-        // Add memory health check
-        healthChecksBuilder.AddPrivateMemoryHealthCheck(
-            configuration.GetValue<long>("HealthChecks:Memory:MaxMemoryMB", 2048) * 1024 * 1024,
-            name: "memory",
-            failureStatus: HealthStatus.Degraded,
-            tags: new[] { "infrastructure", "memory" });
+        // TODO: AddPrivateMemoryHealthCheck requires AspNetCore.HealthChecks.System package
+        // Add memory health check using custom implementation
+        healthChecksBuilder.AddCheck<MemoryHealthCheck>("memory", HealthStatus.Degraded, new[] { "infrastructure", "memory" });
 
         // Add external service health checks
         var externalServices = configuration.GetSection("HealthChecks:ExternalServices").GetChildren();
@@ -98,29 +86,25 @@ public static class HealthCheckExtensions
             var endpoint = service["Endpoint"];
             if (!string.IsNullOrEmpty(endpoint))
             {
-                healthChecksBuilder.AddUrlGroup(
-                    new Uri(endpoint),
-                    name: $"external_{service.Key.ToLower()}",
-                    failureStatus: HealthStatus.Degraded,
-                    tags: new[] { "external", service.Key.ToLower() },
-                    timeout: TimeSpan.FromSeconds(service.GetValue("TimeoutSeconds", 5)));
+                // TODO: AddUrlGroup requires AspNetCore.HealthChecks.Network package
+                // healthChecksBuilder.AddUrlGroup(
+                //     new Uri(endpoint),
+                //     name: $"external_{service.Key.ToLower()}",
+                //     failureStatus: HealthStatus.Degraded,
+                //     tags: new[] { "external", service.Key.ToLower() },
+                //     timeout: TimeSpan.FromSeconds(service.GetValue("TimeoutSeconds", 5)));
+                healthChecksBuilder.AddCheck<ExternalServiceHealthCheck>($"external_{service.Key.ToLower()}", 
+                    HealthStatus.Degraded, new[] { "external", service.Key.ToLower() });
             }
         }
 
-        // Add advanced health checks
+        // Add advanced health checks using custom implementations
+        // TODO: These extension methods are not available, using AddCheck instead
         healthChecksBuilder
-            .AddBusinessLogicHealthCheck(
-                name: "business_logic",
-                failureStatus: HealthStatus.Unhealthy,
-                tags: new[] { "business", "domain", "services" })
-            .AddTenantHealthCheck(
-                name: "tenants",
-                failureStatus: HealthStatus.Degraded,
-                tags: new[] { "tenants", "processes", "multi-tenant" })
-            .AddIntegrationHealthCheck(
-                name: "integration",
-                failureStatus: HealthStatus.Degraded,
-                tags: new[] { "integration", "connectivity", "cross-component" });
+            // TODO: BusinessLogicHealthCheck class is not accessible from Infrastructure layer
+            // .AddCheck<BusinessLogicHealthCheck>("business_logic", HealthStatus.Unhealthy, new[] { "business", "domain", "services" })
+            .AddCheck<TenantHealthCheck>("tenants", HealthStatus.Degraded, new[] { "tenants", "processes", "multi-tenant" })
+            .AddCheck<IntegrationHealthCheck>("integration", HealthStatus.Degraded, new[] { "integration", "connectivity", "cross-component" });
 
         return services;
     }
@@ -132,6 +116,10 @@ public static class HealthCheckExtensions
         this IServiceCollection services,
         IConfiguration configuration)
     {
+        // TODO: AddHealthChecksUI requires AspNetCore.HealthChecks.UI package
+        // Health check UI configuration would go here if package is available
+        // For now, just return services without UI configuration
+        /*
         services.AddHealthChecksUI(options =>
         {
             options.SetEvaluationTimeInSeconds(30);
@@ -154,6 +142,7 @@ public static class HealthCheckExtensions
             }
         })
         .AddInMemoryStorage();
+        */
 
         return services;
     }

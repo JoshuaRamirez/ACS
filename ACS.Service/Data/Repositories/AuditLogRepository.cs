@@ -321,7 +321,7 @@ public class AuditLogRepository : Repository<AuditLog>, IAuditLogRepository
         };
 
         return await GetPagedAsync(pageNumber, pageSize, query.Expression as Expression<Func<AuditLog, bool>>, 
-            orderBy: _ => query as IOrderedQueryable<AuditLog>, cancellationToken: cancellationToken);
+            orderBy: _ => (query as IOrderedQueryable<AuditLog>) ?? query.OrderBy(al => al.ChangeDate), cancellationToken: cancellationToken);
     }
 
     private static IEnumerable<string> GetComplianceKeywords(string complianceType)

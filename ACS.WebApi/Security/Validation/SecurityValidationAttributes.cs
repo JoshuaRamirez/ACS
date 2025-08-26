@@ -48,7 +48,12 @@ public class NoSqlInjectionAttribute : ValidationAttribute
     {
         @"(\b(SELECT|INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|EXEC|EXECUTE|UNION)\b)",
         @"(--|\#|\/\*|\*\/)",
-        @"(\bOR\b|\bAND\b)[\s]*['\"]?[\s]*[=<>]"
+        @"(\bOR\b|\bAND\b)[\s]*'[\s]*=",
+        @"(\bOR\b|\bAND\b)[\s]*""[\s]*=",
+        @"(\bOR\b|\bAND\b)[\s]*'[\s]*<",
+        @"(\bOR\b|\bAND\b)[\s]*""[\s]*<",
+        @"(\bOR\b|\bAND\b)[\s]*'[\s]*>",
+        @"(\bOR\b|\bAND\b)[\s]*""[\s]*>"
     };
 
     protected override ValidationResult? IsValid(object? value, ValidationContext validationContext)
@@ -337,12 +342,12 @@ public class SafeLengthAttribute : ValidationAttribute
         var input = value.ToString();
         if (TrimWhitespace) input = input?.Trim() ?? string.Empty;
 
-        if (input.Length < MinLength)
+        if (input?.Length < MinLength)
         {
             return new ValidationResult($"The field {validationContext.DisplayName} must be at least {MinLength} characters long.");
         }
 
-        if (input.Length > MaxLength)
+        if (input?.Length > MaxLength)
         {
             return new ValidationResult($"The field {validationContext.DisplayName} cannot exceed {MaxLength} characters.");
         }

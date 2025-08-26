@@ -1,5 +1,6 @@
 using ACS.Infrastructure.Services;
 using Grpc.Net.Client;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using System.Collections.Concurrent;
 
@@ -134,7 +135,7 @@ public class TenantContextService : ITenantContextService
 
     public void ClearTenantContext()
     {
-        _tenantContext.Value = null;
+        _tenantContext.Value = new TenantContext();
         
         var httpContext = _httpContextAccessor.HttpContext;
         if (httpContext != null)

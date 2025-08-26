@@ -89,7 +89,7 @@ public class RedisHealthCheck : IHealthCheck
                 {
                     if (group.Key == "Memory")
                     {
-                        var memoryInfo = ParseRedisInfo(group);
+                        var memoryInfo = ParseRedisInfo(new KeyValuePair<string, KeyValuePair<string, string>[]>(group.Key, group.ToArray()));
                         if (memoryInfo.TryGetValue("used_memory_human", out var usedMemory))
                             data["UsedMemory"] = usedMemory;
                         if (memoryInfo.TryGetValue("used_memory_peak_human", out var peakMemory))
@@ -97,7 +97,7 @@ public class RedisHealthCheck : IHealthCheck
                     }
                     else if (group.Key == "Stats")
                     {
-                        var statsInfo = ParseRedisInfo(group);
+                        var statsInfo = ParseRedisInfo(new KeyValuePair<string, KeyValuePair<string, string>[]>(group.Key, group.ToArray()));
                         if (statsInfo.TryGetValue("total_connections_received", out var connections))
                             data["TotalConnections"] = connections;
                         if (statsInfo.TryGetValue("total_commands_processed", out var commands))
@@ -105,7 +105,7 @@ public class RedisHealthCheck : IHealthCheck
                     }
                     else if (group.Key == "Clients")
                     {
-                        var clientInfo = ParseRedisInfo(group);
+                        var clientInfo = ParseRedisInfo(new KeyValuePair<string, KeyValuePair<string, string>[]>(group.Key, group.ToArray()));
                         if (clientInfo.TryGetValue("connected_clients", out var clients))
                             data["ConnectedClients"] = clients;
                     }

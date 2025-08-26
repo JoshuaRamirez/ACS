@@ -49,7 +49,7 @@ public interface IPermissionEvaluationService
     Task<IEnumerable<Permission>> GetConflictingPermissionsAsync(int entityId, string uri, HttpVerb httpVerb);
     
     // Permission Templates and Presets
-    Task<PermissionTemplate> GetPermissionTemplateAsync(string templateName);
+    Task<PermissionTemplate?> GetPermissionTemplateAsync(string templateName);
     Task<IEnumerable<PermissionTemplate>> GetAllPermissionTemplatesAsync();
     Task ApplyPermissionTemplateAsync(int entityId, string templateName);
     Task<PermissionTemplate> CreatePermissionTemplateAsync(string name, IEnumerable<Permission> permissions);
@@ -85,7 +85,7 @@ public interface IPermissionEvaluationService
     
     // Permission Policies
     Task<bool> EvaluatePolicyAsync(int entityId, string policyName, Dictionary<string, object> context);
-    Task<PermissionPolicy> GetPolicyAsync(string policyName);
+    Task<PermissionPolicy?> GetPolicyAsync(string policyName);
     Task<IEnumerable<PermissionPolicy>> GetApplicablePoliciesAsync(int entityId);
     Task CreatePolicyAsync(PermissionPolicy policy);
     Task UpdatePolicyAsync(string policyName, PermissionPolicy policy);

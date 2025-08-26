@@ -8,6 +8,7 @@ namespace ACS.Service.Domain;
 public class Permission
 {
     public int Id { get; set; }
+    public int EntityId { get; set; }
     
     [Required]
     [ValidUriPattern(AllowWildcards = true, AllowParameters = true, AllowedSchemes = new[] { "http", "https" })]
@@ -21,4 +22,9 @@ public class Permission
     
     [Required]
     public Scheme Scheme { get; set; }
+    
+    // Additional properties expected by services
+    public string Resource { get; set; } = string.Empty;
+    public string Action { get; set; } = string.Empty;
+    public string Scope { get; set; } = string.Empty;
 }

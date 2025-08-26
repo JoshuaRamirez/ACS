@@ -27,17 +27,19 @@ public class EnvironmentVariableProvider : ConfigurationProvider, IConfiguration
 
     public override void Load()
     {
-        Data = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        Data = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
 
         // Load environment variables
         var envVars = Environment.GetEnvironmentVariables();
         
         foreach (var key in envVars.Keys)
         {
+            if (key == null) continue;
+            
             var keyStr = key.ToString();
             var value = envVars[key]?.ToString();
 
-            if (string.IsNullOrEmpty(value))
+            if (string.IsNullOrEmpty(value) || string.IsNullOrEmpty(keyStr))
                 continue;
 
             // Check if it's an ACS-specific variable
@@ -166,6 +168,9 @@ public class EnvironmentVariableProvider : ConfigurationProvider, IConfiguration
         foreach (var kvp in Data)
         {
             var value = kvp.Value;
+            if (string.IsNullOrEmpty(value))
+                continue;
+            
             var matches = regex.Matches(value);
             
             foreach (Match match in matches)

@@ -64,14 +64,14 @@ public class RoleRepository : Repository<Role>, IRoleRepository
 
     public async Task<IEnumerable<RoleWithPermissionCount>> GetRolesWithPermissionCountsAsync(Expression<Func<Role, bool>>? predicate = null, CancellationToken cancellationToken = default)
     {
-        var rolesQuery = _dbSet.Include(r => r.Entity);
+        IQueryable<Role> rolesQuery = _dbSet.Include(r => r.Entity);
         
         if (predicate != null)
             rolesQuery = rolesQuery.Where(predicate);
 
         var roles = await rolesQuery.ToListAsync(cancellationToken);
 
-        var roleCounts = await (from r in roles
+        var roleCounts = (from r in roles
                               join e in _context.Entities on r.EntityId equals e.Id
                               join ps in _context.EntityPermissions on e.Id equals ps.EntityId into permissions
                               from p in permissions.DefaultIfEmpty()
@@ -86,7 +86,7 @@ public class RoleRepository : Repository<Role>, IRoleRepository
                                   PermissionCount = g.Count(x => x.a != null),
                                   ResourceCount = g.Where(x => x.resource != null).Select(x => x.resource.Id).Distinct().Count(),
                                   ResourceUris = g.Where(x => x.resource != null).Select(x => x.resource.Uri).Distinct()
-                              }).ToListAsync(cancellationToken);
+                              }).ToList();
 
         return roles.Select(role =>
         {
@@ -103,14 +103,14 @@ public class RoleRepository : Repository<Role>, IRoleRepository
 
     public async Task<IEnumerable<RoleWithAssignmentCount>> GetRolesWithAssignmentCountsAsync(Expression<Func<Role, bool>>? predicate = null, CancellationToken cancellationToken = default)
     {
-        var rolesQuery = _dbSet.Include(r => r.Entity);
+        IQueryable<Role> rolesQuery = _dbSet.Include(r => r.Entity);
         
         if (predicate != null)
             rolesQuery = rolesQuery.Where(predicate);
 
         var roles = await rolesQuery.ToListAsync(cancellationToken);
 
-        var assignmentCounts = await (from r in roles
+        var assignmentCounts = (from r in roles
                                     join ur in _context.UserRoles on r.Id equals ur.RoleId into userRoles
                                     join gr in _context.GroupRoles on r.Id equals gr.RoleId into groupRoles
                                     select new
@@ -118,7 +118,7 @@ public class RoleRepository : Repository<Role>, IRoleRepository
                                         RoleId = r.Id,
                                         UserCount = userRoles.Count(),
                                         GroupCount = groupRoles.Count()
-                                    }).ToListAsync(cancellationToken);
+                                    }).ToList();
 
         return roles.Select(role =>
         {

@@ -279,7 +279,7 @@ public class RateLimitController : ControllerBase
         // Try to get tenant ID from various sources
         if (HttpContext.Items.TryGetValue("TenantId", out var tenantIdObj))
         {
-            return tenantIdObj.ToString() ?? "unknown";
+            return tenantIdObj?.ToString() ?? "unknown";
         }
         
         var tenantClaim = User.FindFirst("tenant_id")?.Value;

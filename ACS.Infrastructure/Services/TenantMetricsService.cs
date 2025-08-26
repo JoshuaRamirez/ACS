@@ -11,7 +11,7 @@ namespace ACS.Infrastructure.Services;
 /// <summary>
 /// Service for collecting and reporting tenant-specific metrics and usage data
 /// </summary>
-public class TenantMetricsService : BackgroundService
+public class TenantMetricsService : BackgroundService // TEMPORARILY DISABLED metric methods due to OpenTelemetry API issues
 {
     private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<TenantMetricsService> _logger;
@@ -35,23 +35,19 @@ public class TenantMetricsService : BackgroundService
         // Create observable gauges
         _activeTenants = OpenTelemetryConfiguration.ServiceMeter.CreateObservableGauge<long>(
             "acs_active_tenants_gauge", 
-            "Number of active tenants",
-            observeValue: () => new Measurement<long>(_tenantUsage.Count));
+            () => new Measurement<long>(_tenantUsage.Count));
             
         _activeUsers = OpenTelemetryConfiguration.ServiceMeter.CreateObservableGauge<long>(
             "acs_active_users_gauge", 
-            "Number of active users across all tenants",
-            observeValue: () => new Measurement<long>(_tenantUsage.Values.Sum(t => t.ActiveUsers)));
+            () => new Measurement<long>(_tenantUsage.Values.Sum(t => t.ActiveUsers)));
             
         _totalPermissionChecks = OpenTelemetryConfiguration.ServiceMeter.CreateObservableGauge<long>(
             "acs_permission_checks_gauge", 
-            "Total permission checks across all tenants",
-            observeValue: () => new Measurement<long>(_tenantUsage.Values.Sum(t => t.PermissionChecks)));
+            () => new Measurement<long>(_tenantUsage.Values.Sum(t => t.PermissionChecks)));
             
         _averageResponseTime = OpenTelemetryConfiguration.ServiceMeter.CreateObservableGauge<double>(
             "acs_average_response_time_gauge", 
-            "Average response time across all tenants",
-            observeValue: () => 
+            () => 
             {
                 var allResponseTimes = _tenantUsage.Values.Where(t => t.RequestCount > 0).ToList();
                 if (!allResponseTimes.Any()) return new Measurement<double>(0);
@@ -156,23 +152,19 @@ public class TenantMetricsService : BackgroundService
         // Record per-tenant gauges
         OpenTelemetryConfiguration.ServiceMeter.CreateObservableGauge<long>(
             "acs_tenant_active_users",
-            "Active users per tenant",
-            observeValue: () => new Measurement<long>(usage.ActiveUsers, tags));
+            () => new Measurement<long>(usage.ActiveUsers, tags));
 
         OpenTelemetryConfiguration.ServiceMeter.CreateObservableGauge<long>(
             "acs_tenant_permission_checks",
-            "Permission checks per tenant",
-            observeValue: () => new Measurement<long>(usage.PermissionChecks, tags));
+            () => new Measurement<long>(usage.PermissionChecks, tags));
 
         OpenTelemetryConfiguration.ServiceMeter.CreateObservableGauge<long>(
             "acs_tenant_storage_bytes",
-            "Storage used per tenant in bytes",
-            observeValue: () => new Measurement<long>(usage.StorageUsedBytes, tags));
+            () => new Measurement<long>(usage.StorageUsedBytes, tags));
 
         OpenTelemetryConfiguration.ServiceMeter.CreateObservableGauge<double>(
             "acs_tenant_avg_response_time",
-            "Average response time per tenant",
-            observeValue: () => new Measurement<double>(
+            () => new Measurement<double>(
                 usage.RequestCount > 0 ? usage.TotalResponseTime / usage.RequestCount : 0, tags));
     }
 

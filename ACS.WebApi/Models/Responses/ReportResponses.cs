@@ -1,3 +1,5 @@
+using ACS.WebApi.Resources;
+
 namespace ACS.WebApi.Models.Responses;
 
 #region Base Report Responses

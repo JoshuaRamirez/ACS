@@ -1,18 +1,36 @@
-using ACS.Service.Domain;
+using ACS.Service.Requests;
+using ACS.Service.Responses;
 
 namespace ACS.Service.Services;
 
+/// <summary>
+/// Service interface for User operations using request/response pattern
+/// Supports full REST operations with proper separation of concerns
+/// </summary>
 public interface IUserService
 {
-    // Async methods (preferred)
-    Task<IEnumerable<User>> GetAllAsync();
-    Task<User?> GetByIdAsync(int id);
-    Task<User> AddAsync(User user, string createdBy);
-    Task<User> UpdateAsync(User user);
-    Task DeleteAsync(int id);
+    // Query operations
+    Task<UserResponse> GetByIdAsync(GetUserRequest request);
+    Task<UsersResponse> GetAllAsync(GetUsersRequest request);
     
-    // Legacy sync methods for backward compatibility (deprecated)
-    IEnumerable<User> GetAll();
-    User? GetById(int id);
-    User Add(User user);
+    // Create operations
+    Task<CreateUserResponse> CreateAsync(CreateUserRequest request);
+    
+    // Update operations
+    Task<UpdateUserResponse> UpdateAsync(UpdateUserRequest request);
+    Task<UpdateUserResponse> PatchAsync(PatchUserRequest request);
+    
+    // Delete operations
+    Task<DeleteUserResponse> DeleteAsync(DeleteUserRequest request);
+    
+    // Relationship operations
+    Task<UserGroupResponse> AddToGroupAsync(AddUserToGroupRequest request);
+    Task<UserGroupResponse> RemoveFromGroupAsync(RemoveUserFromGroupRequest request);
+    Task<UserRoleResponse> AssignToRoleAsync(AssignUserToRoleRequest request);
+    Task<UserRoleResponse> UnassignFromRoleAsync(UnassignUserFromRoleRequest request);
+    
+    // Bulk operations
+    Task<BulkUserResponse<CreateUserResponse>> CreateBulkAsync(BulkUserRequest<CreateUserRequest> request);
+    Task<BulkUserResponse<UpdateUserResponse>> UpdateBulkAsync(BulkUserRequest<UpdateUserRequest> request);
+    Task<BulkUserResponse<DeleteUserResponse>> DeleteBulkAsync(BulkUserRequest<DeleteUserRequest> request);
 }

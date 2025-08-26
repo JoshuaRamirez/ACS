@@ -1,5 +1,7 @@
 using Grpc.Core;
+using Grpc.Core.Interceptors;
 using Microsoft.Extensions.Logging;
+using System.Runtime.CompilerServices;
 using System.Runtime.ExceptionServices;
 using System.Text.Json;
 
@@ -149,20 +151,26 @@ public class GrpcErrorHandler : IGrpcErrorHandler
 
     public async IAsyncEnumerable<T> WrapStreamAsync<T>(
         Func<CancellationToken, IAsyncEnumerable<T>> operation,
-        CancellationToken cancellationToken = default)
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var correlationId = Guid.NewGuid().ToString();
         
-        IAsyncEnumerator<T>? enumerator = null;
+        var stream = GetStreamSafely(operation, correlationId, cancellationToken);
+        
+        await foreach (var item in stream.WithCancellation(cancellationToken))
+        {
+            yield return item;
+        }
+    }
+
+    private IAsyncEnumerable<T> GetStreamSafely<T>(
+        Func<CancellationToken, IAsyncEnumerable<T>> operation,
+        string correlationId,
+        CancellationToken cancellationToken)
+    {
         try
         {
-            var stream = operation(cancellationToken);
-            enumerator = stream.GetAsyncEnumerator(cancellationToken);
-
-            while (await enumerator.MoveNextAsync())
-            {
-                yield return enumerator.Current;
-            }
+            return operation(cancellationToken);
         }
         catch (RpcException)
         {
@@ -170,15 +178,8 @@ public class GrpcErrorHandler : IGrpcErrorHandler
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error in streaming operation. CorrelationId: {CorrelationId}", correlationId);
+            _logger.LogError(ex, "Error creating stream operation. CorrelationId: {CorrelationId}", correlationId);
             throw CreateRpcException(ex, correlationId);
-        }
-        finally
-        {
-            if (enumerator != null)
-            {
-                await enumerator.DisposeAsync();
-            }
         }
     }
 
@@ -397,6 +398,8 @@ public class ErrorHandlingInterceptor : Interceptor
         TRequest request,
         ServerCallContext context,
         UnaryServerMethod<TRequest, TResponse> continuation)
+        where TRequest : class
+        where TResponse : class
     {
         var correlationId = ExtractCorrelationId(context);
         
@@ -418,6 +421,8 @@ public class ErrorHandlingInterceptor : Interceptor
         IAsyncStreamReader<TRequest> requestStream,
         ServerCallContext context,
         ClientStreamingServerMethod<TRequest, TResponse> continuation)
+        where TRequest : class
+        where TResponse : class
     {
         var correlationId = ExtractCorrelationId(context);
         
@@ -440,6 +445,8 @@ public class ErrorHandlingInterceptor : Interceptor
         IServerStreamWriter<TResponse> responseStream,
         ServerCallContext context,
         ServerStreamingServerMethod<TRequest, TResponse> continuation)
+        where TRequest : class
+        where TResponse : class
     {
         var correlationId = ExtractCorrelationId(context);
         
@@ -462,6 +469,8 @@ public class ErrorHandlingInterceptor : Interceptor
         IServerStreamWriter<TResponse> responseStream,
         ServerCallContext context,
         DuplexStreamingServerMethod<TRequest, TResponse> continuation)
+        where TRequest : class
+        where TResponse : class
     {
         var correlationId = ExtractCorrelationId(context);
         

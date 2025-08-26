@@ -370,7 +370,7 @@ public class MigrationValidationService : IMigrationValidationService
                 {
                     MigrationId = migration,
                     IsApplied = isApplied,
-                    ProductVersion = migrationVersions.ContainsKey(migration) ? migrationVersions[migration] : null,
+                    ProductVersion = migrationVersions.ContainsKey(migration) ? migrationVersions[migration] : string.Empty,
                     AppliedDate = isApplied ? await GetMigrationAppliedDateAsync(migration, cancellationToken) : null
                 };
 
@@ -594,7 +594,7 @@ public class MigrationValidationService : IMigrationValidationService
                     CreatedAt = reader.GetDateTime(2),
                     BackupPath = reader.GetString(3),
                     CurrentMigration = reader.GetString(4),
-                    Metadata = reader.IsDBNull(5) ? null : reader.GetString(5)
+                    Metadata = reader.IsDBNull(5) ? string.Empty : reader.GetString(5)
                 });
             }
 
@@ -703,7 +703,7 @@ public class MigrationValidationService : IMigrationValidationService
         await Task.CompletedTask;
     }
 
-    private async Task<MigrationExecutionResult> ApplyMigrationToTestDatabaseAsync(
+    private Task<MigrationExecutionResult> ApplyMigrationToTestDatabaseAsync(
         string testConnectionString, string migrationName, CancellationToken cancellationToken)
     {
         var result = new MigrationExecutionResult();
@@ -724,7 +724,7 @@ public class MigrationValidationService : IMigrationValidationService
             result.Duration = DateTime.UtcNow - startTime;
         }
 
-        return result;
+        return Task.FromResult(result);
     }
 
     private async Task<Dictionary<string, bool>> RunValidationQueriesAsync(string connectionString, CancellationToken cancellationToken)
@@ -737,7 +737,7 @@ public class MigrationValidationService : IMigrationValidationService
         return await Task.FromResult(results);
     }
 
-    private async Task<RollbackTestResult> TestRollbackAsync(string connectionString, string migrationName, CancellationToken cancellationToken)
+    private Task<RollbackTestResult> TestRollbackAsync(string connectionString, string migrationName, CancellationToken cancellationToken)
     {
         var result = new RollbackTestResult();
         var startTime = DateTime.UtcNow;
@@ -755,7 +755,7 @@ public class MigrationValidationService : IMigrationValidationService
             result.Duration = DateTime.UtcNow - startTime;
         }
 
-        return result;
+        return Task.FromResult(result);
     }
 
     private async Task<PerformanceImpact> TestPerformanceImpactAsync(string connectionString, CancellationToken cancellationToken)
@@ -851,7 +851,7 @@ public class MigrationValidationService : IMigrationValidationService
 
 public class MigrationValidationResult
 {
-    public string MigrationName { get; set; }
+    public string MigrationName { get; set; } = string.Empty;
     public bool Success { get; set; }
     public List<string> Errors { get; set; } = new();
     public List<string> Warnings { get; set; } = new();
@@ -866,14 +866,14 @@ public class MigrationValidationResult
 
 public class MigrationTestResult
 {
-    public string MigrationName { get; set; }
+    public string MigrationName { get; set; } = string.Empty;
     public bool Success { get; set; }
     public bool MigrationSucceeded { get; set; }
     public bool RollbackSucceeded { get; set; }
     public TimeSpan? MigrationDuration { get; set; }
     public TimeSpan? RollbackDuration { get; set; }
     public Dictionary<string, bool> ValidationResults { get; set; } = new();
-    public PerformanceImpact PerformanceImpact { get; set; }
+    public PerformanceImpact PerformanceImpact { get; set; } = new();
     public List<string> Errors { get; set; } = new();
     public DateTime TestStartTime { get; set; }
     public DateTime TestEndTime { get; set; }
@@ -883,11 +883,11 @@ public class MigrationTestResult
 public class RollbackResult
 {
     public bool Success { get; set; }
-    public string Error { get; set; }
-    public string TargetMigration { get; set; }
-    public string FromMigration { get; set; }
+    public string Error { get; set; } = string.Empty;
+    public string TargetMigration { get; set; } = string.Empty;
+    public string FromMigration { get; set; } = string.Empty;
     public List<string> RolledBackMigrations { get; set; } = new();
-    public string BackupPath { get; set; }
+    public string BackupPath { get; set; } = string.Empty;
     public bool RestoredFromBackup { get; set; }
     public List<string> Warnings { get; set; } = new();
     public DateTime RollbackStartTime { get; set; }
@@ -897,16 +897,16 @@ public class RollbackResult
 
 public class MigrationInfo
 {
-    public string MigrationId { get; set; }
+    public string MigrationId { get; set; } = string.Empty;
     public bool IsApplied { get; set; }
     public DateTime? AppliedDate { get; set; }
-    public string ProductVersion { get; set; }
+    public string ProductVersion { get; set; } = string.Empty;
 }
 
 public class PendingMigration
 {
-    public string MigrationId { get; set; }
-    public MigrationValidationResult ValidationResult { get; set; }
+    public string MigrationId { get; set; } = string.Empty;
+    public MigrationValidationResult ValidationResult { get; set; } = new();
     public TimeSpan? EstimatedDuration { get; set; }
     public bool RequiresDowntime { get; set; }
     public bool RequiresBackup { get; set; }
@@ -921,7 +921,7 @@ public class MigrationHealthCheck
     public List<string> PendingMigrations { get; set; } = new();
     public bool HasConflicts { get; set; }
     public List<string> Conflicts { get; set; } = new();
-    public DatabaseIntegrityCheck DatabaseIntegrity { get; set; }
+    public DatabaseIntegrityCheck DatabaseIntegrity { get; set; } = new();
     public List<string> Errors { get; set; } = new();
     public DateTime CheckTime { get; set; }
 }
@@ -929,11 +929,11 @@ public class MigrationHealthCheck
 public class MigrationCheckpoint
 {
     public Guid CheckpointId { get; set; }
-    public string Description { get; set; }
+    public string Description { get; set; } = string.Empty;
     public DateTime CreatedAt { get; set; }
-    public string BackupPath { get; set; }
-    public string CurrentMigration { get; set; }
-    public string Metadata { get; set; }
+    public string BackupPath { get; set; } = string.Empty;
+    public string CurrentMigration { get; set; } = string.Empty;
+    public string Metadata { get; set; } = string.Empty;
 }
 
 // Helper classes
@@ -954,7 +954,7 @@ internal class DataLossCheck
 {
     public bool HasPotentialDataLoss { get; set; }
     public bool HasCriticalDataLoss { get; set; }
-    public string Description { get; set; }
+    public string Description { get; set; } = string.Empty;
 }
 
 internal class MigrationImpact
@@ -968,25 +968,25 @@ internal class MigrationImpact
 internal class MigrationExecutionResult
 {
     public bool Success { get; set; }
-    public string Error { get; set; }
+    public string Error { get; set; } = string.Empty;
     public TimeSpan Duration { get; set; }
 }
 
 internal class RollbackTestResult
 {
     public bool Success { get; set; }
-    public string Error { get; set; }
+    public string Error { get; set; } = string.Empty;
     public TimeSpan Duration { get; set; }
 }
 
-internal class PerformanceImpact
+public class PerformanceImpact
 {
     public double QueryTimeIncrease { get; set; }
     public double IndexFragmentation { get; set; }
     public long AdditionalStorageBytes { get; set; }
 }
 
-internal class DatabaseIntegrityCheck
+public class DatabaseIntegrityCheck
 {
     public bool IsHealthy { get; set; }
     public List<string> Issues { get; set; } = new();

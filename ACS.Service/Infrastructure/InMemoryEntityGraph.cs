@@ -932,4 +932,19 @@ public class InMemoryEntityGraph
             ? role 
             : throw new InvalidOperationException($"Role {roleId} not found");
     }
+
+    public int GetNextUserId()
+    {
+        return Users.Keys.Count > 0 ? Users.Keys.Max() + 1 : 1;
+    }
+
+    public int GetNextGroupId()
+    {
+        return Groups.Keys.Count > 0 ? Groups.Keys.Max() + 1 : 1;
+    }
+
+    public int GetNextRoleId()
+    {
+        return Roles.Keys.Count > 0 ? Roles.Keys.Max() + 1 : 1;
+    }
 }

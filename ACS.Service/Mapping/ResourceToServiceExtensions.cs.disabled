@@ -1,0 +1,294 @@
+using ACS.WebApi.Resources;
+using ACS.Service.Requests;
+
+namespace ACS.Service.Mapping;
+
+/// <summary>
+/// Extension methods for mapping REST resources to service request objects
+/// Clean, composable mappings with LINQ-style collection mappers
+/// </summary>
+public static class ResourceToServiceExtensions
+{
+    /// <summary>
+    /// Maps CreateUserResource to CreateUserRequest
+    /// </summary>
+    public static CreateUserRequest ToServiceRequest(this CreateUserResource resource, string createdBy)
+    {
+        return new CreateUserRequest
+        {
+            Name = resource.Name,
+            CreatedBy = createdBy
+        };
+    }
+
+    /// <summary>
+    /// Maps UpdateUserResource to UpdateUserRequest
+    /// </summary>
+    public static UpdateUserRequest ToServiceRequest(this UpdateUserResource resource, int userId, string updatedBy)
+    {
+        return new UpdateUserRequest
+        {
+            UserId = userId,
+            Name = resource.Name,
+            UpdatedBy = updatedBy
+        };
+    }
+
+    /// <summary>
+    /// Maps PatchUserResource to PatchUserRequest
+    /// </summary>
+    public static PatchUserRequest ToServiceRequest(this PatchUserResource resource, int userId)
+    {
+        return new PatchUserRequest
+        {
+            UserId = userId,
+            Name = resource.Name,
+            UpdatedBy = resource.UpdatedBy
+        };
+    }
+
+    /// <summary>
+    /// Maps CreateGroupResource to CreateGroupRequest
+    /// </summary>
+    public static CreateGroupRequest ToServiceRequest(this CreateGroupResource resource, string createdBy)
+    {
+        return new CreateGroupRequest
+        {
+            Name = resource.Name,
+            CreatedBy = createdBy
+        };
+    }
+
+    /// <summary>
+    /// Maps UpdateGroupResource to UpdateGroupRequest
+    /// </summary>
+    public static UpdateGroupRequest ToServiceRequest(this UpdateGroupResource resource, int groupId, string updatedBy)
+    {
+        return new UpdateGroupRequest
+        {
+            GroupId = groupId,
+            Name = resource.Name,
+            UpdatedBy = updatedBy
+        };
+    }
+
+    /// <summary>
+    /// Maps PatchGroupResource to PatchGroupRequest
+    /// </summary>
+    public static PatchGroupRequest ToServiceRequest(this PatchGroupResource resource, int groupId)
+    {
+        return new PatchGroupRequest
+        {
+            GroupId = groupId,
+            Name = resource.Name,
+            UpdatedBy = resource.UpdatedBy
+        };
+    }
+
+    /// <summary>
+    /// Maps CreateRoleResource to CreateRoleRequest
+    /// </summary>
+    public static CreateRoleRequest ToServiceRequest(this CreateRoleResource resource, string createdBy)
+    {
+        return new CreateRoleRequest
+        {
+            Name = resource.Name,
+            GroupId = resource.GroupId,
+            CreatedBy = createdBy
+        };
+    }
+
+    /// <summary>
+    /// Maps UpdateRoleResource to UpdateRoleRequest
+    /// </summary>
+    public static UpdateRoleRequest ToServiceRequest(this UpdateRoleResource resource, int roleId, string updatedBy)
+    {
+        return new UpdateRoleRequest
+        {
+            RoleId = roleId,
+            Name = resource.Name,
+            UpdatedBy = updatedBy
+        };
+    }
+
+    /// <summary>
+    /// Maps PatchRoleResource to PatchRoleRequest
+    /// </summary>
+    public static PatchRoleRequest ToServiceRequest(this PatchRoleResource resource, int roleId)
+    {
+        return new PatchRoleRequest
+        {
+            RoleId = roleId,
+            Name = resource.Name,
+            UpdatedBy = resource.UpdatedBy
+        };
+    }
+
+    /// <summary>
+    /// Maps CreatePermissionResource to CreatePermissionRequest
+    /// </summary>
+    public static CreatePermissionRequest ToServiceRequest(this CreatePermissionResource resource)
+    {
+        return new CreatePermissionRequest
+        {
+            Resource = resource.Resource,
+            Action = resource.Action,
+            Scope = resource.Scope,
+            CreatedBy = resource.CreatedBy
+        };
+    }
+
+    /// <summary>
+    /// Maps UpdatePermissionResource to UpdatePermissionRequest
+    /// </summary>
+    public static UpdatePermissionRequest ToServiceRequest(this UpdatePermissionResource resource, int permissionId)
+    {
+        return new UpdatePermissionRequest
+        {
+            PermissionId = permissionId,
+            Resource = resource.Resource,
+            Action = resource.Action,
+            Scope = resource.Scope,
+            UpdatedBy = resource.UpdatedBy
+        };
+    }
+
+    /// <summary>
+    /// Maps QueryResource to GetUsersRequest with LINQ-style composability
+    /// </summary>
+    public static GetUsersRequest ToGetUsersRequest(this QueryResource query, string requestedBy)
+    {
+        return new GetUsersRequest
+        {
+            Page = query.Pagination.ValidPage,
+            PageSize = query.Pagination.ValidPageSize,
+            Search = query.Search,
+            SortBy = query.Sort.FirstOrDefault()?.Field,
+            SortDescending = query.Sort.FirstOrDefault()?.Direction == SortDirection.Descending,
+            RequestedBy = requestedBy
+        };
+    }
+
+    /// <summary>
+    /// Maps QueryResource to GetGroupsRequest with LINQ-style composability
+    /// </summary>
+    public static GetGroupsRequest ToGetGroupsRequest(this QueryResource query, string requestedBy)
+    {
+        return new GetGroupsRequest
+        {
+            Page = query.Pagination.ValidPage,
+            PageSize = query.Pagination.ValidPageSize,
+            Search = query.Search,
+            SortBy = query.Sort.FirstOrDefault()?.Field,
+            SortDescending = query.Sort.FirstOrDefault()?.Direction == SortDirection.Descending,
+            RequestedBy = requestedBy
+        };
+    }
+
+    /// <summary>
+    /// Maps QueryResource to GetRolesRequest with LINQ-style composability
+    /// </summary>
+    public static GetRolesRequest ToGetRolesRequest(this QueryResource query, string requestedBy)
+    {
+        return new GetRolesRequest
+        {
+            Page = query.Pagination.ValidPage,
+            PageSize = query.Pagination.ValidPageSize,
+            Search = query.Search,
+            SortBy = query.Sort.FirstOrDefault()?.Field,
+            SortDescending = query.Sort.FirstOrDefault()?.Direction == SortDirection.Descending,
+            RequestedBy = requestedBy
+        };
+    }
+
+    /// <summary>
+    /// Maps QueryResource to GetPermissionsRequest with LINQ-style composability
+    /// </summary>
+    public static GetPermissionsRequest ToGetPermissionsRequest(this QueryResource query, string requestedBy)
+    {
+        return new GetPermissionsRequest
+        {
+            Page = query.Pagination.ValidPage,
+            PageSize = query.Pagination.ValidPageSize,
+            Search = query.Search,
+            RequestedBy = requestedBy
+        };
+    }
+
+    /// <summary>
+    /// Maps collection of CreateUserResources to bulk service request
+    /// LINQ-style composable collection mapper
+    /// </summary>
+    public static BulkUserRequest<CreateUserRequest> ToBulkServiceRequest(
+        this IEnumerable<CreateUserResource> resources, 
+        string operation, 
+        string requestedBy)
+    {
+        return new BulkUserRequest<CreateUserRequest>
+        {
+            Items = resources.Select(r => r.ToServiceRequest(requestedBy)).ToList(),
+            Operation = operation,
+            RequestedBy = requestedBy
+        };
+    }
+
+    /// <summary>
+    /// Maps collection of CreateGroupResources to bulk service request
+    /// LINQ-style composable collection mapper
+    /// </summary>
+    public static BulkGroupRequest<CreateGroupRequest> ToBulkServiceRequest(
+        this IEnumerable<CreateGroupResource> resources, 
+        string operation, 
+        string requestedBy)
+    {
+        return new BulkGroupRequest<CreateGroupRequest>
+        {
+            Items = resources.Select(r => r.ToServiceRequest(requestedBy)).ToList(),
+            Operation = operation,
+            RequestedBy = requestedBy
+        };
+    }
+
+    /// <summary>
+    /// Maps collection of CreateRoleResources to bulk service request
+    /// LINQ-style composable collection mapper
+    /// </summary>
+    public static BulkRoleRequest<CreateRoleRequest> ToBulkServiceRequest(
+        this IEnumerable<CreateRoleResource> resources, 
+        string operation, 
+        string requestedBy)
+    {
+        return new BulkRoleRequest<CreateRoleRequest>
+        {
+            Items = resources.Select(r => r.ToServiceRequest(requestedBy)).ToList(),
+            Operation = operation,
+            RequestedBy = requestedBy
+        };
+    }
+
+    /// <summary>
+    /// Generic bulk operation mapper with LINQ composability
+    /// </summary>
+    public static BulkRequest<TServiceRequest> ToBulkServiceRequest<TResource, TServiceRequest>(
+        this BulkOperationResource<TResource> bulkResource,
+        Func<TResource, TServiceRequest> mapper,
+        string operation)
+    {
+        return new BulkRequest<TServiceRequest>
+        {
+            Items = bulkResource.Items.Select(mapper).ToList(),
+            Operation = operation,
+            RequestedBy = bulkResource.RequestedBy
+        };
+    }
+}
+
+/// <summary>
+/// Generic bulk request for any type
+/// </summary>
+public record BulkRequest<T>
+{
+    public ICollection<T> Items { get; init; } = new List<T>();
+    public string Operation { get; init; } = string.Empty;
+    public string RequestedBy { get; init; } = string.Empty;
+}

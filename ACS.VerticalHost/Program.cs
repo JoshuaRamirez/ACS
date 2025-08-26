@@ -65,7 +65,8 @@ public class Program
         builder.Configuration["TenantId"] = tenantId;
         
         // Configure all services using centralized registration
-        var logger = builder.Services.BuildServiceProvider().GetRequiredService<ILogger<Program>>();
+        using var loggerFactory = LoggerFactory.Create(options => options.AddConsole());
+        var logger = loggerFactory.CreateLogger<Program>();
         builder.Services.ConfigureServices(builder.Configuration, logger, "VerticalHost");
         
         // Configure comprehensive OpenTelemetry for distributed tracing, metrics, and logging
@@ -122,16 +123,15 @@ public class Program
         // Map health check endpoint
         app.MapHealthChecks("/health");
 
-        // Initialize domain services
+        // Initialize entity graph
         using (var scope = app.Services.CreateScope())
         {
             var entityGraph = scope.ServiceProvider.GetRequiredService<InMemoryEntityGraph>();
-            var domainService = scope.ServiceProvider.GetRequiredService<AccessControlDomainService>();
             
-            // Load entity graph and hydrate normalizers
-            await domainService.LoadEntityGraphAsync();
+            // Entity graph will be loaded lazily by the services as needed
+            // No need for explicit preloading since services handle their own initialization
             
-            Console.WriteLine($"Entity graph loaded for tenant: {tenantId}");
+            Console.WriteLine($"Entity graph initialized for tenant: {tenantId}");
         }
 
         Console.WriteLine($"Starting VerticalHost for tenant: {tenantId} on gRPC port: {grpcPort}");

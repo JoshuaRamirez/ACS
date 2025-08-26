@@ -37,4 +37,11 @@ public class User
     // Navigation properties for convenience (read-only computed properties)
     public IEnumerable<Group> Groups => UserGroups.Select(ug => ug.Group);
     public IEnumerable<Role> Roles => UserRoles.Select(ur => ur.Role);
+    
+    // GDPR-related properties for compliance tracking
+    public Dictionary<string, object> Metadata { get; set; } = new();
+    public string? PseudonymId { get; set; }
+    public bool IsPseudonymized { get; set; }
+    public bool IsAnonymized { get; set; }
+    public DateTime? AnonymizedAt { get; set; }
 }

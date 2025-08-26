@@ -1,4 +1,6 @@
 using ACS.Service.Data.Models;
+using ACS.Service.Domain;
+using ACS.Service.Compliance;
 
 namespace ACS.Service.Services;
 
@@ -26,11 +28,11 @@ public interface IAuditService
     Task<bool> HasSuspiciousActivityAsync(string userId, int timeWindowMinutes = 30);
     
     // Compliance Reporting
-    Task<ComplianceReport> GenerateGDPRReportAsync(string userId, DateTime? startDate = null, DateTime? endDate = null);
-    Task<ComplianceReport> GenerateSOC2ReportAsync(DateTime startDate, DateTime endDate);
-    Task<ComplianceReport> GenerateHIPAAReportAsync(DateTime startDate, DateTime endDate);
-    Task<ComplianceReport> GeneratePCIDSSReportAsync(DateTime startDate, DateTime endDate);
-    Task<ComplianceReport> GenerateCustomComplianceReportAsync(string reportType, Dictionary<string, object> parameters);
+    Task<ACS.Service.Compliance.ComplianceReport> GenerateGDPRReportAsync(string userId, DateTime? startDate = null, DateTime? endDate = null);
+    Task<ACS.Service.Compliance.ComplianceReport> GenerateSOC2ReportAsync(DateTime startDate, DateTime endDate);
+    Task<ACS.Service.Compliance.ComplianceReport> GenerateHIPAAReportAsync(DateTime startDate, DateTime endDate);
+    Task<ACS.Service.Compliance.ComplianceReport> GeneratePCIDSSReportAsync(DateTime startDate, DateTime endDate);
+    Task<ACS.Service.Compliance.ComplianceReport> GenerateCustomComplianceReportAsync(string reportType, Dictionary<string, object> parameters);
     
     // Data Retention and Privacy
     Task<int> PurgeOldAuditLogsAsync(int retentionDays, string? entityType = null);
@@ -90,7 +92,7 @@ public interface IAuditService
     
     // Regulatory Compliance
     Task<bool> IsCompliantAsync(string regulation, DateTime? asOfDate = null);
-    Task<IEnumerable<ComplianceViolation>> GetComplianceViolationsAsync(string? regulation = null, DateTime? startDate = null, DateTime? endDate = null);
+    Task<IEnumerable<ACS.Service.Domain.ComplianceViolation>> GetComplianceViolationsAsync(string? regulation = null, DateTime? startDate = null, DateTime? endDate = null);
     Task<bool> RemediateViolationAsync(int violationId, string remediationAction, string performedBy);
     Task<ComplianceStatus> GetComplianceStatusAsync(string regulation);
     Task<bool> ScheduleComplianceAuditAsync(string regulation, DateTime scheduledDate);
@@ -109,41 +111,6 @@ public class SecurityEvent
     public string? UserAgent { get; set; }
     public DateTime OccurredAt { get; set; }
     public Dictionary<string, object> Metadata { get; set; } = new();
-}
-
-public class ComplianceReport
-{
-    public string ReportType { get; set; } = string.Empty;
-    public DateTime GeneratedAt { get; set; }
-    public DateTime StartDate { get; set; }
-    public DateTime EndDate { get; set; }
-    public bool IsCompliant { get; set; }
-    public List<ComplianceItem> Items { get; set; } = new();
-    public List<ComplianceViolation> Violations { get; set; } = new();
-    public Dictionary<string, object> Summary { get; set; } = new();
-    public string? SignedBy { get; set; }
-}
-
-public class ComplianceItem
-{
-    public string Category { get; set; } = string.Empty;
-    public string Requirement { get; set; } = string.Empty;
-    public bool IsMet { get; set; }
-    public string Evidence { get; set; } = string.Empty;
-    public DateTime CheckedAt { get; set; }
-}
-
-public class ComplianceViolation
-{
-    public int Id { get; set; }
-    public string Regulation { get; set; } = string.Empty;
-    public string Requirement { get; set; } = string.Empty;
-    public string ViolationType { get; set; } = string.Empty;
-    public string Severity { get; set; } = string.Empty;
-    public DateTime DetectedAt { get; set; }
-    public bool IsRemediated { get; set; }
-    public string? RemediationAction { get; set; }
-    public DateTime? RemediatedAt { get; set; }
 }
 
 public class DataRetentionPolicy

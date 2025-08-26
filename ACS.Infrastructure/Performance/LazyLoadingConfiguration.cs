@@ -18,11 +18,13 @@ public static class LazyLoadingConfiguration
         IConfiguration configuration,
         IServiceProvider serviceProvider)
     {
-        var logger = serviceProvider.GetService<ILogger<LazyLoadingConfiguration>>();
+        var logger = serviceProvider.GetService<ILogger>();
         
         // Lazy loading configuration
         var enableLazyLoading = configuration.GetValue<bool>("EntityFramework:EnableLazyLoading", false);
-        options.UseLazyLoadingProxies(enableLazyLoading);
+        // TODO: UseLazyLoadingProxies requires Microsoft.EntityFrameworkCore.Proxies package
+        // Lazy loading is controlled via LazyLoadingEnabled in ChangeTracker instead
+        // options.UseLazyLoadingProxies(enableLazyLoading);
         
         if (enableLazyLoading)
         {
@@ -64,8 +66,10 @@ public static class LazyLoadingConfiguration
         
         // Query splitting behavior
         var defaultSplitQueryBehavior = configuration.GetValue<string>("EntityFramework:DefaultSplitQueryBehavior", "SplitQuery");
-        var splitBehavior = Enum.Parse<QuerySplitBehavior>(defaultSplitQueryBehavior);
-        options.UseQuerySplittingBehavior(splitBehavior);
+        // TODO: UseQuerySplittingBehavior not available in this EF Core version
+        // Query splitting should be configured per query or in model configuration
+        // var splitBehavior = Enum.Parse<QuerySplittingBehavior>(defaultSplitQueryBehavior);
+        // options.UseQuerySplittingBehavior(splitBehavior);
         
         // Service scope validation (only in development)
         var validateScopes = configuration.GetValue<bool>("EntityFramework:ValidateScopes", false);
@@ -159,9 +163,10 @@ public static class DbContextExtensions
         // Auto detect changes optimization
         context.ChangeTracker.AutoDetectChangesEnabled = true;
         
-        // Cascade delete behavior
-        context.ChangeTracker.CascadeDeleteTiming = CascadeTiming.OnSaveChanges;
-        context.ChangeTracker.DeleteOrphansTiming = CascadeTiming.OnSaveChanges;
+        // TODO: CascadeTiming not available in this EF Core version
+        // Cascade behavior is controlled at model level in OnModelCreating
+        // context.ChangeTracker.CascadeDeleteTiming = CascadeTiming.OnSaveChanges;
+        // context.ChangeTracker.DeleteOrphansTiming = CascadeTiming.OnSaveChanges;
     }
     
     /// <summary>

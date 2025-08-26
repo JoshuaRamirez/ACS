@@ -371,8 +371,11 @@ public class ComplianceReport
     public Dictionary<string, int> EventsByType { get; set; } = new();
     public List<ComplianceViolation> Violations { get; set; } = new();
     public List<ComplianceRecommendation> Recommendations { get; set; } = new();
+    public List<ComplianceItem> Items { get; set; } = new();
     public Dictionary<string, object> Statistics { get; set; } = new();
+    public Dictionary<string, object> Summary { get; set; } = new();
     public string ExecutiveSummary { get; set; } = string.Empty;
+    public bool IsCompliant { get; set; }
 }
 
 /// <summary>
@@ -400,6 +403,9 @@ public class ComplianceViolation
     public string RemediationRequired { get; set; } = string.Empty;
     public DateTime? RemediationDeadline { get; set; }
     public string ResponsibleParty { get; set; } = string.Empty;
+    public bool IsRemediated { get; set; }
+    public DateTime? RemediatedAt { get; set; }
+    public string? RemediationAction { get; set; }
 }
 
 /// <summary>

@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json;
+using Microsoft.Data.SqlClient;
 
 namespace ACS.Infrastructure.Configuration;
 
@@ -301,7 +302,7 @@ public class ConnectionStringValidator : IConfigurationValidator
         {
             try
             {
-                var builder = new System.Data.SqlClient.SqlConnectionStringBuilder(defaultConnection);
+                var builder = new SqlConnectionStringBuilder(defaultConnection);
                 
                 // Validate connection string components
                 if (string.IsNullOrEmpty(builder.DataSource))

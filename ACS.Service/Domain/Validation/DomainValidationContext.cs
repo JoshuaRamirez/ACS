@@ -63,7 +63,7 @@ public class MemoryValidationCache : IValidationCache
         _statistics = new ValidationCacheStatistics { LastReset = DateTime.UtcNow };
     }
 
-    public async Task<T?> GetAsync<T>(string key) where T : class
+    public Task<T?> GetAsync<T>(string key) where T : class
     {
         try
         {
@@ -73,23 +73,23 @@ public class MemoryValidationCache : IValidationCache
                 {
                     _statistics.HitCount++;
                 }
-                return value as T;
+                return Task.FromResult(value as T);
             }
             
             lock (_statsLock)
             {
                 _statistics.MissCount++;
             }
-            return null;
+            return Task.FromResult<T?>(null);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error retrieving validation cache entry for key: {Key}", key);
-            return null;
+            return Task.FromResult<T?>(null);
         }
     }
 
-    public async Task SetAsync<T>(string key, T value, TimeSpan? expiration = null) where T : class
+    public Task SetAsync<T>(string key, T value, TimeSpan? expiration = null) where T : class
     {
         try
         {
@@ -119,36 +119,41 @@ public class MemoryValidationCache : IValidationCache
                 else
                     _statistics.EntriesByType[typeName] = 1;
             }
+            return Task.CompletedTask;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error setting validation cache entry for key: {Key}", key);
+            return Task.CompletedTask;
         }
     }
 
-    public async Task RemoveAsync(string key)
+    public Task RemoveAsync(string key)
     {
         try
         {
             _cache.Remove(key);
             _logger.LogDebug("Removed validation cache entry: {Key}", key);
+            return Task.CompletedTask;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error removing validation cache entry for key: {Key}", key);
+            return Task.CompletedTask;
         }
     }
 
-    public async Task RemovePatternAsync(string pattern)
+    public Task RemovePatternAsync(string pattern)
     {
         // Note: IMemoryCache doesn't support pattern-based removal natively
         // In a production system, you might use a different caching solution
         // or maintain a list of keys to support this functionality
         
         _logger.LogWarning("Pattern-based cache removal not fully implemented for MemoryCache. Pattern: {Pattern}", pattern);
+        return Task.CompletedTask;
     }
 
-    public async Task ClearAsync()
+    public Task ClearAsync()
     {
         try
         {
@@ -179,18 +184,20 @@ public class MemoryValidationCache : IValidationCache
             }
 
             _logger.LogInformation("Validation cache cleared");
+            return Task.CompletedTask;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error clearing validation cache");
+            return Task.CompletedTask;
         }
     }
 
-    public async Task<ValidationCacheStatistics> GetStatisticsAsync()
+    public Task<ValidationCacheStatistics> GetStatisticsAsync()
     {
         lock (_statsLock)
         {
-            return new ValidationCacheStatistics
+            return Task.FromResult(new ValidationCacheStatistics
             {
                 TotalEntries = _statistics.TotalEntries,
                 HitCount = _statistics.HitCount,
@@ -198,7 +205,7 @@ public class MemoryValidationCache : IValidationCache
                 TotalMemoryUsage = _statistics.TotalMemoryUsage,
                 EntriesByType = new Dictionary<string, int>(_statistics.EntriesByType),
                 LastReset = _statistics.LastReset
-            };
+            });
         }
     }
 

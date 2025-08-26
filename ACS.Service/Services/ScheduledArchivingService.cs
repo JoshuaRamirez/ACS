@@ -2,6 +2,8 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using ACS.Service.Infrastructure;
+using ACS.Alerting;
 
 namespace ACS.Service.Services;
 
@@ -217,7 +219,7 @@ public class ScheduledArchivingService : BackgroundService
                 // Send success notification if configured
                 if (schedule.SendNotifications && alertingService != null)
                 {
-                    await alertingService.RaiseAlertAsync(new Alert
+                    await alertingService.SendAlertAsync(new AlertRequest
                     {
                         Id = Guid.NewGuid().ToString(),
                         Title = "Data Archiving Successful",
@@ -225,8 +227,8 @@ public class ScheduledArchivingService : BackgroundService
                         Severity = AlertSeverity.Info,
                         Category = AlertCategory.Database,
                         Source = "ScheduledArchivingService",
-                        CreatedAt = DateTime.UtcNow,
-                        Metadata = new Dictionary<string, string>
+                        Timestamp = DateTime.UtcNow,
+                        Metadata = new Dictionary<string, object>
                         {
                             ["ArchiveId"] = result.ArchiveId,
                             ["RecordsArchived"] = result.RecordsArchived.ToString(),
@@ -242,7 +244,7 @@ public class ScheduledArchivingService : BackgroundService
                 // Send failure alert
                 if (alertingService != null)
                 {
-                    await alertingService.RaiseAlertAsync(new Alert
+                    await alertingService.SendAlertAsync(new AlertRequest
                     {
                         Id = Guid.NewGuid().ToString(),
                         Title = "Data Archiving Failed",
@@ -250,8 +252,8 @@ public class ScheduledArchivingService : BackgroundService
                         Severity = AlertSeverity.Warning,
                         Category = AlertCategory.Database,
                         Source = "ScheduledArchivingService",
-                        CreatedAt = DateTime.UtcNow,
-                        Metadata = new Dictionary<string, string>
+                        Timestamp = DateTime.UtcNow,
+                        Metadata = new Dictionary<string, object>
                         {
                             ["Error"] = result.Error ?? result.Message
                         }
@@ -296,7 +298,7 @@ public class ScheduledArchivingService : BackgroundService
                 // Send notification if significant data was purged
                 if (result.RecordsPurged > 0 && alertingService != null)
                 {
-                    await alertingService.RaiseAlertAsync(new Alert
+                    await alertingService.SendAlertAsync(new AlertRequest
                     {
                         Id = Guid.NewGuid().ToString(),
                         Title = "Data Purge Completed",
@@ -304,8 +306,8 @@ public class ScheduledArchivingService : BackgroundService
                         Severity = AlertSeverity.Info,
                         Category = AlertCategory.Database,
                         Source = "ScheduledArchivingService",
-                        CreatedAt = DateTime.UtcNow,
-                        Metadata = new Dictionary<string, string>
+                        Timestamp = DateTime.UtcNow,
+                        Metadata = new Dictionary<string, object>
                         {
                             ["RecordsPurged"] = result.RecordsPurged.ToString(),
                             ["Tables"] = string.Join(", ", result.TablesPurged),
@@ -321,7 +323,7 @@ public class ScheduledArchivingService : BackgroundService
                 // Send failure alert
                 if (alertingService != null)
                 {
-                    await alertingService.RaiseAlertAsync(new Alert
+                    await alertingService.SendAlertAsync(new AlertRequest
                     {
                         Id = Guid.NewGuid().ToString(),
                         Title = "Data Purge Failed",
@@ -329,7 +331,7 @@ public class ScheduledArchivingService : BackgroundService
                         Severity = AlertSeverity.Warning,
                         Category = AlertCategory.Database,
                         Source = "ScheduledArchivingService",
-                        CreatedAt = DateTime.UtcNow
+                        Timestamp = DateTime.UtcNow
                     });
                 }
             }
@@ -374,10 +376,10 @@ public class ScheduledArchivingService : BackgroundService
             // Alert on violations
             if (report.Violations.Any())
             {
-                using var alertingService = scope.ServiceProvider.GetService<IAlertingService>();
+                var alertingService = scope.ServiceProvider.GetService<IAlertingService>();
                 if (alertingService != null)
                 {
-                    await alertingService.RaiseAlertAsync(new Alert
+                    await alertingService.SendAlertAsync(new AlertRequest
                     {
                         Id = Guid.NewGuid().ToString(),
                         Title = "Compliance Violations Detected",
@@ -385,8 +387,8 @@ public class ScheduledArchivingService : BackgroundService
                         Severity = AlertSeverity.Warning,
                         Category = AlertCategory.Compliance,
                         Source = "ScheduledArchivingService",
-                        CreatedAt = DateTime.UtcNow,
-                        Metadata = new Dictionary<string, string>
+                        Timestamp = DateTime.UtcNow,
+                        Metadata = new Dictionary<string, object>
                         {
                             ["ReportId"] = report.ReportId,
                             ["ComplianceType"] = report.ComplianceType.ToString(),
@@ -426,7 +428,7 @@ public class ScheduledArchivingService : BackgroundService
                     ? AlertSeverity.Critical 
                     : AlertSeverity.Warning;
 
-                await alertingService.RaiseAlertAsync(new Alert
+                await alertingService.SendAlertAsync(new AlertRequest
                 {
                     Id = Guid.NewGuid().ToString(),
                     Title = "Data Retention Non-Compliance",
@@ -434,11 +436,11 @@ public class ScheduledArchivingService : BackgroundService
                     Severity = severity,
                     Category = AlertCategory.Compliance,
                     Source = "ScheduledArchivingService",
-                    CreatedAt = DateTime.UtcNow,
-                    Metadata = new Dictionary<string, string>
+                    Timestamp = DateTime.UtcNow,
+                    Metadata = new Dictionary<string, object>
                     {
-                        ["RecordsExceeding"] = status.RecordsExceedingRetention.ToString(),
-                        ["Tables"] = string.Join(", ", status.TablesExceedingRetention)
+                        ["RecordsExceeding"] = status.RecordsExceedingRetention,
+                        ["Tables"] = status.TablesExceedingRetention
                     }
                 });
 
@@ -579,33 +581,17 @@ public class ScheduledArchivingService : BackgroundService
 
 #region Configuration Models
 
-public enum ScheduleType
-{
-    Daily,
-    Weekly,
-    Monthly
-}
-
-public interface IScheduleBase
-{
-    bool Enabled { get; set; }
-    ScheduleType ScheduleType { get; set; }
-    string DailyAt { get; set; }
-    string WeeklyOn { get; set; }
-    string WeeklyAt { get; set; }
-    int MonthlyDay { get; set; }
-    string MonthlyAt { get; set; }
-}
 
 public class ArchiveSchedule : IScheduleBase
 {
     public bool Enabled { get; set; } = true;
     public ScheduleType ScheduleType { get; set; } = ScheduleType.Weekly;
-    public string DailyAt { get; set; }
+    public string DailyAt { get; set; } = "02:00:00";
     public string WeeklyOn { get; set; } = "Sunday";
     public string WeeklyAt { get; set; } = "02:00:00";
     public int MonthlyDay { get; set; } = 1;
     public string MonthlyAt { get; set; } = "02:00:00";
+    public int IntervalHours { get; set; } = 168;
     public ArchiveType ArchiveType { get; set; } = ArchiveType.All;
     public int RetentionDays { get; set; } = 90;
     public bool CompressArchive { get; set; } = true;
@@ -619,11 +605,12 @@ public class PurgeSchedule : IScheduleBase
 {
     public bool Enabled { get; set; } = true;
     public ScheduleType ScheduleType { get; set; } = ScheduleType.Monthly;
-    public string DailyAt { get; set; }
-    public string WeeklyOn { get; set; }
-    public string WeeklyAt { get; set; }
+    public string DailyAt { get; set; } = "03:00:00";
+    public string WeeklyOn { get; set; } = "Sunday";
+    public string WeeklyAt { get; set; } = "03:00:00";
     public int MonthlyDay { get; set; } = 1;
     public string MonthlyAt { get; set; } = "03:00:00";
+    public int IntervalHours { get; set; } = 720;
     public int RetentionDays { get; set; } = 365;
     public List<string> TablesToPurge { get; set; } = new();
     public bool CreateBackupBeforePurge { get; set; } = true;
@@ -636,11 +623,12 @@ public class ComplianceReportSchedule : IScheduleBase
 {
     public bool Enabled { get; set; } = true;
     public ScheduleType ScheduleType { get; set; } = ScheduleType.Monthly;
-    public string DailyAt { get; set; }
-    public string WeeklyOn { get; set; }
-    public string WeeklyAt { get; set; }
+    public string DailyAt { get; set; } = "06:00:00";
+    public string WeeklyOn { get; set; } = "Sunday";
+    public string WeeklyAt { get; set; } = "06:00:00";
     public int MonthlyDay { get; set; } = 1;
     public string MonthlyAt { get; set; } = "06:00:00";
+    public int IntervalHours { get; set; } = 720;
     public ComplianceType ComplianceType { get; set; } = ComplianceType.All;
     public string ReportPeriod { get; set; } = "monthly";
     public ExportFormat ExportFormat { get; set; } = ExportFormat.Pdf;
@@ -653,10 +641,11 @@ public class RetentionCheckSchedule : IScheduleBase
     public bool Enabled { get; set; } = true;
     public ScheduleType ScheduleType { get; set; } = ScheduleType.Daily;
     public string DailyAt { get; set; } = "01:00:00";
-    public string WeeklyOn { get; set; }
-    public string WeeklyAt { get; set; }
-    public int MonthlyDay { get; set; }
-    public string MonthlyAt { get; set; }
+    public string WeeklyOn { get; set; } = "Sunday";
+    public string WeeklyAt { get; set; } = "01:00:00";
+    public int MonthlyDay { get; set; } = 1;
+    public string MonthlyAt { get; set; } = "01:00:00";
+    public int IntervalHours { get; set; } = 24;
     public bool AutoRemediate { get; set; } = false;
     public int DefaultRetentionDays { get; set; } = 90;
     public long CriticalThreshold { get; set; } = 100000;
@@ -665,10 +654,10 @@ public class RetentionCheckSchedule : IScheduleBase
 public class ArchivingScheduleOptions
 {
     public bool Enabled { get; set; } = true;
-    public ArchiveSchedule ArchiveSchedule { get; set; }
-    public PurgeSchedule PurgeSchedule { get; set; }
-    public ComplianceReportSchedule ComplianceReportSchedule { get; set; }
-    public RetentionCheckSchedule RetentionCheckSchedule { get; set; }
+    public ArchiveSchedule ArchiveSchedule { get; set; } = new();
+    public PurgeSchedule PurgeSchedule { get; set; } = new();
+    public ComplianceReportSchedule ComplianceReportSchedule { get; set; } = new();
+    public RetentionCheckSchedule RetentionCheckSchedule { get; set; } = new();
 }
 
 #endregion

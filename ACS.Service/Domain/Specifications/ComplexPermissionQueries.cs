@@ -23,9 +23,9 @@ public static class ComplexPermissionQueries
             var effectivePermissionSpec = new EffectivePermissionSpecification();
             var combinedSpec = sensitiveResourceSpec.And(effectivePermissionSpec);
 
-            return new UserSpecificationBuilder()
-                .And(new EntityWithPermissionSpecification(combinedSpec))
-                .Build();
+            var entityWithPermSpec = new EntityWithPermissionSpecification(combinedSpec);
+            var userSpec = new UserEntitySpecification();
+            return entityWithPermSpec.And(userSpec).Cast<User>();
         }
 
         public static ISpecification<User> UsersWithDeletePermissions()
@@ -33,8 +33,9 @@ public static class ComplexPermissionQueries
             var deletePermissionSpec = new HttpVerbPermissionSpecification(HttpVerb.DELETE)
                 .And(new EffectivePermissionSpecification());
 
-            return new EntityWithPermissionSpecification(deletePermissionSpec)
-                .And(new TypedEntitySpecification<User>());
+            var entityWithPermSpec = new EntityWithPermissionSpecification(deletePermissionSpec);
+            var userSpec = new UserEntitySpecification();
+            return entityWithPermSpec.And(userSpec).Cast<User>();
         }
 
         public static ISpecification<User> UsersWithWildcardPermissions()
@@ -42,8 +43,9 @@ public static class ComplexPermissionQueries
             var wildcardSpec = new WildcardPermissionSpecification()
                 .And(new EffectivePermissionSpecification());
 
-            return new EntityWithPermissionSpecification(wildcardSpec)
-                .And(new TypedEntitySpecification<User>());
+            var entityWithPermSpec = new EntityWithPermissionSpecification(wildcardSpec);
+            var userSpec = new UserEntitySpecification();
+            return entityWithPermSpec.And(userSpec).Cast<User>();
         }
     }
 
@@ -57,7 +59,7 @@ public static class ComplexPermissionQueries
             return new UserSpecificationBuilder()
                 .WithMinimumRoles(maxRoles + 1)
                 .Or(new EntityWithMinimumPermissionsSpecification(maxPermissions + 1)
-                    .And(new TypedEntitySpecification<User>()))
+                    .And(new UserEntitySpecification()).Cast<User>())
                 .Build();
         }
 
@@ -73,7 +75,9 @@ public static class ComplexPermissionQueries
             var hasApprovalSpec = new EntityWithPermissionSpecification(approvalPermissionSpec);
             var hasProcessingSpec = new EntityWithPermissionSpecification(processingPermissionSpec);
 
-            return hasApprovalSpec.And(hasProcessingSpec).And(new TypedEntitySpecification<User>());
+            var combinedSpec = hasApprovalSpec.And(hasProcessingSpec);
+            var userSpec = new UserEntitySpecification();
+            return combinedSpec.And(userSpec).Cast<User>();
         }
 
         public static ISpecification<User> AdminUsersWithoutMFA()
@@ -128,12 +132,7 @@ public static class ComplexPermissionQueries
 
         public static ISpecification<Entity> EntitiesWithCircularHierarchies()
         {
-            // This requires custom logic for cycle detection
-            return new Specification<Entity>
-            {
-                ToExpression = () => e => false, // Placeholder - would need custom implementation
-                IsSatisfiedBy = entity => HasCircularHierarchy(entity)
-            };
+            return new CircularHierarchySpecification();
         }
 
         private static bool HasCircularHierarchy(Entity entity, HashSet<int>? visited = null)
@@ -156,20 +155,13 @@ public static class ComplexPermissionQueries
     {
         public static ISpecification<Permission> RedundantPermissions()
         {
-            // Permissions that are both granted and denied (should not exist)
-            return new Specification<Permission>
-            {
-                ToExpression = () => p => p.Grant && p.Deny
-            };
+            return new RedundantPermissionSpecification();
         }
 
         public static ISpecification<Permission> IneffectivePermissions()
         {
             return new DenyPermissionSpecification()
-                .Or(new Specification<Permission>
-                {
-                    ToExpression = () => p => !p.Grant && !p.Deny
-                });
+                .Or(new InactivePermissionSpecification());
         }
 
         public static ISpecification<User> UsersWithRedundantRoleAssignments()
@@ -207,8 +199,9 @@ public static class ComplexPermissionQueries
                 .Cast<ISpecification<Permission>>()
                 .Aggregate((spec1, spec2) => spec1.Or(spec2));
 
-            return new EntityWithPermissionSpecification(combinedSpec)
-                .And(new TypedEntitySpecification<User>());
+            var entityWithPermSpec = new EntityWithPermissionSpecification(combinedSpec);
+            var userSpec = new UserEntitySpecification();
+            return entityWithPermSpec.And(userSpec).Cast<User>();
         }
 
         public static ISpecification<Permission> CrossSystemPermissions()
@@ -228,9 +221,10 @@ public static class ComplexPermissionQueries
                 .Or(new UriPatternPermissionSpecification("/api/external/*"))
                 .Or(new UriPatternPermissionSpecification("/integration/*"));
 
-            return new EntityWithPermissionSpecification(
-                externalApiSpec.And(new EffectivePermissionSpecification()))
-                .And(new TypedEntitySpecification<User>());
+            var permissionSpec = externalApiSpec.And(new EffectivePermissionSpecification());
+            var entityWithPermSpec = new EntityWithPermissionSpecification(permissionSpec);
+            var userSpec = new UserEntitySpecification();
+            return entityWithPermSpec.And(userSpec).Cast<User>();
         }
     }
 
@@ -249,21 +243,16 @@ public static class ComplexPermissionQueries
 
         public static ISpecification<Group> GroupsWithComplexHierarchies()
         {
-            return new EntitySpecificationBuilder()
-                .WithMinimumPermissions(1)
-                .ThatAreParentsOf(0) // Has children
-                .And(new TypedEntitySpecification<Group>())
-                .Build()
-                .And(new TypedEntitySpecification<Group>());
+            var groupWithPermissionsSpec = new EntityWithMinimumPermissionsSpecification(1);
+            var hasChildrenSpec = new EntityWithChildrenSpecification();
+            var groupSpec = new GroupEntitySpecification();
+            return groupWithPermissionsSpec.And(hasChildrenSpec).And(groupSpec).Cast<Group>();
         }
 
         public static ISpecification<Role> RolesWithInheritedPermissions()
         {
             // Roles that are also assigned to groups (inheriting group permissions)
-            return new Specification<Role>
-            {
-                ToExpression = () => r => r.Parents.Any(p => p is Group)
-            };
+            return new RoleWithInheritedPermissionsSpecification();
         }
 
         public static ISpecification<Entity> DeepHierarchyEntities(int minDepth = 3)
@@ -292,9 +281,10 @@ public static class ComplexPermissionQueries
                 .Cast<ISpecification<Permission>>()
                 .Aggregate((spec1, spec2) => spec1.Or(spec2));
 
-            return new EntityWithPermissionSpecification(
-                personalDataSpec.And(new EffectivePermissionSpecification()))
-                .And(new TypedEntitySpecification<User>());
+            var permissionSpec = personalDataSpec.And(new EffectivePermissionSpecification());
+            var entityWithPermSpec = new EntityWithPermissionSpecification(permissionSpec);
+            var userSpec = new UserEntitySpecification();
+            return entityWithPermSpec.And(userSpec).Cast<User>();
         }
 
         public static ISpecification<Permission> DataExportPermissions()
@@ -317,9 +307,10 @@ public static class ComplexPermissionQueries
                 .Or(new UriPatternPermissionSpecification("/batch/*"))
                 .Or(new UriPatternPermissionSpecification("/mass/*"));
 
-            return new EntityWithPermissionSpecification(
-                bulkOperationSpec.And(new EffectivePermissionSpecification()))
-                .And(new TypedEntitySpecification<User>());
+            var permissionSpec = bulkOperationSpec.And(new EffectivePermissionSpecification());
+            var entityWithPermSpec = new EntityWithPermissionSpecification(permissionSpec);
+            var userSpec = new UserEntitySpecification();
+            return entityWithPermSpec.And(userSpec).Cast<User>();
         }
     }
 
@@ -352,7 +343,7 @@ public static class ComplexPermissionQueries
 
         public ComplexPermissionQueryBuilder ForUsers()
         {
-            _entitySpecs.Add(new TypedEntitySpecification<User>());
+            _entitySpecs.Add(new UserEntitySpecification());
             return this;
         }
 
@@ -370,18 +361,18 @@ public static class ComplexPermissionQueries
 
         public ISpecification<User> BuildUserQuery()
         {
-            var spec = new TrueSpecification<User>();
+            ISpecification<User> spec = new TrueSpecification<User>();
 
             foreach (var userSpec in _userSpecs)
             {
-                spec = (TrueSpecification<User>)spec.And(userSpec);
+                spec = spec.And(userSpec);
             }
 
             foreach (var permSpec in _permissionSpecs)
             {
                 var entityWithPermSpec = new EntityWithPermissionSpecification(permSpec);
-                var userWithPermSpec = entityWithPermSpec.And(new TypedEntitySpecification<User>());
-                spec = (TrueSpecification<User>)spec.And(userWithPermSpec);
+                var userWithPermSpec = entityWithPermSpec.And(new UserEntitySpecification()).Cast<User>();
+                spec = spec.And(userWithPermSpec);
             }
 
             return spec;
@@ -444,6 +435,31 @@ public static class ComplexQueryExtensions
 /// <summary>
 /// Result of security analysis queries
 /// </summary>
+public class UserEntitySpecification : TypedEntitySpecification<User>
+{
+    // Inherits default implementation from TypedEntitySpecification<User>
+    // which checks if entity is User and returns true for GetTypedExpression
+}
+
+public class GroupEntitySpecification : TypedEntitySpecification<Group>
+{
+    // Inherits default implementation from TypedEntitySpecification<Group>
+    // which checks if entity is Group and returns true for GetTypedExpression
+}
+
+public class RoleWithInheritedPermissionsSpecification : Specification<Role>
+{
+    public override Expression<Func<Role, bool>> ToExpression()
+    {
+        return r => r.Parents.Any(p => p is Group);
+    }
+
+    public override bool IsSatisfiedBy(Role entity)
+    {
+        return entity.Parents.Any(p => p is Group);
+    }
+}
+
 public class SecurityAnalysisResult
 {
     public string EntityType { get; set; } = string.Empty;
@@ -454,4 +470,77 @@ public class SecurityAnalysisResult
     public DateTime AnalysisDate { get; set; }
     public string QueryDescription { get; set; } = string.Empty;
     public Dictionary<string, object> AdditionalMetrics { get; set; } = new();
+}
+
+public class CircularHierarchySpecification : Specification<Entity>
+{
+    public override Expression<Func<Entity, bool>> ToExpression()
+    {
+        return e => false; // Placeholder - would need complex cycle detection
+    }
+    
+    public override bool IsSatisfiedBy(Entity entity)
+    {
+        return HasCircularHierarchy(entity);
+    }
+    
+    private static bool HasCircularHierarchy(Entity entity, HashSet<int>? visited = null)
+    {
+        visited ??= new HashSet<int>();
+        
+        if (visited.Contains(entity.Id))
+            return true;
+            
+        visited.Add(entity.Id);
+        
+        return entity.Parents.Any(parent => HasCircularHierarchy(parent, new HashSet<int>(visited)));
+    }
+}
+
+public class RedundantPermissionSpecification : Specification<Permission>
+{
+    public override Expression<Func<Permission, bool>> ToExpression()
+    {
+        return p => p.Grant && p.Deny;
+    }
+}
+
+public class InactivePermissionSpecification : Specification<Permission>
+{
+    public override Expression<Func<Permission, bool>> ToExpression()
+    {
+        return p => !p.Grant && !p.Deny;
+    }
+}
+
+
+public static class SpecificationCastExtensions
+{
+    public static ISpecification<TTarget> Cast<TTarget>(this ISpecification<Entity> entitySpec) where TTarget : Entity
+    {
+        return new CastedSpecification<TTarget>(entitySpec);
+    }
+}
+
+public class CastedSpecification<T> : Specification<T> where T : Entity
+{
+    private readonly ISpecification<Entity> _entitySpec;
+    
+    public CastedSpecification(ISpecification<Entity> entitySpec)
+    {
+        _entitySpec = entitySpec;
+    }
+    
+    public override Expression<Func<T, bool>> ToExpression()
+    {
+        var entityExpression = _entitySpec.ToExpression();
+        var parameter = Expression.Parameter(typeof(T), entityExpression.Parameters[0].Name);
+        var body = new ReplaceExpressionVisitor(entityExpression.Parameters[0], parameter).Visit(entityExpression.Body);
+        return Expression.Lambda<Func<T, bool>>(body!, parameter);
+    }
+    
+    public override bool IsSatisfiedBy(T entity)
+    {
+        return _entitySpec.IsSatisfiedBy(entity);
+    }
 }

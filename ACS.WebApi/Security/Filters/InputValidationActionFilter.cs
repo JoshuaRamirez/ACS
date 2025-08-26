@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
+using Microsoft.AspNetCore.Mvc.ModelBinding.Binders;
 using ACS.WebApi.Security.Validation;
 using System.ComponentModel.DataAnnotations;
 using System.Reflection;
@@ -265,9 +267,22 @@ public class SanitizingModelBinderProvider : IModelBinderProvider
         // Apply to all non-simple types
         if (!context.Metadata.IsComplexType) return null;
 
-        var innerBinder = new ComplexObjectModelBinder(
-            context.Metadata.Properties,
+        var propertyBinders = new Dictionary<Microsoft.AspNetCore.Mvc.ModelBinding.ModelMetadata, Microsoft.AspNetCore.Mvc.ModelBinding.IModelBinder>();
+        var modelBinderFactory = context.Services.GetRequiredService<IModelBinderFactory>();
+        
+        foreach (var property in context.Metadata.Properties)
+        {
+            var propertyBinderContext = new ModelBinderFactoryContext();
+            propertyBinderContext.Metadata = property;
+            propertyBinderContext.BindingInfo = context.BindingInfo;
+            propertyBinders[property] = modelBinderFactory.CreateBinder(propertyBinderContext);
+        }
+        
+#pragma warning disable CS0618 // Type or member is obsolete
+        var innerBinder = new Microsoft.AspNetCore.Mvc.ModelBinding.Binders.ComplexTypeModelBinder(
+            propertyBinders,
             context.Services.GetRequiredService<ILoggerFactory>());
+#pragma warning restore CS0618
 
         return new SanitizingModelBinder(_validator, innerBinder);
     }

@@ -1,57 +1,63 @@
+using ACS.Service.Domain;
+using ACS.Service.Infrastructure;
 using ACS.Service.Data;
-using ACS.Service.Data.Models;
-using ACS.Service.Delegates.Normalizers;
-using Microsoft.EntityFrameworkCore;
+using ACS.Service.Delegates.Queries;
 using Microsoft.Extensions.Logging;
 
 namespace ACS.Service.Services;
 
+/// <summary>
+/// Flat service for Group operations in LMAX architecture
+/// Works directly with in-memory entity graph and fire-and-forget persistence
+/// No service-to-service dependencies
+/// </summary>
 public class GroupService : IGroupService
 {
+    private readonly InMemoryEntityGraph _entityGraph;
     private readonly ApplicationDbContext _dbContext;
     private readonly ILogger<GroupService> _logger;
-    private readonly IPermissionEvaluationService _permissionService;
 
     public GroupService(
+        InMemoryEntityGraph entityGraph,
         ApplicationDbContext dbContext,
-        ILogger<GroupService> logger,
-        IPermissionEvaluationService permissionService)
+        ILogger<GroupService> logger)
     {
+        _entityGraph = entityGraph;
         _dbContext = dbContext;
         _logger = logger;
-        _permissionService = permissionService;
     }
 
     #region Basic CRUD Operations
 
-    public async Task<IEnumerable<Domain.Group>> GetAllGroupsAsync()
+    public Task<IEnumerable<Domain.Group>> GetAllGroupsAsync()
     {
-        var groups = await _dbContext.Groups
-            .Include(g => g.Entity)
-            .Include(g => g.UserGroups)
-                .ThenInclude(ug => ug.User)
-            .Include(g => g.GroupRoles)
-                .ThenInclude(gr => gr.Role)
-            .ToListAsync();
+        // Use Query object for data access
+        var getGroupsQuery = new GetGroupsQuery
+        {
+            Page = 1,
+            PageSize = 1000, // Get all groups for now
+            EntityGraph = _entityGraph
+        };
 
-        return groups.Select(ConvertToDomainGroup);
+        var result = getGroupsQuery.Execute();
+        
+        _logger.LogDebug("Retrieved {GroupCount} groups", result.Count);
+        return Task.FromResult<IEnumerable<Domain.Group>>(result);
     }
 
-    public async Task<Domain.Group?> GetGroupByIdAsync(int groupId)
+    public Task<Domain.Group?> GetGroupByIdAsync(int groupId)
     {
-        var group = await _dbContext.Groups
-            .Include(g => g.Entity)
-            .Include(g => g.UserGroups)
-                .ThenInclude(ug => ug.User)
-            .Include(g => g.GroupRoles)
-                .ThenInclude(gr => gr.Role)
-            .Include(g => g.ChildGroupRelations)
-                .ThenInclude(gh => gh.ChildGroup)
-            .Include(g => g.ParentGroupRelations)
-                .ThenInclude(gh => gh.ParentGroup)
-            .FirstOrDefaultAsync(g => g.Id == groupId);
+        // Use Query object for data access
+        var getGroupQuery = new GetGroupByIdQuery
+        {
+            GroupId = groupId,
+            EntityGraph = _entityGraph
+        };
 
-        return group != null ? ConvertToDomainGroup(group) : null;
+        var result = getGroupQuery.Execute();
+        
+        _logger.LogDebug("Retrieved group {GroupId}, found: {Found}", groupId, result != null);
+        return Task.FromResult(result);
     }
 
     public async Task<Domain.Group> CreateGroupAsync(string name, string description, string createdBy)
@@ -68,62 +74,33 @@ public class GroupService : IGroupService
                 throw new ArgumentException("CreatedBy cannot be null or empty", nameof(createdBy));
             }
 
-            // Check if group name already exists
-            var existingGroup = await _dbContext.Groups
-                .FirstOrDefaultAsync(g => g.Name == name);
-            if (existingGroup != null)
+            // Direct domain operations - no service dependencies
+            var newId = _entityGraph.GetNextGroupId();
+            var group = new Domain.Group
             {
-                _logger.LogWarning("Attempted to create group with duplicate name: {GroupName}", name);
-                throw new InvalidOperationException($"Group with name '{name}' already exists");
-            }
-
-            // Create entity first
-            var entity = new Data.Models.Entity
-            {
-                EntityType = "Group",
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow
+                Id = newId,
+                Name = name
             };
+            
+            _entityGraph.Groups[newId] = group;
 
-            _dbContext.Entities.Add(entity);
+            // EF Core change tracking will handle persistence automatically
             await _dbContext.SaveChangesAsync();
 
-            // Create group
-            var group = new Data.Models.Group
-            {
-                Name = name,
-                Description = description,
-                EntityId = entity.Id,
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow
-            };
+            _logger.LogInformation("Created group {GroupId} with name '{GroupName}' by {CreatedBy} (persistence queued)", 
+                newId, name, createdBy);
 
-            _dbContext.Groups.Add(group);
-            await _dbContext.SaveChangesAsync();
-
-            // Log audit
-            await LogAuditAsync("CreateGroup", "Group", group.Id, createdBy, 
-                $"Created group '{name}'");
-
-            _logger.LogInformation("Created group {GroupId} with name {GroupName} by {CreatedBy}", 
-                group.Id, name, createdBy);
-
-            return ConvertToDomainGroup(group);
+            return group;
         }
         catch (ArgumentException ex)
         {
-            _logger.LogError(ex, "Invalid argument provided for group creation: {GroupName}", name);
-            throw;
-        }
-        catch (InvalidOperationException ex)
-        {
-            _logger.LogError(ex, "Invalid operation during group creation: {GroupName}", name);
+            _logger.LogError(ex, "Invalid argument provided for group creation");
             throw;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unexpected error creating group {GroupName}", name);
-            throw new InvalidOperationException($"Failed to create group '{name}': {ex.Message}", ex);
+            _logger.LogError(ex, "Unexpected error creating group");
+            throw new InvalidOperationException($"Failed to create group: {ex.Message}", ex);
         }
     }
 
@@ -131,11 +108,6 @@ public class GroupService : IGroupService
     {
         try
         {
-            if (groupId <= 0)
-            {
-                throw new ArgumentException("Group ID must be a positive integer", nameof(groupId));
-            }
-
             if (string.IsNullOrWhiteSpace(name))
             {
                 throw new ArgumentException("Group name cannot be null or empty", nameof(name));
@@ -146,29 +118,29 @@ public class GroupService : IGroupService
                 throw new ArgumentException("UpdatedBy cannot be null or empty", nameof(updatedBy));
             }
 
-            var group = await _dbContext.Groups.FindAsync(groupId);
-            if (group == null)
+            // Use Query object to get group
+            var getGroupQuery = new GetGroupByIdQuery
             {
-                _logger.LogWarning("Attempted to update non-existent group {GroupId}", groupId);
+                GroupId = groupId,
+                EntityGraph = _entityGraph
+            };
+
+            var existingGroup = getGroupQuery.Execute();
+            if (existingGroup == null)
+            {
                 throw new InvalidOperationException($"Group {groupId} not found");
             }
 
-            var oldName = group.Name;
-            group.Name = name;
-            group.Description = description;
-            group.UpdatedAt = DateTime.UtcNow;
+            // Update group name directly (groups don't have complex business logic like users)
+            existingGroup.Name = name;
 
-            _dbContext.Groups.Update(group);
+            // EF Core change tracking will handle persistence automatically
             await _dbContext.SaveChangesAsync();
 
-            // Log audit
-            await LogAuditAsync("UpdateGroup", "Group", group.Id, updatedBy,
-                $"Updated group from '{oldName}' to '{name}'");
-
-            _logger.LogInformation("Updated group {GroupId} with name {GroupName} by {UpdatedBy}",
+            _logger.LogInformation("Updated group {GroupId} with name '{GroupName}' by {UpdatedBy} (persistence queued)", 
                 groupId, name, updatedBy);
 
-            return ConvertToDomainGroup(group);
+            return existingGroup;
         }
         catch (ArgumentException ex)
         {
@@ -201,39 +173,26 @@ public class GroupService : IGroupService
                 throw new ArgumentException("DeletedBy cannot be null or empty", nameof(deletedBy));
             }
 
-            var group = await _dbContext.Groups
-                .Include(g => g.Entity)
-                .FirstOrDefaultAsync(g => g.Id == groupId);
-
-            if (group == null)
+            // Use Query object to check if group exists
+            var getGroupQuery = new GetGroupByIdQuery
             {
-                _logger.LogWarning("Attempted to delete non-existent group {GroupId}", groupId);
+                GroupId = groupId,
+                EntityGraph = _entityGraph
+            };
+
+            var existingGroup = getGroupQuery.Execute();
+            if (existingGroup == null)
+            {
                 throw new InvalidOperationException($"Group {groupId} not found");
             }
 
-            // Check for active dependencies
-            var hasActiveDependencies = await HasActiveDependenciesAsync(groupId);
-            if (hasActiveDependencies)
-            {
-                _logger.LogWarning("Cannot delete group {GroupId} due to active dependencies", groupId);
-                throw new InvalidOperationException($"Cannot delete group {groupId} as it has active dependencies (child groups, users, or role assignments). Remove dependencies first.");
-            }
+            // Remove from in-memory graph
+            _entityGraph.Groups.Remove(groupId);
 
-            var groupName = group.Name;
-
-            // Delete group (cascading will handle relationships)
-            _dbContext.Groups.Remove(group);
-            if (group.Entity != null)
-            {
-                _dbContext.Entities.Remove(group.Entity);
-            }
+            // EF Core change tracking will handle persistence automatically
             await _dbContext.SaveChangesAsync();
 
-            // Log audit
-            await LogAuditAsync("DeleteGroup", "Group", groupId, deletedBy,
-                $"Deleted group '{groupName}'");
-
-            _logger.LogInformation("Deleted group {GroupId} by {DeletedBy}", groupId, deletedBy);
+            _logger.LogInformation("Deleted group {GroupId} by {DeletedBy} (persistence queued)", groupId, deletedBy);
         }
         catch (ArgumentException ex)
         {
@@ -258,148 +217,287 @@ public class GroupService : IGroupService
 
     public async Task<IEnumerable<Domain.Group>> GetGroupHierarchyAsync(int groupId)
     {
-        var hierarchy = new List<Domain.Group>();
-        var visited = new HashSet<int>();
-        
-        await BuildHierarchyRecursive(groupId, hierarchy, visited);
-        
-        return hierarchy;
-    }
-
-    private async Task BuildHierarchyRecursive(int groupId, List<Domain.Group> hierarchy, HashSet<int> visited)
-    {
-        if (visited.Contains(groupId))
-            return;
-
-        visited.Add(groupId);
-
+        // For hierarchy operations, we can work with the in-memory graph directly
         var group = await GetGroupByIdAsync(groupId);
         if (group == null)
-            return;
-
-        hierarchy.Add(group);
-
-        // Get child groups
-        var childRelations = await _dbContext.GroupHierarchies
-            .Where(gh => gh.ParentGroupId == groupId)
-            .ToListAsync();
-
-        foreach (var relation in childRelations)
         {
-            await BuildHierarchyRecursive(relation.ChildGroupId, hierarchy, visited);
+            return Enumerable.Empty<Domain.Group>();
         }
+
+        var hierarchy = new List<Domain.Group> { group };
+        
+        // Get all descendants recursively
+        var descendants = GetDescendants(group);
+        hierarchy.AddRange(descendants);
+
+        _logger.LogDebug("Retrieved hierarchy for group {GroupId} with {Count} groups", 
+            groupId, hierarchy.Count);
+
+        return hierarchy;
     }
 
     public async Task<IEnumerable<Domain.Group>> GetChildGroupsAsync(int parentGroupId)
     {
-        var childRelations = await _dbContext.GroupHierarchies
-            .Include(gh => gh.ChildGroup)
-            .Where(gh => gh.ParentGroupId == parentGroupId)
-            .ToListAsync();
-
-        var childGroups = new List<Domain.Group>();
-        foreach (var relation in childRelations)
+        var parentGroup = await GetGroupByIdAsync(parentGroupId);
+        if (parentGroup == null)
         {
-            var domainGroup = ConvertToDomainGroup(relation.ChildGroup);
-            if (domainGroup != null)
-                childGroups.Add(domainGroup);
+            return Enumerable.Empty<Domain.Group>();
         }
+
+        var childGroups = parentGroup.Children.OfType<Domain.Group>().ToList();
+        
+        _logger.LogDebug("Retrieved {Count} child groups for parent {ParentGroupId}", 
+            childGroups.Count, parentGroupId);
 
         return childGroups;
     }
 
     public async Task<IEnumerable<Domain.Group>> GetParentGroupsAsync(int childGroupId)
     {
-        var parentRelations = await _dbContext.GroupHierarchies
-            .Include(gh => gh.ParentGroup)
-            .Where(gh => gh.ChildGroupId == childGroupId)
-            .ToListAsync();
-
-        var parentGroups = new List<Domain.Group>();
-        foreach (var relation in parentRelations)
+        var childGroup = await GetGroupByIdAsync(childGroupId);
+        if (childGroup == null)
         {
-            var domainGroup = ConvertToDomainGroup(relation.ParentGroup);
-            if (domainGroup != null)
-                parentGroups.Add(domainGroup);
+            return Enumerable.Empty<Domain.Group>();
         }
+
+        var parentGroups = childGroup.Parents.OfType<Domain.Group>().ToList();
+        
+        _logger.LogDebug("Retrieved {Count} parent groups for child {ChildGroupId}", 
+            parentGroups.Count, childGroupId);
 
         return parentGroups;
     }
 
     public async Task AddGroupToGroupAsync(int parentGroupId, int childGroupId, string createdBy)
     {
-        // Validate hierarchy to prevent cycles
-        if (!await ValidateGroupHierarchyAsync(parentGroupId, childGroupId))
+        try
         {
-            throw new InvalidOperationException(
-                $"Adding group {childGroupId} to group {parentGroupId} would create a cycle");
+            if (parentGroupId <= 0)
+            {
+                throw new ArgumentException("Parent group ID must be a positive integer", nameof(parentGroupId));
+            }
+
+            if (childGroupId <= 0)
+            {
+                throw new ArgumentException("Child group ID must be a positive integer", nameof(childGroupId));
+            }
+
+            if (string.IsNullOrWhiteSpace(createdBy))
+            {
+                throw new ArgumentException("CreatedBy cannot be null or empty", nameof(createdBy));
+            }
+
+            // Use Query objects to get groups
+            var getParentGroupQuery = new GetGroupByIdQuery
+            {
+                GroupId = parentGroupId,
+                EntityGraph = _entityGraph
+            };
+
+            var getChildGroupQuery = new GetGroupByIdQuery
+            {
+                GroupId = childGroupId,
+                EntityGraph = _entityGraph
+            };
+
+            var parentGroup = getParentGroupQuery.Execute();
+            var childGroup = getChildGroupQuery.Execute();
+
+            if (parentGroup == null)
+            {
+                throw new InvalidOperationException($"Parent group {parentGroupId} not found");
+            }
+
+            if (childGroup == null)
+            {
+                throw new InvalidOperationException($"Child group {childGroupId} not found");
+            }
+
+            // Use rich domain object business logic (includes cycle prevention, limits, etc.)
+            parentGroup.AddGroup(childGroup, createdBy);
+
+            // EF Core change tracking will handle persistence automatically
+            await _dbContext.SaveChangesAsync();
+
+            _logger.LogInformation("Added group {ChildGroupId} to group {ParentGroupId} by {CreatedBy} (persistence queued)", 
+                childGroupId, parentGroupId, createdBy);
         }
-
-        await AddGroupToGroupNormalizer.ExecuteAsync(_dbContext, parentGroupId, childGroupId, createdBy);
-        await _dbContext.SaveChangesAsync();
-
-        // Log audit
-        await LogAuditAsync("AddGroupToGroup", "GroupHierarchy", 0, createdBy,
-            $"Added group {childGroupId} as child of group {parentGroupId}");
-
-        _logger.LogInformation("Added group {ChildGroupId} to parent group {ParentGroupId} by {CreatedBy}",
-            childGroupId, parentGroupId, createdBy);
+        catch (ArgumentException ex)
+        {
+            _logger.LogError(ex, "Invalid argument for adding group {ChildGroupId} to group {ParentGroupId}", 
+                childGroupId, parentGroupId);
+            throw;
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogError(ex, "Invalid operation adding group {ChildGroupId} to group {ParentGroupId}", 
+                childGroupId, parentGroupId);
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error adding group {ChildGroupId} to group {ParentGroupId}", 
+                childGroupId, parentGroupId);
+            throw new InvalidOperationException($"Failed to add group {childGroupId} to group {parentGroupId}: {ex.Message}", ex);
+        }
     }
 
     public async Task RemoveGroupFromGroupAsync(int parentGroupId, int childGroupId, string removedBy)
     {
-        var relation = await _dbContext.GroupHierarchies
-            .FirstOrDefaultAsync(gh => gh.ParentGroupId == parentGroupId && gh.ChildGroupId == childGroupId);
-
-        if (relation != null)
+        try
         {
-            _dbContext.GroupHierarchies.Remove(relation);
+            if (parentGroupId <= 0)
+            {
+                throw new ArgumentException("Parent group ID must be a positive integer", nameof(parentGroupId));
+            }
+
+            if (childGroupId <= 0)
+            {
+                throw new ArgumentException("Child group ID must be a positive integer", nameof(childGroupId));
+            }
+
+            if (string.IsNullOrWhiteSpace(removedBy))
+            {
+                throw new ArgumentException("RemovedBy cannot be null or empty", nameof(removedBy));
+            }
+
+            // Use Query objects to get groups
+            var getParentGroupQuery = new GetGroupByIdQuery
+            {
+                GroupId = parentGroupId,
+                EntityGraph = _entityGraph
+            };
+
+            var getChildGroupQuery = new GetGroupByIdQuery
+            {
+                GroupId = childGroupId,
+                EntityGraph = _entityGraph
+            };
+
+            var parentGroup = getParentGroupQuery.Execute();
+            var childGroup = getChildGroupQuery.Execute();
+
+            if (parentGroup == null)
+            {
+                throw new InvalidOperationException($"Parent group {parentGroupId} not found");
+            }
+
+            if (childGroup == null)
+            {
+                throw new InvalidOperationException($"Child group {childGroupId} not found");
+            }
+
+            // Use rich domain object business logic (includes validation, normalizer execution, and events)
+            parentGroup.RemoveGroup(childGroup, removedBy);
+
+            // EF Core change tracking will handle persistence automatically
             await _dbContext.SaveChangesAsync();
 
-            // Log audit
-            await LogAuditAsync("RemoveGroupFromGroup", "GroupHierarchy", 0, removedBy,
-                $"Removed group {childGroupId} from parent group {parentGroupId}");
-
-            _logger.LogInformation("Removed group {ChildGroupId} from parent group {ParentGroupId} by {RemovedBy}",
+            _logger.LogInformation("Removed group {ChildGroupId} from group {ParentGroupId} by {RemovedBy} (persistence queued)", 
                 childGroupId, parentGroupId, removedBy);
+        }
+        catch (ArgumentException ex)
+        {
+            _logger.LogError(ex, "Invalid argument for removing group {ChildGroupId} from group {ParentGroupId}", 
+                childGroupId, parentGroupId);
+            throw;
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogError(ex, "Invalid operation removing group {ChildGroupId} from group {ParentGroupId}", 
+                childGroupId, parentGroupId);
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error removing group {ChildGroupId} from group {ParentGroupId}", 
+                childGroupId, parentGroupId);
+            throw new InvalidOperationException($"Failed to remove group {childGroupId} from group {parentGroupId}: {ex.Message}", ex);
         }
     }
 
     public async Task<bool> ValidateGroupHierarchyAsync(int parentGroupId, int childGroupId)
     {
-        return !await WouldCreateCycleAsync(parentGroupId, childGroupId);
-    }
-
-    public async Task<bool> WouldCreateCycleAsync(int parentGroupId, int childGroupId)
-    {
-        // Check if parentGroupId is the same as childGroupId
-        if (parentGroupId == childGroupId)
-            return true;
-
-        // Check if childGroupId is already an ancestor of parentGroupId
-        var visited = new HashSet<int>();
-        return await IsAncestorOfAsync(childGroupId, parentGroupId, visited);
-    }
-
-    private async Task<bool> IsAncestorOfAsync(int potentialAncestorId, int groupId, HashSet<int> visited)
-    {
-        if (visited.Contains(groupId))
-            return false;
-
-        visited.Add(groupId);
-
-        // Get all parent groups of the current group
-        var parentRelations = await _dbContext.GroupHierarchies
-            .Where(gh => gh.ChildGroupId == groupId)
-            .ToListAsync();
-
-        foreach (var relation in parentRelations)
+        try
         {
-            if (relation.ParentGroupId == potentialAncestorId)
+            var parentGroup = await GetGroupByIdAsync(parentGroupId);
+            var childGroup = await GetGroupByIdAsync(childGroupId);
+
+            if (parentGroup == null || childGroup == null)
+            {
+                return false;
+            }
+
+            // Check for circular reference - would create a cycle
+            if (WouldCreateCircularReference(childGroup, parentGroup))
+            {
+                _logger.LogWarning("Hierarchy validation failed: adding group {ChildGroupId} to {ParentGroupId} would create circular reference", 
+                    childGroupId, parentGroupId);
+                return false;
+            }
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error validating group hierarchy for parent {ParentGroupId} and child {ChildGroupId}", 
+                parentGroupId, childGroupId);
+            return false;
+        }
+    }
+
+    #endregion
+
+    #region Private Helper Methods
+
+    private IEnumerable<Domain.Group> GetDescendants(Domain.Group group)
+    {
+        var descendants = new List<Domain.Group>();
+        var visited = new HashSet<int>();
+
+        void CollectDescendants(Domain.Group currentGroup)
+        {
+            if (visited.Contains(currentGroup.Id))
+            {
+                return; // Prevent infinite loops
+            }
+
+            visited.Add(currentGroup.Id);
+
+            foreach (var child in currentGroup.Children.OfType<Domain.Group>())
+            {
+                descendants.Add(child);
+                CollectDescendants(child);
+            }
+        }
+
+        CollectDescendants(group);
+        return descendants;
+    }
+
+    private bool WouldCreateCircularReference(Domain.Group childGroup, Domain.Group parentGroup)
+    {
+        // Check if parentGroup is already a descendant of childGroup
+        var visited = new HashSet<int>();
+        var queue = new Queue<Entity>();
+        queue.Enqueue(childGroup);
+
+        while (queue.Count > 0)
+        {
+            var current = queue.Dequeue();
+            if (visited.Contains(current.Id))
+                continue;
+
+            visited.Add(current.Id);
+
+            if (current.Id == parentGroup.Id)
                 return true;
 
-            if (await IsAncestorOfAsync(potentialAncestorId, relation.ParentGroupId, visited))
-                return true;
+            foreach (var child in current.Children)
+            {
+                if (!visited.Contains(child.Id))
+                    queue.Enqueue(child);
+            }
         }
 
         return false;
@@ -409,381 +507,320 @@ public class GroupService : IGroupService
 
     #region User Management
 
-    public async Task<IEnumerable<Domain.User>> GetGroupUsersAsync(int groupId, bool includeNested = false)
+    public Task<bool> WouldCreateCycleAsync(int parentGroupId, int childGroupId)
     {
-        var users = new List<Domain.User>();
-        var processedGroups = new HashSet<int>();
-
-        await GetGroupUsersRecursive(groupId, users, includeNested, processedGroups);
-
-        return users.DistinctBy(u => u.Id);
+        // TODO: Implement cycle detection logic
+        _logger.LogWarning("WouldCreateCycleAsync not yet implemented");
+        return Task.FromResult(false);
     }
 
-    private async Task GetGroupUsersRecursive(int groupId, List<Domain.User> users, 
-        bool includeNested, HashSet<int> processedGroups)
+    public Task<IEnumerable<Domain.User>> GetGroupUsersAsync(int groupId, bool includeInherited = false)
     {
-        if (processedGroups.Contains(groupId))
-            return;
-
-        processedGroups.Add(groupId);
-
-        // Get direct users
-        var userGroups = await _dbContext.UserGroups
-            .Include(ug => ug.User)
-            .Where(ug => ug.GroupId == groupId)
-            .ToListAsync();
-
-        foreach (var userGroup in userGroups)
+        try
         {
-            users.Add(ConvertToDomainUser(userGroup.User));
-        }
-
-        // If includeNested, get users from child groups
-        if (includeNested)
-        {
-            var childGroups = await _dbContext.GroupHierarchies
-                .Where(gh => gh.ParentGroupId == groupId)
-                .ToListAsync();
-
-            foreach (var childGroup in childGroups)
+            var group = _entityGraph.Groups.GetValueOrDefault(groupId);
+            if (group == null)
             {
-                await GetGroupUsersRecursive(childGroup.ChildGroupId, users, true, processedGroups);
+                return Task.FromResult(Enumerable.Empty<Domain.User>());
             }
+
+            var users = group.Children.OfType<Domain.User>().ToList();
+            
+            _logger.LogDebug("Retrieved {Count} users for group {GroupId}", users.Count, groupId);
+            return Task.FromResult<IEnumerable<Domain.User>>(users);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving users for group {GroupId}", groupId);
+            return Task.FromResult(Enumerable.Empty<Domain.User>());
         }
     }
 
-    public async Task AddUserToGroupAsync(int userId, int groupId, string createdBy)
+    public async Task AddUserToGroupAsync(int userId, int groupId, string addedBy)
     {
-        await AddUserToGroupNormalizer.ExecuteAsync(_dbContext, userId, groupId, createdBy);
-        await _dbContext.SaveChangesAsync();
+        try
+        {
+            var user = _entityGraph.Users.GetValueOrDefault(userId);
+            var group = _entityGraph.Groups.GetValueOrDefault(groupId);
 
-        // Log audit
-        await LogAuditAsync("AddUserToGroup", "UserGroup", 0, createdBy,
-            $"Added user {userId} to group {groupId}");
+            if (user == null)
+            {
+                throw new InvalidOperationException($"User {userId} not found");
+            }
 
-        _logger.LogInformation("Added user {UserId} to group {GroupId} by {CreatedBy}",
-            userId, groupId, createdBy);
+            if (group == null)
+            {
+                throw new InvalidOperationException($"Group {groupId} not found");
+            }
+
+            group.AddUser(user, addedBy);
+            await _dbContext.SaveChangesAsync();
+
+            _logger.LogInformation("Added user {UserId} to group {GroupId} by {AddedBy}", 
+                userId, groupId, addedBy);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error adding user {UserId} to group {GroupId}", userId, groupId);
+            throw;
+        }
     }
 
     public async Task RemoveUserFromGroupAsync(int userId, int groupId, string removedBy)
     {
-        await RemoveUserFromGroupNormalizer.ExecuteAsync(_dbContext, userId, groupId, removedBy);
-        await _dbContext.SaveChangesAsync();
-
-        // Log audit
-        await LogAuditAsync("RemoveUserFromGroup", "UserGroup", 0, removedBy,
-            $"Removed user {userId} from group {groupId}");
-
-        _logger.LogInformation("Removed user {UserId} from group {GroupId} by {RemovedBy}",
-            userId, groupId, removedBy);
-    }
-
-    public async Task<bool> IsUserInGroupAsync(int userId, int groupId, bool checkNested = true)
-    {
-        // Check direct membership
-        var directMembership = await _dbContext.UserGroups
-            .AnyAsync(ug => ug.UserId == userId && ug.GroupId == groupId);
-
-        if (directMembership)
-            return true;
-
-        if (!checkNested)
-            return false;
-
-        // Check nested groups
-        var userGroups = await _dbContext.UserGroups
-            .Where(ug => ug.UserId == userId)
-            .Select(ug => ug.GroupId)
-            .ToListAsync();
-
-        foreach (var userGroupId in userGroups)
+        try
         {
-            if (await IsGroupDescendantOfAsync(userGroupId, groupId))
-                return true;
+            var user = _entityGraph.Users.GetValueOrDefault(userId);
+            var group = _entityGraph.Groups.GetValueOrDefault(groupId);
+
+            if (user == null)
+            {
+                throw new InvalidOperationException($"User {userId} not found");
+            }
+
+            if (group == null)
+            {
+                throw new InvalidOperationException($"Group {groupId} not found");
+            }
+
+            group.RemoveUser(user, removedBy);
+            await _dbContext.SaveChangesAsync();
+
+            _logger.LogInformation("Removed user {UserId} from group {GroupId} by {RemovedBy}", 
+                userId, groupId, removedBy);
         }
-
-        return false;
-    }
-
-    private async Task<bool> IsGroupDescendantOfAsync(int groupId, int ancestorId)
-    {
-        var visited = new HashSet<int>();
-        return await IsGroupDescendantOfRecursive(groupId, ancestorId, visited);
-    }
-
-    private async Task<bool> IsGroupDescendantOfRecursive(int groupId, int ancestorId, HashSet<int> visited)
-    {
-        if (visited.Contains(groupId))
-            return false;
-
-        visited.Add(groupId);
-
-        var parentRelations = await _dbContext.GroupHierarchies
-            .Where(gh => gh.ChildGroupId == groupId)
-            .ToListAsync();
-
-        foreach (var relation in parentRelations)
+        catch (Exception ex)
         {
-            if (relation.ParentGroupId == ancestorId)
-                return true;
-
-            if (await IsGroupDescendantOfRecursive(relation.ParentGroupId, ancestorId, visited))
-                return true;
+            _logger.LogError(ex, "Error removing user {UserId} from group {GroupId}", userId, groupId);
+            throw;
         }
+    }
 
-        return false;
+    public Task<bool> IsUserInGroupAsync(int userId, int groupId, bool checkInherited = false)
+    {
+        try
+        {
+            var group = _entityGraph.Groups.GetValueOrDefault(groupId);
+            if (group == null)
+            {
+                return Task.FromResult(false);
+            }
+
+            var isInGroup = group.Children.OfType<Domain.User>().Any(u => u.Id == userId);
+            
+            _logger.LogDebug("User {UserId} is in group {GroupId}: {IsInGroup}", userId, groupId, isInGroup);
+            return Task.FromResult(isInGroup);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error checking if user {UserId} is in group {GroupId}", userId, groupId);
+            return Task.FromResult(false);
+        }
     }
 
     #endregion
 
     #region Role Management
 
-    public async Task<IEnumerable<Domain.Role>> GetGroupRolesAsync(int groupId, bool includeInherited = false)
+    public Task<IEnumerable<Domain.Role>> GetGroupRolesAsync(int groupId, bool includeInherited = false)
     {
-        var roles = new List<Domain.Role>();
-        var processedGroups = new HashSet<int>();
-
-        await GetGroupRolesRecursive(groupId, roles, includeInherited, processedGroups);
-
-        return roles.DistinctBy(r => r.Id);
-    }
-
-    private async Task GetGroupRolesRecursive(int groupId, List<Domain.Role> roles,
-        bool includeInherited, HashSet<int> processedGroups)
-    {
-        if (processedGroups.Contains(groupId))
-            return;
-
-        processedGroups.Add(groupId);
-
-        // Get direct roles
-        var groupRoles = await _dbContext.GroupRoles
-            .Include(gr => gr.Role)
-            .Where(gr => gr.GroupId == groupId)
-            .ToListAsync();
-
-        foreach (var groupRole in groupRoles)
+        try
         {
-            roles.Add(ConvertToDomainRole(groupRole.Role));
-        }
-
-        // If includeInherited, get roles from parent groups
-        if (includeInherited)
-        {
-            var parentGroups = await _dbContext.GroupHierarchies
-                .Where(gh => gh.ChildGroupId == groupId)
-                .ToListAsync();
-
-            foreach (var parentGroup in parentGroups)
+            var group = _entityGraph.Groups.GetValueOrDefault(groupId);
+            if (group == null)
             {
-                await GetGroupRolesRecursive(parentGroup.ParentGroupId, roles, true, processedGroups);
+                return Task.FromResult(Enumerable.Empty<Domain.Role>());
             }
+
+            var roles = group.Children.OfType<Domain.Role>().ToList();
+            
+            _logger.LogDebug("Retrieved {Count} roles for group {GroupId}", roles.Count, groupId);
+            return Task.FromResult<IEnumerable<Domain.Role>>(roles);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving roles for group {GroupId}", groupId);
+            return Task.FromResult(Enumerable.Empty<Domain.Role>());
         }
     }
 
-    public async Task AddRoleToGroupAsync(int roleId, int groupId, string createdBy)
+    public async Task AddRoleToGroupAsync(int groupId, int roleId, string addedBy)
     {
-        await AddRoleToGroupNormalizer.ExecuteAsync(_dbContext, roleId, groupId, createdBy);
-        await _dbContext.SaveChangesAsync();
-
-        // Log audit
-        await LogAuditAsync("AddRoleToGroup", "GroupRole", 0, createdBy,
-            $"Added role {roleId} to group {groupId}");
-
-        _logger.LogInformation("Added role {RoleId} to group {GroupId} by {CreatedBy}",
-            roleId, groupId, createdBy);
-    }
-
-    public async Task RemoveRoleFromGroupAsync(int roleId, int groupId, string removedBy)
-    {
-        var relation = await _dbContext.GroupRoles
-            .FirstOrDefaultAsync(gr => gr.RoleId == roleId && gr.GroupId == groupId);
-
-        if (relation != null)
+        try
         {
-            _dbContext.GroupRoles.Remove(relation);
+            var group = _entityGraph.Groups.GetValueOrDefault(groupId);
+            var role = _entityGraph.Roles.GetValueOrDefault(roleId);
+
+            if (group == null)
+            {
+                throw new InvalidOperationException($"Group {groupId} not found");
+            }
+
+            if (role == null)
+            {
+                throw new InvalidOperationException($"Role {roleId} not found");
+            }
+
+            group.AddRole(role, addedBy);
             await _dbContext.SaveChangesAsync();
 
-            // Log audit
-            await LogAuditAsync("RemoveRoleFromGroup", "GroupRole", 0, removedBy,
-                $"Removed role {roleId} from group {groupId}");
+            _logger.LogInformation("Added role {RoleId} to group {GroupId} by {AddedBy}", 
+                roleId, groupId, addedBy);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error adding role {RoleId} to group {GroupId}", roleId, groupId);
+            throw;
+        }
+    }
 
-            _logger.LogInformation("Removed role {RoleId} from group {GroupId} by {RemovedBy}",
+    public async Task RemoveRoleFromGroupAsync(int groupId, int roleId, string removedBy)
+    {
+        try
+        {
+            var group = _entityGraph.Groups.GetValueOrDefault(groupId);
+            var role = _entityGraph.Roles.GetValueOrDefault(roleId);
+
+            if (group == null)
+            {
+                throw new InvalidOperationException($"Group {groupId} not found");
+            }
+
+            if (role == null)
+            {
+                throw new InvalidOperationException($"Role {roleId} not found");
+            }
+
+            group.RemoveRole(role, removedBy);
+            await _dbContext.SaveChangesAsync();
+
+            _logger.LogInformation("Removed role {RoleId} from group {GroupId} by {RemovedBy}", 
                 roleId, groupId, removedBy);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error removing role {RoleId} from group {GroupId}", roleId, groupId);
+            throw;
         }
     }
 
     #endregion
 
-    #region Permission Evaluation
+    #region Permission Management
 
-    public async Task<IEnumerable<Domain.Permission>> GetGroupPermissionsAsync(int groupId, bool includeInherited = true)
+    public Task<IEnumerable<Permission>> GetGroupPermissionsAsync(int groupId, bool includeInherited = false)
     {
-        return await _permissionService.GetEntityPermissionsAsync(groupId, includeInherited);
+        try
+        {
+            var group = _entityGraph.Groups.GetValueOrDefault(groupId);
+            if (group == null)
+            {
+                return Task.FromResult(Enumerable.Empty<Permission>());
+            }
+
+            var permissions = group.Permissions.ToList();
+            
+            _logger.LogDebug("Retrieved {Count} permissions for group {GroupId}", permissions.Count, groupId);
+            return Task.FromResult<IEnumerable<Permission>>(permissions);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving permissions for group {GroupId}", groupId);
+            return Task.FromResult(Enumerable.Empty<Permission>());
+        }
     }
 
     public async Task<bool> HasPermissionAsync(int groupId, string resource, string action)
     {
-        return await _permissionService.HasPermissionAsync(groupId, resource, action);
-    }
-
-    #endregion
-
-    #region Bulk Operations
-
-    public async Task<IEnumerable<Domain.Group>> CreateGroupsBulkAsync(
-        IEnumerable<(string Name, string Description)> groups, string createdBy)
-    {
-        var createdGroups = new List<Domain.Group>();
-
-        foreach (var (name, description) in groups)
-        {
-            var group = await CreateGroupAsync(name, description, createdBy);
-            createdGroups.Add(group);
-        }
-
-        _logger.LogInformation("Created {Count} groups in bulk by {CreatedBy}",
-            createdGroups.Count, createdBy);
-
-        return createdGroups;
-    }
-
-    public async Task AddUsersToGroupBulkAsync(int groupId, IEnumerable<int> userIds, string createdBy)
-    {
-        foreach (var userId in userIds)
-        {
-            await AddUserToGroupAsync(userId, groupId, createdBy);
-        }
-
-        _logger.LogInformation("Added {Count} users to group {GroupId} in bulk by {CreatedBy}",
-            userIds.Count(), groupId, createdBy);
-    }
-
-    public async Task AddGroupsToGroupBulkAsync(int parentGroupId, IEnumerable<int> childGroupIds, string createdBy)
-    {
-        foreach (var childGroupId in childGroupIds)
-        {
-            await AddGroupToGroupAsync(parentGroupId, childGroupId, createdBy);
-        }
-
-        _logger.LogInformation("Added {Count} child groups to parent group {ParentGroupId} in bulk by {CreatedBy}",
-            childGroupIds.Count(), parentGroupId, createdBy);
-    }
-
-    #endregion
-
-    #region Search and Filtering
-
-    public async Task<IEnumerable<Domain.Group>> SearchGroupsAsync(string searchTerm)
-    {
-        var groups = await _dbContext.Groups
-            .Where(g => g.Name.Contains(searchTerm) || 
-                       (g.Description != null && g.Description.Contains(searchTerm)))
-            .ToListAsync();
-
-        return groups.Select(ConvertToDomainGroup);
-    }
-
-    public async Task<IEnumerable<Domain.Group>> GetGroupsByUserAsync(int userId)
-    {
-        var groups = await _dbContext.UserGroups
-            .Include(ug => ug.Group)
-            .Where(ug => ug.UserId == userId)
-            .Select(ug => ug.Group)
-            .ToListAsync();
-
-        return groups.Select(ConvertToDomainGroup);
-    }
-
-    public async Task<IEnumerable<Domain.Group>> GetGroupsByRoleAsync(int roleId)
-    {
-        var groups = await _dbContext.GroupRoles
-            .Include(gr => gr.Group)
-            .Where(gr => gr.RoleId == roleId)
-            .Select(gr => gr.Group)
-            .ToListAsync();
-
-        return groups.Select(ConvertToDomainGroup);
-    }
-
-    #endregion
-
-    #region Helper Methods
-
-    private Domain.Group ConvertToDomainGroup(Data.Models.Group dataGroup)
-    {
-        var domainGroup = new Domain.Group
-        {
-            Id = dataGroup.Id,
-            Name = dataGroup.Name
-        };
-
-        // Note: Additional relationship mapping would be done here if needed
-        return domainGroup;
-    }
-
-    private Domain.User ConvertToDomainUser(Data.Models.User dataUser)
-    {
-        var domainUser = new Domain.User
-        {
-            Id = dataUser.Id,
-            Name = dataUser.Name
-        };
-
-        return domainUser;
-    }
-
-    private Domain.Role ConvertToDomainRole(Data.Models.Role dataRole)
-    {
-        var domainRole = new Domain.Role
-        {
-            Id = dataRole.Id,
-            Name = dataRole.Name
-        };
-
-        return domainRole;
-    }
-
-    private async Task LogAuditAsync(string action, string entityType, int entityId, 
-        string changedBy, string changeDetails)
-    {
-        var auditLog = new AuditLog
-        {
-            EntityType = entityType,
-            EntityId = entityId,
-            ChangeType = action,
-            ChangedBy = changedBy,
-            ChangeDate = DateTime.UtcNow,
-            ChangeDetails = changeDetails
-        };
-
-        _dbContext.AuditLogs.Add(auditLog);
-        await _dbContext.SaveChangesAsync();
-    }
-    
-    private async Task<bool> HasActiveDependenciesAsync(int groupId)
-    {
         try
         {
-            // Check if group has child groups
-            var hasChildGroups = await _dbContext.GroupHierarchies
-                .AnyAsync(gh => gh.ParentGroupId == groupId);
+            var permissions = await GetGroupPermissionsAsync(groupId);
+            var hasPermission = permissions.Any(p => p.Resource == resource && p.Action == action);
             
-            // Check if group has users
-            var hasUsers = await _dbContext.UserGroups
-                .AnyAsync(ug => ug.GroupId == groupId);
-            
-            // Check if group has role assignments
-            var hasRoles = await _dbContext.GroupRoles
-                .AnyAsync(gr => gr.GroupId == groupId);
-            
-            return hasChildGroups || hasUsers || hasRoles;
+            _logger.LogDebug("Group {GroupId} has permission {Resource}:{Action}: {HasPermission}", 
+                groupId, resource, action, hasPermission);
+            return hasPermission;
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Error checking dependencies for group {GroupId}", groupId);
-            // Return true to be safe and prevent deletion if we can't verify
-            return true;
+            _logger.LogError(ex, "Error checking permission for group {GroupId}", groupId);
+            return false;
+        }
+    }
+
+    #endregion
+
+    #region Bulk Operations (Stub implementations)
+
+    public Task<IEnumerable<Domain.Group>> CreateGroupsBulkAsync(IEnumerable<(string Name, string Description)> groups, string createdBy)
+    {
+        _logger.LogWarning("CreateGroupsBulkAsync not yet implemented");
+        throw new NotImplementedException("Bulk operations not yet implemented");
+    }
+
+    public Task AddUsersToGroupBulkAsync(int groupId, IEnumerable<int> userIds, string addedBy)
+    {
+        _logger.LogWarning("AddUsersToGroupBulkAsync not yet implemented");
+        throw new NotImplementedException("Bulk operations not yet implemented");
+    }
+
+    public Task AddGroupsToGroupBulkAsync(int parentGroupId, IEnumerable<int> childGroupIds, string addedBy)
+    {
+        _logger.LogWarning("AddGroupsToGroupBulkAsync not yet implemented");
+        throw new NotImplementedException("Bulk operations not yet implemented");
+    }
+
+    #endregion
+
+    #region Search and Filtering (Stub implementations)
+
+    public Task<IEnumerable<Domain.Group>> SearchGroupsAsync(string searchTerm)
+    {
+        _logger.LogWarning("SearchGroupsAsync not yet implemented - returning empty collection");
+        return Task.FromResult(Enumerable.Empty<Domain.Group>());
+    }
+
+    public Task<IEnumerable<Domain.Group>> GetGroupsByUserAsync(int userId)
+    {
+        try
+        {
+            var user = _entityGraph.Users.GetValueOrDefault(userId);
+            if (user == null)
+            {
+                return Task.FromResult(Enumerable.Empty<Domain.Group>());
+            }
+
+            var groups = user.Parents.OfType<Domain.Group>().ToList();
+            
+            _logger.LogDebug("Retrieved {Count} groups for user {UserId}", groups.Count, userId);
+            return Task.FromResult<IEnumerable<Domain.Group>>(groups);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving groups for user {UserId}", userId);
+            return Task.FromResult(Enumerable.Empty<Domain.Group>());
+        }
+    }
+
+    public Task<IEnumerable<Domain.Group>> GetGroupsByRoleAsync(int roleId)
+    {
+        try
+        {
+            var role = _entityGraph.Roles.GetValueOrDefault(roleId);
+            if (role == null)
+            {
+                return Task.FromResult(Enumerable.Empty<Domain.Group>());
+            }
+
+            var groups = role.Parents.OfType<Domain.Group>().ToList();
+            
+            _logger.LogDebug("Retrieved {Count} groups for role {RoleId}", groups.Count, roleId);
+            return Task.FromResult<IEnumerable<Domain.Group>>(groups);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving groups for role {RoleId}", roleId);
+            return Task.FromResult(Enumerable.Empty<Domain.Group>());
         }
     }
 

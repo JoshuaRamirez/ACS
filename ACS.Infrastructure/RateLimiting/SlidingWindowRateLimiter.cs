@@ -180,7 +180,7 @@ public class SlidingWindowRateLimiter : IRateLimitingService
         };
     }
 
-    private async Task<RateLimitResult> ApplySlidingWindowAsync(
+    private Task<RateLimitResult> ApplySlidingWindowAsync(
         WindowData windowData, 
         RateLimitPolicy policy, 
         DateTime now, 
@@ -207,7 +207,7 @@ public class SlidingWindowRateLimiter : IRateLimitingService
         var remainingRequests = Math.Max(0, policy.RequestLimit - currentRequestCount - (isAllowed ? 1 : 0));
         var resetTime = CalculateResetTime(activeTimestamps, policy, now);
         
-        return new RateLimitResult
+        var result = new RateLimitResult
         {
             IsAllowed = isAllowed,
             RemainingRequests = remainingRequests,
@@ -222,6 +222,8 @@ public class SlidingWindowRateLimiter : IRateLimitingService
                 ["active_requests"] = currentRequestCount
             }
         };
+        
+        return Task.FromResult(result);
     }
 
     private async Task UpdateStorageAsync(

@@ -1,5 +1,7 @@
 using ACS.Service.Data;
 using ACS.Service.Data.Models;
+using ACS.Service.Domain;
+using ACS.Service.Compliance;
 using ACS.Service.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -266,7 +268,7 @@ public class AuditServiceTests
     }
 
     [TestMethod]
-    public async Task AuditService_GetAuditLogsAsync_FiltersBy DateRange()
+    public async Task AuditService_GetAuditLogsAsync_FiltersByDateRange()
     {
         // Arrange
         var startDate = DateTime.UtcNow.AddDays(-2);
@@ -762,8 +764,8 @@ public class AuditServiceTests
 
         // Assert
         Assert.IsNotNull(result);
-        Assert.AreEqual("GDPR", result.ReportType);
-        Assert.IsTrue(result.GeneratedAt <= DateTime.UtcNow);
+        Assert.AreEqual("GDPR", result.Framework.ToString());
+        Assert.IsTrue(result.GeneratedDate <= DateTime.UtcNow);
         Assert.IsTrue(result.Items.Any());
     }
 
@@ -786,8 +788,8 @@ public class AuditServiceTests
 
         // Assert
         Assert.IsNotNull(result);
-        Assert.AreEqual("SOC2", result.ReportType);
-        Assert.IsTrue(result.GeneratedAt <= DateTime.UtcNow);
+        Assert.AreEqual("SOC2", result.Framework.ToString());
+        Assert.IsTrue(result.GeneratedDate <= DateTime.UtcNow);
         Assert.IsTrue(result.Items.Any());
     }
 

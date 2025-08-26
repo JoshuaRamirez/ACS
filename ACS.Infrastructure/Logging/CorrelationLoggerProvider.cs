@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.DependencyInjection;
 using System.Collections.Concurrent;
 
 namespace ACS.Infrastructure.Logging;
@@ -51,7 +52,7 @@ public class CorrelationLogger : ILogger
         _correlationService = correlationService;
     }
 
-    public IDisposable BeginScope<TState>(TState state)
+    public IDisposable BeginScope<TState>(TState state) where TState : notnull
     {
         // Enhance scope with correlation information
         var correlationContext = _correlationService.GetContext();
@@ -79,7 +80,7 @@ public class CorrelationLogger : ILogger
             enhancedState["OriginalState"] = state;
         }
 
-        return _innerLogger.BeginScope(enhancedState);
+        return _innerLogger.BeginScope(enhancedState) ?? new NoOpDisposable();
     }
 
     public bool IsEnabled(LogLevel logLevel)
@@ -226,6 +227,14 @@ public static class CorrelationLoggingExtensions
             ["TraceId"] = context.TraceId ?? string.Empty,
             ["UserId"] = context.UserId ?? string.Empty,
             ["TenantId"] = context.TenantId ?? string.Empty
-        });
+        }) ?? new NoOpDisposable();
+    }
+}
+
+internal class NoOpDisposable : IDisposable
+{
+    public void Dispose()
+    {
+        // No operation needed
     }
 }

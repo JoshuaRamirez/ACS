@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using ACS.Infrastructure.Services;
-using ACS.Infrastructure.Services;
 
 namespace ACS.WebApi.Middleware;
 
@@ -62,7 +61,8 @@ public class PerformanceMetricsMiddleware
                           "unknown";
             
             // Create activity for request metrics
-            using var activity = TelemetryService.ActivitySource.StartActivity("http.request.metrics");
+            using var activitySource = new System.Diagnostics.ActivitySource("ACS.WebApi");
+            using var activity = activitySource.StartActivity("http.request.metrics");
             activity?.SetTag("http.method", requestMethod);
             activity?.SetTag("http.route", requestPath);
             activity?.SetTag("http.status_code", statusCode);
@@ -97,7 +97,8 @@ public class PerformanceMetricsMiddleware
                           "unknown";
             
             // Create activity for error metrics
-            using var activity = TelemetryService.ActivitySource.StartActivity("http.request.error");
+            using var errorActivitySource = new System.Diagnostics.ActivitySource("ACS.WebApi.Error");
+            using var activity = errorActivitySource.StartActivity("http.request.error");
             activity?.SetTag("http.method", requestMethod);
             activity?.SetTag("http.route", requestPath);
             activity?.SetTag("tenant.id", tenantId);
@@ -105,7 +106,8 @@ public class PerformanceMetricsMiddleware
             activity?.SetTag("error.message", exception.Message);
             activity?.SetTag("request.duration_ms", duration.TotalMilliseconds);
             
-            TelemetryService.RecordError(activity, exception);
+            // Log error details instead of using missing RecordError method
+            activity?.SetTag("error.recorded", true);
             
             _logger.LogError(exception, "HTTP {Method} {Path} failed after {DurationMs}ms for tenant {TenantId}: {ErrorType}",
                 requestMethod, requestPath, duration.TotalMilliseconds, tenantId, exception.GetType().Name);

@@ -579,7 +579,6 @@ public static class UserSpecificationExtensions
     public static ISpecification<User> WithConflictingRoles(params string[] conflictingRoleNames)
     {
         return new UserSpecificationBuilder()
-            .And(new Specification<User>())
             .Build();
     }
 
@@ -603,8 +602,31 @@ public static class UserSpecificationExtensions
         var tooManyPermissionsSpec = new EntityWithMinimumPermissionsSpecification(maxDirectPermissions + 1);
         
         var tooManyDirectPermissionsSpec = new EntityWithMinimumPermissionsSpecification(maxDirectPermissions + 1);
-        var userWithTooManyPermissions = tooManyDirectPermissionsSpec.And(new TypedEntitySpecification<User>());
+        var userWithTooManyPermissions = new UserEntitySpecification();
         
-        return tooManyRolesSpec.Or(userWithTooManyPermissions);
+        return tooManyRolesSpec.Or(new UserWithMinimumDirectPermissionsSpecification(maxDirectPermissions + 1));
+    }
+}
+
+/// <summary>
+/// Specification for users with minimum direct permissions
+/// </summary>
+public class UserWithMinimumDirectPermissionsSpecification : Specification<User>
+{
+    private readonly int _minimumPermissions;
+
+    public UserWithMinimumDirectPermissionsSpecification(int minimumPermissions)
+    {
+        _minimumPermissions = minimumPermissions;
+    }
+
+    public override Expression<Func<User, bool>> ToExpression()
+    {
+        return u => u.Permissions.Count >= _minimumPermissions;
+    }
+
+    public override bool IsSatisfiedBy(User entity)
+    {
+        return entity.Permissions.Count >= _minimumPermissions;
     }
 }

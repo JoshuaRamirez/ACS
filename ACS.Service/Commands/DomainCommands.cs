@@ -19,12 +19,14 @@ public class AddUserToGroupCommand : DomainCommand<bool>
 {
     public int UserId { get; set; }
     public int GroupId { get; set; }
+    public string? AddedBy { get; set; }
 }
 
 public class RemoveUserFromGroupCommand : DomainCommand<bool>
 {
     public int UserId { get; set; }
     public int GroupId { get; set; }
+    public string? RemovedBy { get; set; }
 }
 
 // User-Role Commands
@@ -32,12 +34,14 @@ public class AssignUserToRoleCommand : DomainCommand<bool>
 {
     public int UserId { get; set; }
     public int RoleId { get; set; }
+    public string? AssignedBy { get; set; }
 }
 
 public class UnAssignUserFromRoleCommand : DomainCommand<bool>
 {
     public int UserId { get; set; }
     public int RoleId { get; set; }
+    public string? UnassignedBy { get; set; }
 }
 
 // Group-Role Commands
@@ -45,12 +49,14 @@ public class AddRoleToGroupCommand : DomainCommand<bool>
 {
     public int GroupId { get; set; }
     public int RoleId { get; set; }
+    public string? AssignedBy { get; set; }
 }
 
 public class RemoveRoleFromGroupCommand : DomainCommand<bool>
 {
     public int GroupId { get; set; }
     public int RoleId { get; set; }
+    public string? RemovedBy { get; set; }
 }
 
 // Group-Group Commands
@@ -58,12 +64,14 @@ public class AddGroupToGroupCommand : DomainCommand<bool>
 {
     public int ParentGroupId { get; set; }
     public int ChildGroupId { get; set; }
+    public string? AddedBy { get; set; }
 }
 
 public class RemoveGroupFromGroupCommand : DomainCommand<bool>
 {
     public int ParentGroupId { get; set; }
     public int ChildGroupId { get; set; }
+    public string? RemovedBy { get; set; }
 }
 
 // Permission Commands
@@ -108,18 +116,21 @@ public class CreateUserCommand : DomainCommand<User>
     public string Name { get; set; } = null!;
     public int? GroupId { get; set; }
     public int? RoleId { get; set; }
+    public string? CreatedBy { get; set; }
 }
 
 public class CreateGroupCommand : DomainCommand<Group>
 {
     public string Name { get; set; } = null!;
     public int? ParentGroupId { get; set; }
+    public string? CreatedBy { get; set; }
 }
 
 public class CreateRoleCommand : DomainCommand<Role>
 {
     public string Name { get; set; } = null!;
     public int? GroupId { get; set; }
+    public string? CreatedBy { get; set; }
 }
 
 // UPDATE Commands
@@ -127,34 +138,40 @@ public class UpdateUserCommand : DomainCommand<User>
 {
     public int UserId { get; set; }
     public string Name { get; set; } = null!;
+    public string? UpdatedBy { get; set; }
 }
 
 public class UpdateGroupCommand : DomainCommand<Group>
 {
     public int GroupId { get; set; }
     public string Name { get; set; } = null!;
+    public string? UpdatedBy { get; set; }
 }
 
 public class UpdateRoleCommand : DomainCommand<Role>
 {
     public int RoleId { get; set; }
     public string Name { get; set; } = null!;
+    public string? UpdatedBy { get; set; }
 }
 
 // DELETE Commands
 public class DeleteUserCommand : DomainCommand<bool>
 {
     public int UserId { get; set; }
+    public string? DeletedBy { get; set; }
 }
 
 public class DeleteGroupCommand : DomainCommand<bool>
 {
     public int GroupId { get; set; }
+    public string? DeletedBy { get; set; }
 }
 
 public class DeleteRoleCommand : DomainCommand<bool>
 {
     public int RoleId { get; set; }
+    public string? DeletedBy { get; set; }
 }
 
 // QUERY Commands for lists

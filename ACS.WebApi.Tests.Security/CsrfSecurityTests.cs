@@ -388,8 +388,9 @@ public class CsrfSecurityTests : SecurityTestBase
                     HttpStatusCode.BadRequest, 
                     HttpStatusCode.Created,
                     HttpStatusCode.OK,
-                    HttpStatusCode.NotFound,
-                    $"State-changing operation {operation.Method} {operation.Url} should have CSRF protection");
+                    HttpStatusCode.NotFound)
+                    .And.Subject.Should().NotBe(HttpStatusCode.OK, 
+                        $"State-changing operation {operation.Method} {operation.Url} should have CSRF protection");
             }
             else
             {

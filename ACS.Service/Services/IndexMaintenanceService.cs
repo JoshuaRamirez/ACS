@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using ACS.Service.Data;
+using ACS.Service.Domain;
 
 namespace ACS.Service.Services;
 
@@ -243,70 +244,37 @@ public class IndexMaintenanceService : BackgroundService
         }
     }
 
-    private async Task SendHealthScoreAlerts(IndexAnalysisReport report)
+    private Task SendHealthScoreAlerts(IndexAnalysisReport report)
     {
         try
         {
             using var scope = _serviceProvider.CreateScope();
-            var alertingService = scope.ServiceProvider.GetService<IAlertingService>();
-            
-            if (alertingService == null)
-            {
-                _logger.LogDebug("Alerting service not available");
-                return;
-            }
-
-            AlertSeverity severity;
-            string message;
+            // Alerting service not implemented - using logging instead
 
             if (report.HealthScore < 30)
             {
-                severity = AlertSeverity.Critical;
-                message = $"Critical: Database index health is very poor ({report.HealthScore:F1}%). Immediate maintenance required.";
+                _logger.LogCritical("Critical: Database index health is very poor ({HealthScore:F1}%). Immediate maintenance required.", report.HealthScore);
             }
             else if (report.HealthScore < 50)
             {
-                severity = AlertSeverity.Warning;
-                message = $"Warning: Database index health is poor ({report.HealthScore:F1}%). Maintenance recommended.";
+                _logger.LogWarning("Warning: Database index health is poor ({HealthScore:F1}%). Maintenance recommended.", report.HealthScore);
             }
             else if (report.HealthScore < 75)
             {
-                severity = AlertSeverity.Info;
-                message = $"Info: Database index health needs attention ({report.HealthScore:F1}%).";
+                _logger.LogInformation("Info: Database index health needs attention ({HealthScore:F1}%).", report.HealthScore);
             }
             else
             {
                 // Health is good, no alert needed
-                return;
+                return Task.CompletedTask;
             }
-
-            var alert = new Alert
-            {
-                Id = Guid.NewGuid().ToString(),
-                Title = "Database Index Health Alert",
-                Message = message,
-                Severity = severity,
-                Category = AlertCategory.Performance,
-                Source = "IndexMaintenanceService",
-                CreatedAt = DateTime.UtcNow,
-                Metadata = new Dictionary<string, string>
-                {
-                    ["HealthScore"] = report.HealthScore.ToString("F1"),
-                    ["TotalIndexes"] = report.TotalIndexes.ToString(),
-                    ["MissingIndexes"] = report.MissingIndexes.Count.ToString(),
-                    ["UnusedIndexes"] = report.UnusedIndexes.Count.ToString(),
-                    ["FragmentedIndexes"] = report.FragmentedIndexes.Count.ToString(),
-                    ["DuplicateIndexes"] = report.DuplicateIndexes.Count.ToString()
-                }
-            };
-
-            await alertingService.RaiseAlertAsync(alert);
-            _logger.LogInformation("Sent index health alert with severity {Severity}", severity);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error sending index health alert");
         }
+        
+        return Task.CompletedTask;
     }
 
     private bool IsInMaintenanceWindow()

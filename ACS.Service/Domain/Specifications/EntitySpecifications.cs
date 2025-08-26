@@ -102,7 +102,8 @@ public class EntityWithPermissionSpecification : Specification<Entity>
     public override Expression<Func<Entity, bool>> ToExpression()
     {
         var permissionExpression = _permissionSpecification.ToExpression();
-        return e => e.Permissions.Any(permissionExpression);
+        var compiledPermissionPredicate = permissionExpression.Compile();
+        return e => e.Permissions.Any(compiledPermissionPredicate);
     }
 
     public override bool IsSatisfiedBy(Entity entity)
@@ -354,6 +355,15 @@ public abstract class TypedEntitySpecification<T> : Specification<Entity> where 
 }
 
 /// <summary>
+/// Concrete implementation of TypedEntitySpecification for basic type filtering
+/// </summary>
+public class ConcreteTypedEntitySpecification<T> : TypedEntitySpecification<T> where T : Entity
+{
+    // Inherits all behavior from the abstract base class
+    // No additional implementation needed for basic type filtering
+}
+
+/// <summary>
 /// Specification builder for entities
 /// </summary>
 public class EntitySpecificationBuilder
@@ -505,7 +515,7 @@ public static class EntitySpecificationExtensions
     /// </summary>
     public static ISpecification<Entity> OfType<T>() where T : Entity
     {
-        return new TypedEntitySpecification<T>();
+        return new ConcreteTypedEntitySpecification<T>();
     }
 
     /// <summary>

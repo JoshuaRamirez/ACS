@@ -277,7 +277,7 @@ public class RedisRateLimitStorage : IRateLimitStorage, IDisposable
         await Task.WhenAll(tasks);
     }
 
-    private async Task<Dictionary<string, long>> GetTenantCountsAsync(IEnumerable<RedisKey> keys)
+    private Task<Dictionary<string, long>> GetTenantCountsAsync(IEnumerable<RedisKey> keys)
     {
         var tenantCounts = new Dictionary<string, long>();
         
@@ -297,7 +297,7 @@ public class RedisRateLimitStorage : IRateLimitStorage, IDisposable
             }
         }
         
-        return tenantCounts;
+        return Task.FromResult(tenantCounts);
     }
 
     private string GetRedisKey(string key) => $"{_keyPrefix}{key}";

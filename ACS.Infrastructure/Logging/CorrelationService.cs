@@ -91,10 +91,10 @@ public class CorrelationService : ICorrelationService
         // Try HTTP context
         var httpContext = _httpContextAccessor.HttpContext;
         if (httpContext?.Items.TryGetValue("CorrelationContext", out var httpContextValue) == true &&
-            httpContextValue is CorrelationContext httpContext)
+            httpContextValue is CorrelationContext correlationContext)
         {
-            _context.Value = httpContext;
-            return httpContext;
+            _context.Value = correlationContext;
+            return correlationContext;
         }
         
         // Create new context from HTTP headers or defaults
@@ -161,7 +161,7 @@ public class CorrelationService : ICorrelationService
     private class CorrelationScope : IDisposable
     {
         private readonly CorrelationService _service;
-        private readonly CorrelationContext _previousContext;
+        private readonly CorrelationContext? _previousContext;
 
         public CorrelationScope(CorrelationService service, CorrelationContext newContext)
         {
@@ -178,7 +178,7 @@ public class CorrelationService : ICorrelationService
             }
             else
             {
-                _context.Value = null;
+                _context.Value = new CorrelationContext();
             }
         }
     }

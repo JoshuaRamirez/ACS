@@ -5,6 +5,7 @@ using ACS.Service.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Caching.Memory;
+using Moq;
 
 namespace ACS.Service.Tests.Unit;
 
@@ -14,6 +15,7 @@ public class PermissionEvaluationServiceTests
     private Mock<ApplicationDbContext> _mockDbContext = null!;
     private Mock<ILogger<PermissionEvaluationService>> _mockLogger = null!;
     private Mock<IMemoryCache> _mockMemoryCache = null!;
+    private Mock<IAuditService> _mockAuditService = null!;
     private PermissionEvaluationService _permissionService = null!;
     private Mock<DbSet<Data.Models.Entity>> _mockEntityDbSet = null!;
     private Mock<DbSet<PermissionScheme>> _mockPermissionSchemeDbSet = null!;
@@ -32,6 +34,7 @@ public class PermissionEvaluationServiceTests
         _mockDbContext = new Mock<ApplicationDbContext>(options);
         _mockLogger = new Mock<ILogger<PermissionEvaluationService>>();
         _mockMemoryCache = new Mock<IMemoryCache>();
+        _mockAuditService = new Mock<IAuditService>();
         
         _mockEntityDbSet = new Mock<DbSet<Data.Models.Entity>>();
         _mockPermissionSchemeDbSet = new Mock<DbSet<PermissionScheme>>();
@@ -40,7 +43,7 @@ public class PermissionEvaluationServiceTests
         _mockVerbTypeDbSet = new Mock<DbSet<VerbType>>();
         
         _mockDbContext.Setup(x => x.Entities).Returns(_mockEntityDbSet.Object);
-        _mockDbContext.Setup(x => x.PermissionSchemes).Returns(_mockPermissionSchemeDbSet.Object);
+        _mockDbContext.Setup(x => x.EntityPermissions).Returns(_mockPermissionSchemeDbSet.Object);
         _mockDbContext.Setup(x => x.Resources).Returns(_mockResourceDbSet.Object);
         _mockDbContext.Setup(x => x.UriAccesses).Returns(_mockUriAccessDbSet.Object);
         _mockDbContext.Setup(x => x.VerbTypes).Returns(_mockVerbTypeDbSet.Object);
@@ -48,7 +51,8 @@ public class PermissionEvaluationServiceTests
         _permissionService = new PermissionEvaluationService(
             _mockDbContext.Object,
             _mockLogger.Object,
-            _mockMemoryCache.Object);
+            _mockMemoryCache.Object,
+            _mockAuditService.Object);
     }
 
     #region HasPermissionAsync Tests

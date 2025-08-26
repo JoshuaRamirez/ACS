@@ -43,14 +43,14 @@ public class ComplianceAuditService : IComplianceAuditService
                 ["purpose"] = auditEvent.Purpose,
                 ["dataCategories"] = auditEvent.DataCategories,
                 ["consentGiven"] = auditEvent.ConsentGiven,
-                ["consentTimestamp"] = auditEvent.ConsentTimestamp,
+                ["consentTimestamp"] = auditEvent.ConsentTimestamp ?? (object)DBNull.Value,
                 ["consentVersion"] = auditEvent.ConsentVersion,
                 ["isDataPortability"] = auditEvent.IsDataPortability,
                 ["isRightToErasure"] = auditEvent.IsRightToErasure,
                 ["processingActivity"] = auditEvent.ProcessingActivity,
                 ["dataController"] = auditEvent.DataController,
                 ["dataProcessor"] = auditEvent.DataProcessor,
-                ["retentionPeriodDays"] = auditEvent.RetentionPeriodDays
+                ["retentionPeriodDays"] = auditEvent.RetentionPeriodDays ?? (object)DBNull.Value
             };
 
             entry.Details = JsonSerializer.Serialize(gdprDetails);
@@ -89,7 +89,7 @@ public class ComplianceAuditService : IComplianceAuditService
                 ["systemComponent"] = auditEvent.SystemComponent,
                 ["riskLevel"] = auditEvent.RiskLevel,
                 ["remediationAction"] = auditEvent.RemediationAction,
-                ["remediationDeadline"] = auditEvent.RemediationDeadline,
+                ["remediationDeadline"] = auditEvent.RemediationDeadline ?? (object)DBNull.Value,
                 ["evidence"] = auditEvent.Evidence
             };
 

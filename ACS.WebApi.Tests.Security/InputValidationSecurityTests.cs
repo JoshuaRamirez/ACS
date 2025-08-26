@@ -1,4 +1,5 @@
 using ACS.WebApi.Tests.Security.Infrastructure;
+using System.Net.Http.Headers;
 using System.Text;
 using System.Web;
 
@@ -124,12 +125,12 @@ public class InputValidationSecurityTests : SecurityTestBase
         // Arrange - Null/empty required fields
         var invalidUsers = new[]
         {
-            new { Name = (string)null, Email = "test@example.com", Password = "Password123!" },
-            new { Name = "", Email = "test@example.com", Password = "Password123!" },
-            new { Name = "Test User", Email = (string)null, Password = "Password123!" },
-            new { Name = "Test User", Email = "", Password = "Password123!" },
-            new { Name = "Test User", Email = "test@example.com", Password = (string)null },
-            new { Name = "Test User", Email = "test@example.com", Password = "" }
+            new { Name = (string?)null, Email = (string?)"test@example.com", Password = (string?)"Password123!" },
+            new { Name = (string?)"", Email = (string?)"test@example.com", Password = (string?)"Password123!" },
+            new { Name = (string?)"Test User", Email = (string?)null, Password = (string?)"Password123!" },
+            new { Name = (string?)"Test User", Email = (string?)"", Password = (string?)"Password123!" },
+            new { Name = (string?)"Test User", Email = (string?)"test@example.com", Password = (string?)null },
+            new { Name = (string?)"Test User", Email = (string?)"test@example.com", Password = (string?)"" }
         };
 
         foreach (var user in invalidUsers)
@@ -253,8 +254,8 @@ public class InputValidationSecurityTests : SecurityTestBase
         // Arrange - Invalid parent group ID
         var invalidGroups = new[]
         {
-            new { Name = "Test Group", ParentGroupId = -1 },
-            new { Name = "Test Group", ParentGroupId = 999999 }, // Non-existent parent
+            new { Name = "Test Group", ParentGroupId = (int?)-1 },
+            new { Name = "Test Group", ParentGroupId = (int?)999999 }, // Non-existent parent
             new { Name = "", ParentGroupId = (int?)null }, // Empty name
             new { Name = new string('A', 1000), ParentGroupId = (int?)null } // Too long name
         };
@@ -264,7 +265,7 @@ public class InputValidationSecurityTests : SecurityTestBase
             var content = new StringContent(
                 System.Text.Json.JsonSerializer.Serialize(group),
                 Encoding.UTF8,
-                "application/json");
+                new MediaTypeHeaderValue("application/json"));
 
             // Act
             var response = await Client.PostAsync("/api/groups", content);

@@ -1,3 +1,4 @@
+using Grpc.Core;
 using Grpc.Net.Client;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -63,23 +64,23 @@ public static class GrpcCompressionConfiguration
     /// <summary>
     /// Get call options with compression headers
     /// </summary>
-    public static Grpc.Core.CallOptions GetCompressionCallOptions(IConfiguration? configuration = null)
+    public static CallOptions GetCompressionCallOptions(IConfiguration? configuration = null)
     {
         var enableCompression = configuration?.GetValue<bool>("Grpc:EnableCompression", true) ?? true;
         
         if (!enableCompression)
         {
-            return new Grpc.Core.CallOptions();
+            return new CallOptions();
         }
         
         var compressionProvider = configuration?.GetValue<string>("Grpc:CompressionProvider", "gzip") ?? "gzip";
         
         // For gRPC.Net.Client, compression is handled at the channel/call level through headers
         // The actual compression is configured at the server side middleware level
-        var metadata = new Grpc.Core.Metadata();
+        var metadata = new Metadata();
         metadata.Add("grpc-accept-encoding", compressionProvider);
         metadata.Add("grpc-encoding", compressionProvider);
         
-        return new Grpc.Core.CallOptions(headers: metadata);
+        return new CallOptions(headers: metadata);
     }
 }

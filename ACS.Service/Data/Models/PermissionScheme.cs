@@ -13,4 +13,10 @@ public class PermissionScheme
     public int? SchemeTypeId { get; set; }
     public SchemeType SchemeType { get; set; } = null!;
     public Entity Entity { get; set; } = null!;
+
+    // Additional properties needed by tests and permission evaluation
+    [ForeignKey("UriAccess")]
+    public int? UriAccessId { get; set; }
+    public UriAccess? UriAccess { get; set; }
+    public bool Grant { get; set; } = false;
 }

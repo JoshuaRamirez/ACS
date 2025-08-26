@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using ACS.Service.Data;
+using Microsoft.AspNetCore.Routing;
 
 namespace ACS.WebApi.Tests.Performance.Infrastructure;
 
@@ -113,11 +114,9 @@ public class PerformanceTestWebApplicationFactory : WebApplicationFactory<Progra
             {
                 Id = i,
                 Name = $"Role_{i}",
-                Description = $"Test role {i}",
-                CreatedDate = DateTime.UtcNow.AddDays(-random.Next(365)),
-                CreatedBy = "system",
-                LastModifiedDate = DateTime.UtcNow.AddDays(-random.Next(30)),
-                LastModifiedBy = "system"
+                EntityId = i,
+                CreatedAt = DateTime.UtcNow.AddDays(-random.Next(365)),
+                UpdatedAt = DateTime.UtcNow.AddDays(-random.Next(30))
             });
         }
         context.Roles.AddRange(roles);
@@ -130,12 +129,9 @@ public class PerformanceTestWebApplicationFactory : WebApplicationFactory<Progra
             {
                 Id = i,
                 Name = $"Group_{i}",
-                Description = $"Test group {i}",
-                ParentGroupId = i > 10 ? random.Next(1, Math.Min(i, 10)) : null,
-                CreatedDate = DateTime.UtcNow.AddDays(-random.Next(365)),
-                CreatedBy = "system",
-                LastModifiedDate = DateTime.UtcNow.AddDays(-random.Next(30)),
-                LastModifiedBy = "system"
+                EntityId = i,
+                CreatedAt = DateTime.UtcNow.AddDays(-random.Next(365)),
+                UpdatedAt = DateTime.UtcNow.AddDays(-random.Next(30))
             });
         }
         context.Groups.AddRange(groups);
@@ -150,11 +146,9 @@ public class PerformanceTestWebApplicationFactory : WebApplicationFactory<Progra
                 Name = $"User_{i}",
                 Email = $"user{i}@test.com",
                 PasswordHash = BCrypt.Net.BCrypt.HashPassword("Password123!"),
-                IsActive = random.Next(0, 10) > 1, // 90% active users
-                CreatedDate = DateTime.UtcNow.AddDays(-random.Next(365)),
-                CreatedBy = "system",
-                LastModifiedDate = DateTime.UtcNow.AddDays(-random.Next(30)),
-                LastModifiedBy = "system"
+                EntityId = i,
+                CreatedAt = DateTime.UtcNow.AddDays(-random.Next(365)),
+                UpdatedAt = DateTime.UtcNow.AddDays(-random.Next(30))
             });
         }
         context.Users.AddRange(users);

@@ -236,7 +236,7 @@ public class AesEncryptionService : IEncryptionService
             
             // Keep old key for decryption of existing data
             // Schedule background re-encryption process
-            _ = Task.Run(async () => await StartBackgroundReEncryptionAsync(tenantId, oldKeyVersion, newKeyVersion));
+            _ = Task.Run(async () => await StartBackgroundReEncryptionAsync(tenantId, oldKeyInfo.Version, newKeyVersion));
             
             // Clear cache to force reload
             await _keyCacheLock.WaitAsync();

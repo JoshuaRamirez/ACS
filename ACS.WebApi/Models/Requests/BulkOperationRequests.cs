@@ -316,7 +316,7 @@ public class BulkChangeUserStatusRequest : BulkOperationRequestBase
     /// </summary>
     [Required(ErrorMessage = "Reason is required")]
     [StringLength(1000, ErrorMessage = "Reason cannot exceed 1000 characters")]
-    public string Reason { get; set; } = string.Empty;
+    public new string Reason { get; set; } = string.Empty;
 
     /// <summary>
     /// Effective date for the status change

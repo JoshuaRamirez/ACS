@@ -231,7 +231,7 @@ public class MultiLevelCache : IMultiLevelCache
         }
     }
 
-    public async Task<MultiLevelCacheStatistics> GetStatisticsAsync(CancellationToken cancellationToken = default)
+    public Task<MultiLevelCacheStatistics> GetStatisticsAsync(CancellationToken cancellationToken = default)
     {
         var stats = new MultiLevelCacheStatistics
         {
@@ -244,7 +244,7 @@ public class MultiLevelCache : IMultiLevelCache
         // Get additional statistics if available
         // Note: MemoryCache and IDistributedCache don't expose detailed stats by default
         
-        return stats;
+        return Task.FromResult(stats);
     }
 
     public async Task WarmupAsync(string[] keys, CancellationToken cancellationToken = default)
@@ -358,7 +358,7 @@ public class MultiLevelCache : IMultiLevelCache
         var bytes = System.Text.Encoding.UTF8.GetBytes(json);
         
         // Compress if strategy suggests it
-        if (_cacheStrategy.ShouldCompress(cacheType, value))
+        if (value != null && _cacheStrategy.ShouldCompress(cacheType, value))
         {
             using var output = new MemoryStream();
             using (var gzip = new GZipStream(output, CompressionLevel.Fastest))

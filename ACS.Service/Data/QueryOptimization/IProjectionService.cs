@@ -88,12 +88,12 @@ public interface IProjectionService
     /// <summary>
     /// Execute custom projection query
     /// </summary>
-    Task<IEnumerable<T>> ExecuteProjectionAsync<T>(IQueryable<T> query, CancellationToken cancellationToken = default);
+    Task<IEnumerable<T>> ExecuteProjectionAsync<T>(IQueryable<T> query, CancellationToken cancellationToken = default) where T : class;
 
     /// <summary>
     /// Get paged projection results
     /// </summary>
-    Task<PagedProjectionResult<T>> GetPagedProjectionAsync<T>(IQueryable<T> query, int pageNumber, int pageSize, CancellationToken cancellationToken = default);
+    Task<PagedProjectionResult<T>> GetPagedProjectionAsync<T>(IQueryable<T> query, int pageNumber, int pageSize, CancellationToken cancellationToken = default) where T : class;
 
     #endregion
 }

@@ -148,7 +148,7 @@ public class GroupRepository : Repository<Group>, IGroupRepository
 
     public async Task<IEnumerable<GroupWithMemberCount>> GetGroupsWithMemberCountsAsync(Expression<Func<Group, bool>>? predicate = null, CancellationToken cancellationToken = default)
     {
-        var query = _dbSet
+        IQueryable<Group> query = _dbSet
             .Include(g => g.Entity)
             .Include(g => g.UserGroups)
             .Include(g => g.GroupRoles)

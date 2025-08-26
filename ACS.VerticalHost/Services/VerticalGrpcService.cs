@@ -1,29 +1,36 @@
 using Grpc.Core;
 using ACS.Core.Grpc;
 using ACS.Service.Services;
-using ACS.Service.Infrastructure;
+using ACS.Service.Requests;
 using Google.Protobuf;
 using Microsoft.Extensions.Logging;
-using ACS.Infrastructure;
 using System.Reflection;
 using System.Diagnostics;
+using ACS.Infrastructure;
+using Infrastructure = ACS.Service.Infrastructure;
 
 namespace ACS.VerticalHost.Services;
 
 public class VerticalGrpcService : VerticalService.VerticalServiceBase
 {
-    private readonly AccessControlDomainService _domainService;
+    private readonly IUserService _userService;
+    private readonly IGroupService _groupService;
+    private readonly IRoleService _roleService;
     private readonly ILogger<VerticalGrpcService> _logger;
     private readonly string _tenantId;
     private long _commandsProcessed = 0;
     private readonly DateTime _startTime = DateTime.UtcNow;
 
     public VerticalGrpcService(
-        AccessControlDomainService domainService,
-        TenantConfiguration config,
+        IUserService userService,
+        IGroupService groupService,
+        IRoleService roleService,
+        ACS.Service.Infrastructure.TenantConfiguration config,
         ILogger<VerticalGrpcService> logger)
     {
-        _domainService = domainService;
+        _userService = userService;
+        _groupService = groupService;
+        _roleService = roleService;
         _tenantId = config.TenantId;
         _logger = logger;
     }
@@ -66,7 +73,7 @@ public class VerticalGrpcService : VerticalService.VerticalServiceBase
             if (isVoidCommand)
             {
                 // Execute void command
-                await _domainService.ExecuteCommandAsync((DomainCommand)command);
+                await ExecuteVoidCommandAsync((DomainCommand)command);
                 commandActivity?.SetTag("command.has_result", false);
             }
             else
@@ -74,33 +81,8 @@ public class VerticalGrpcService : VerticalService.VerticalServiceBase
                 // Execute command with result
                 commandActivity?.SetTag("command.has_result", true);
                 
-                var executeMethod = typeof(AccessControlDomainService)
-                    .GetMethods()
-                    .Where(m => m.Name == "ExecuteCommandAsync" && m.IsGenericMethodDefinition)
-                    .FirstOrDefault();
-
-                if (executeMethod == null)
-                {
-                    throw new InvalidOperationException("Could not find generic ExecuteCommandAsync method");
-                }
-
-                var resultType = commandType.GetGenericArguments()[0];
-                commandActivity?.SetTag("command.result_type", resultType.Name);
-                
-                var genericMethod = executeMethod.MakeGenericMethod(resultType);
-                
-                var task = genericMethod.Invoke(_domainService, new[] { command });
-                if (task == null)
-                {
-                    throw new InvalidOperationException("Command execution returned null");
-                }
-
-                // Wait for task completion
-                await (Task)task;
-                
-                // Get result from task
-                var resultProperty = task.GetType().GetProperty("Result");
-                var result = resultProperty?.GetValue(task);
+                var result = await ExecuteCommandWithResultAsync((dynamic)command);
+                commandActivity?.SetTag("command.result_type", result?.GetType().Name ?? "null");
                 
                 if (result != null)
                 {
@@ -173,5 +155,222 @@ public class VerticalGrpcService : VerticalService.VerticalServiceBase
             response.UptimeSeconds, response.CommandsProcessed);
 
         return Task.FromResult(response);
+    }
+
+    private async Task ExecuteVoidCommandAsync(DomainCommand command)
+    {
+        await (command switch
+        {
+            AddUserToGroupCommand cmd => ExecuteAddUserToGroup(cmd),
+            RemoveUserFromGroupCommand cmd => ExecuteRemoveUserFromGroup(cmd),
+            AssignUserToRoleCommand cmd => ExecuteAssignUserToRole(cmd),
+            UnAssignUserFromRoleCommand cmd => ExecuteUnAssignUserFromRole(cmd),
+            AddRoleToGroupCommand cmd => ExecuteAddRoleToGroup(cmd),
+            RemoveRoleFromGroupCommand cmd => ExecuteRemoveRoleFromGroup(cmd),
+            AddGroupToGroupCommand cmd => ExecuteAddGroupToGroup(cmd),
+            RemoveGroupFromGroupCommand cmd => ExecuteRemoveGroupFromGroup(cmd),
+            _ => throw new NotSupportedException($"Void command type {command.GetType().Name} is not supported")
+        });
+    }
+
+    private async Task<object> ExecuteCommandWithResultAsync(dynamic command)
+    {
+        return command switch
+        {
+            CreateUserCommand cmd => await ExecuteCreateUser(cmd),
+            CreateGroupCommand cmd => await ExecuteCreateGroup(cmd),
+            CreateRoleCommand cmd => await ExecuteCreateRole(cmd),
+            UpdateUserCommand cmd => await ExecuteUpdateUser(cmd),
+            UpdateGroupCommand cmd => await ExecuteUpdateGroup(cmd),
+            UpdateRoleCommand cmd => await ExecuteUpdateRole(cmd),
+            DeleteUserCommand cmd => await ExecuteDeleteUser(cmd),
+            DeleteGroupCommand cmd => await ExecuteDeleteGroup(cmd),
+            DeleteRoleCommand cmd => await ExecuteDeleteRole(cmd),
+            GetUserCommand cmd => ExecuteGetUser(cmd),
+            GetGroupCommand cmd => ExecuteGetGroup(cmd),
+            GetRoleCommand cmd => ExecuteGetRole(cmd),
+            GetUsersCommand cmd => ExecuteGetUsers(cmd),
+            GetGroupsCommand cmd => ExecuteGetGroups(cmd),
+            GetRolesCommand cmd => ExecuteGetRoles(cmd),
+            _ => throw new NotSupportedException($"Result command type {command.GetType().Name} is not supported")
+        };
+    }
+
+    // User Commands
+    private async Task<object> ExecuteCreateUser(CreateUserCommand cmd)
+    {
+        var request = new CreateUserRequest
+        {
+            Name = cmd.Name ?? throw new ArgumentNullException(nameof(cmd.Name)),
+            CreatedBy = cmd.CreatedBy ?? "system"
+        };
+        
+        var response = await _userService.CreateAsync(request);
+        return response.User ?? throw new InvalidOperationException("User creation failed");
+    }
+
+    private async Task<object> ExecuteUpdateUser(UpdateUserCommand cmd)
+    {
+        var request = new UpdateUserRequest
+        {
+            UserId = cmd.UserId,
+            Name = cmd.Name ?? throw new ArgumentNullException(nameof(cmd.Name)),
+            UpdatedBy = cmd.UpdatedBy ?? "system"
+        };
+        
+        var response = await _userService.UpdateAsync(request);
+        return response.User ?? throw new InvalidOperationException("User update failed");
+    }
+
+    private async Task<object> ExecuteDeleteUser(DeleteUserCommand cmd)
+    {
+        var request = new DeleteUserRequest
+        {
+            UserId = cmd.UserId,
+            DeletedBy = cmd.DeletedBy ?? "system"
+        };
+        
+        var response = await _userService.DeleteAsync(request);
+        return response.Success;
+    }
+
+    private object ExecuteGetUser(GetUserCommand cmd)
+    {
+        var request = new GetUserRequest
+        {
+            UserId = cmd.UserId,
+            RequestedBy = "system"
+        };
+        
+        var response = _userService.GetByIdAsync(request).Result;
+        return response.User ?? throw new InvalidOperationException($"User {cmd.UserId} not found");
+    }
+
+    private object ExecuteGetUsers(GetUsersCommand cmd)
+    {
+        var request = new GetUsersRequest
+        {
+            Page = cmd.Page,
+            PageSize = cmd.PageSize,
+            RequestedBy = "system"
+        };
+        
+        var response = _userService.GetAllAsync(request).Result;
+        return response.Users ?? new List<ACS.Service.Domain.User>();
+    }
+
+    // Group Commands
+    private async Task<object> ExecuteCreateGroup(CreateGroupCommand cmd)
+    {
+        var group = await _groupService.CreateGroupAsync(
+            cmd.Name ?? throw new ArgumentNullException(nameof(cmd.Name)),
+            "", // description
+            cmd.CreatedBy ?? "system");
+        return group;
+    }
+
+    private async Task<object> ExecuteUpdateGroup(UpdateGroupCommand cmd)
+    {
+        await _groupService.UpdateGroupAsync(cmd.GroupId, 
+            cmd.Name ?? throw new ArgumentNullException(nameof(cmd.Name)),
+            "", // description
+            cmd.UpdatedBy ?? "system");
+        return true;
+    }
+
+    private async Task<object> ExecuteDeleteGroup(DeleteGroupCommand cmd)
+    {
+        await _groupService.DeleteGroupAsync(cmd.GroupId, cmd.DeletedBy ?? "system");
+        return true;
+    }
+
+    private object ExecuteGetGroup(GetGroupCommand cmd)
+    {
+        var group = _groupService.GetGroupByIdAsync(cmd.GroupId).Result;
+        return group ?? throw new InvalidOperationException($"Group {cmd.GroupId} not found");
+    }
+
+    private object ExecuteGetGroups(GetGroupsCommand cmd)
+    {
+        var groups = _groupService.GetAllGroupsAsync().Result;
+        return groups ?? new List<ACS.Service.Domain.Group>();
+    }
+
+    // Role Commands
+    private async Task<object> ExecuteCreateRole(CreateRoleCommand cmd)
+    {
+        var role = await _roleService.CreateRoleAsync(
+            cmd.Name ?? throw new ArgumentNullException(nameof(cmd.Name)),
+            "", // description
+            cmd.CreatedBy ?? "system");
+        return role;
+    }
+
+    private async Task<object> ExecuteUpdateRole(UpdateRoleCommand cmd)
+    {
+        await _roleService.UpdateRoleAsync(cmd.RoleId, 
+            cmd.Name ?? throw new ArgumentNullException(nameof(cmd.Name)),
+            "", // description
+            cmd.UpdatedBy ?? "system");
+        return true;
+    }
+
+    private async Task<object> ExecuteDeleteRole(DeleteRoleCommand cmd)
+    {
+        await _roleService.DeleteRoleAsync(cmd.RoleId, cmd.DeletedBy ?? "system");
+        return true;
+    }
+
+    private object ExecuteGetRole(GetRoleCommand cmd)
+    {
+        var role = _roleService.GetRoleByIdAsync(cmd.RoleId).Result;
+        return role ?? throw new InvalidOperationException($"Role {cmd.RoleId} not found");
+    }
+
+    private object ExecuteGetRoles(GetRolesCommand cmd)
+    {
+        var roles = _roleService.GetAllRolesAsync().Result;
+        return roles ?? new List<ACS.Service.Domain.Role>();
+    }
+
+    // Relationship Commands (Void)
+    private async Task ExecuteAddUserToGroup(AddUserToGroupCommand cmd)
+    {
+        await _groupService.AddUserToGroupAsync(cmd.UserId, cmd.GroupId, cmd.AddedBy ?? "system");
+    }
+
+    private async Task ExecuteRemoveUserFromGroup(RemoveUserFromGroupCommand cmd)
+    {
+        await _groupService.RemoveUserFromGroupAsync(cmd.UserId, cmd.GroupId, cmd.RemovedBy ?? "system");
+    }
+
+    private async Task ExecuteAssignUserToRole(AssignUserToRoleCommand cmd)
+    {
+        await _roleService.AssignUserToRoleAsync(cmd.UserId, cmd.RoleId, cmd.AssignedBy ?? "system");
+    }
+
+    private async Task ExecuteUnAssignUserFromRole(UnAssignUserFromRoleCommand cmd)
+    {
+        await _roleService.UnassignUserFromRoleAsync(cmd.UserId, cmd.RoleId, cmd.UnassignedBy ?? "system");
+    }
+
+    private async Task ExecuteAddRoleToGroup(AddRoleToGroupCommand cmd)
+    {
+        await _groupService.AddRoleToGroupAsync(cmd.RoleId, cmd.GroupId, cmd.AssignedBy ?? "system");
+    }
+
+    private async Task ExecuteRemoveRoleFromGroup(RemoveRoleFromGroupCommand cmd)
+    {
+        await _groupService.RemoveRoleFromGroupAsync(cmd.GroupId, cmd.RoleId, cmd.RemovedBy ?? "system");
+    }
+
+    private async Task ExecuteAddGroupToGroup(AddGroupToGroupCommand cmd)
+    {
+        await _groupService.AddGroupToGroupAsync(cmd.ParentGroupId, cmd.ChildGroupId, cmd.AddedBy ?? "system");
+    }
+
+    private async Task ExecuteRemoveGroupFromGroup(RemoveGroupFromGroupCommand cmd)
+    {
+        await _groupService.RemoveGroupFromGroupAsync(cmd.ParentGroupId, cmd.ChildGroupId, cmd.RemovedBy ?? "system");
     }
 }

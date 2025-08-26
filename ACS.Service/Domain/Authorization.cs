@@ -153,7 +153,7 @@ public class AuthorizationPolicy
     public List<string> RequiredClaims { get; set; } = new();
     public TimeSpan? MaxAge { get; set; }
     
-    public bool Evaluate(Entity subject, Resource resource, string action, Dictionary<string, object> context)
+    public bool Evaluate(Entity? subject, Resource resource, string action, Dictionary<string, object> context)
     {
         // Check authentication requirement
         if (RequiresAuthentication && subject == null)
@@ -167,22 +167,22 @@ public class AuthorizationPolicy
                 return false;
         }
 
-        // Evaluate conditions
-        if (!Conditions.All(condition => condition.Evaluate(subject, resource, action, context)))
+        // Evaluate conditions (skip if subject is null and authentication not required)
+        if (subject != null && !Conditions.All(condition => condition.Evaluate(subject, resource, action, context)))
             return false;
 
         // Evaluate expression based on type
         return Type switch
         {
-            PolicyType.Simple => EvaluateSimpleExpression(subject, resource, action, context),
-            PolicyType.Script => EvaluateScriptExpression(subject, resource, action, context),
+            PolicyType.Simple => subject != null ? EvaluateSimpleExpression(subject, resource, action, context) : false,
+            PolicyType.Script => subject != null ? EvaluateScriptExpression(subject, resource, action, context) : false,
             PolicyType.Regex => EvaluateRegexExpression(resource, action),
-            PolicyType.Custom => EvaluateCustomExpression(subject, resource, action, context),
+            PolicyType.Custom => subject != null ? EvaluateCustomExpression(subject, resource, action, context) : false,
             _ => false
         };
     }
 
-    public PolicyEvaluationResult EvaluateWithDetails(Entity subject, Resource resource, string action, Dictionary<string, object> context)
+    public PolicyEvaluationResult EvaluateWithDetails(Entity? subject, Resource resource, string action, Dictionary<string, object> context)
     {
         var result = new PolicyEvaluationResult
         {
@@ -211,7 +211,8 @@ public class AuthorizationPolicy
 
         foreach (var condition in Conditions)
         {
-            var conditionResult = condition.EvaluateWithDetails(subject, resource, action, context);
+            var conditionResult = subject != null ? condition.EvaluateWithDetails(subject, resource, action, context) : 
+                new ConditionEvaluationResult { IsMet = false, Reason = "Subject is null" };
             result.ConditionResults.Add(conditionResult);
             if (!conditionResult.IsMet)
             {
@@ -539,15 +540,17 @@ public class AuthorizationRule
 
     private bool EvaluatePermissionRule(Entity subject, Resource resource, string action)
     {
-        // Check if subject has required permission
-        var requiredPermission = new Permission
-        {
-            Uri = resource.Uri,
-            HttpVerb = Enum.Parse<HttpVerb>(action),
-            Grant = true
-        };
+        // Check if subject has required permission by examining permissions directly
+        if (!Enum.TryParse<HttpVerb>(action, out var httpVerb))
+            return false;
 
-        return subject.HasPermission(requiredPermission);
+        var hasPermission = subject.Permissions.Any(p => 
+            p.Uri == resource.Uri && 
+            p.HttpVerb == httpVerb && 
+            p.Grant && 
+            !p.Deny);
+
+        return hasPermission;
     }
 
     private bool EvaluateAttributeRule(Entity subject, Resource resource, Dictionary<string, object> context)
@@ -575,11 +578,9 @@ public class AuthorizationRule
         
         if (Expression.Contains("member"))
         {
-            // Check if subject is member of resource group
-            if (subject is User user && resource is Group group)
-            {
-                return user.Parents.Contains(group);
-            }
+            // Check if subject is member of resource (resources don't have group membership in this model)
+            // This would require additional domain logic to determine resource-group relationships
+            return false; // Simplified - resources are not groups
         }
 
         return false;

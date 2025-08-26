@@ -230,10 +230,10 @@ public class TenantGrpcClientService
             if (response.Success && response.ResultData.Length > 0)
             {
                 var users = ProtoSerializer.Deserialize<List<User>>(response.ResultData.ToByteArray());
-                var userResponses = users.Select(u => new UserResponse(
-                    u.Id, 
-                    u.Name, 
-                    u.Parents.FirstOrDefault()?.Id, 
+                var userResponses = users?.Select(u => new UserResponse(
+                    u?.Id ?? 0, 
+                    u?.Name ?? string.Empty, 
+                    u?.Parents?.FirstOrDefault()?.Id, 
                     null, // GroupName - we'll need to fetch this separately if needed
                     null, // RoleId - we'll need to fetch this separately if needed  
                     null, // RoleName
@@ -241,7 +241,7 @@ public class TenantGrpcClientService
                     DateTime.UtcNow, // CreatedAt - placeholder
                     null // UpdatedAt
                 )).ToList();
-                var result = new UserListResponse(userResponses, users.Count, command.Page, command.PageSize);
+                var result = new UserListResponse(userResponses ?? new List<UserResponse>(), users?.Count ?? 0, command.Page, command.PageSize);
                 
                 return result;
             }
@@ -261,9 +261,9 @@ public class TenantGrpcClientService
             {
                 var user = ProtoSerializer.Deserialize<User>(response.ResultData.ToByteArray());
                 var result = new UserResponse(
-                    user.Id,
-                    user.Name,
-                    user.Parents.FirstOrDefault()?.Id,
+                    user?.Id ?? 0,
+                    user?.Name ?? string.Empty,
+                    user?.Parents?.FirstOrDefault()?.Id,
                     null, // GroupName
                     null, // RoleId
                     null, // RoleName
@@ -290,9 +290,9 @@ public class TenantGrpcClientService
             {
                 var user = ProtoSerializer.Deserialize<User>(response.ResultData.ToByteArray());
                 var result = new UserResponse(
-                    user.Id,
-                    user.Name,
-                    user.Parents.FirstOrDefault()?.Id,
+                    user?.Id ?? 0,
+                    user?.Name ?? string.Empty,
+                    user?.Parents?.FirstOrDefault()?.Id,
                     null, // GroupName
                     null, // RoleId
                     null, // RoleName
@@ -319,9 +319,9 @@ public class TenantGrpcClientService
             {
                 var user = ProtoSerializer.Deserialize<User>(response.ResultData.ToByteArray());
                 var result = new UserResponse(
-                    user.Id,
-                    user.Name,
-                    user.Parents.FirstOrDefault()?.Id,
+                    user?.Id ?? 0,
+                    user?.Name ?? string.Empty,
+                    user?.Parents?.FirstOrDefault()?.Id,
                     null, // GroupName
                     null, // RoleId
                     null, // RoleName
@@ -359,10 +359,10 @@ public class TenantGrpcClientService
             if (response.Success && response.ResultData.Length > 0)
             {
                 var groups = ProtoSerializer.Deserialize<List<Group>>(response.ResultData.ToByteArray());
-                var groupResponses = groups.Select(g => new GroupResponse(
-                    g.Id,
-                    g.Name,
-                    g.Parents.FirstOrDefault()?.Id,
+                var groupResponses = groups?.Select(g => new GroupResponse(
+                    g?.Id ?? 0,
+                    g?.Name ?? string.Empty,
+                    g?.Parents?.FirstOrDefault()?.Id,
                     null, // ParentGroupName
                     new List<GroupResponse>(), // ChildGroups
                     new List<UserResponse>(), // Users
@@ -371,7 +371,7 @@ public class TenantGrpcClientService
                     DateTime.UtcNow, // CreatedAt - placeholder
                     null // UpdatedAt
                 )).ToList();
-                var result = new GroupListResponse(groupResponses, groups.Count, command.Page, command.PageSize);
+                var result = new GroupListResponse(groupResponses ?? new List<GroupResponse>(), groups?.Count ?? 0, command.Page, command.PageSize);
                 
                 return result;
             }
@@ -391,9 +391,9 @@ public class TenantGrpcClientService
             {
                 var group = ProtoSerializer.Deserialize<Group>(response.ResultData.ToByteArray());
                 var result = new GroupResponse(
-                    group.Id,
-                    group.Name,
-                    group.Parents.FirstOrDefault()?.Id,
+                    group?.Id ?? 0,
+                    group?.Name ?? string.Empty,
+                    group?.Parents?.FirstOrDefault()?.Id,
                     null, // ParentGroupName
                     new List<GroupResponse>(), // ChildGroups
                     new List<UserResponse>(), // Users
@@ -421,9 +421,9 @@ public class TenantGrpcClientService
             {
                 var group = ProtoSerializer.Deserialize<Group>(response.ResultData.ToByteArray());
                 var result = new GroupResponse(
-                    group.Id,
-                    group.Name,
-                    group.Parents.FirstOrDefault()?.Id,
+                    group?.Id ?? 0,
+                    group?.Name ?? string.Empty,
+                    group?.Parents?.FirstOrDefault()?.Id,
                     null, // ParentGroupName
                     new List<GroupResponse>(), // ChildGroups
                     new List<UserResponse>(), // Users
@@ -451,9 +451,9 @@ public class TenantGrpcClientService
             {
                 var group = ProtoSerializer.Deserialize<Group>(response.ResultData.ToByteArray());
                 var result = new GroupResponse(
-                    group.Id,
-                    group.Name,
-                    group.Parents.FirstOrDefault()?.Id,
+                    group?.Id ?? 0,
+                    group?.Name ?? string.Empty,
+                    group?.Parents?.FirstOrDefault()?.Id,
                     null, // ParentGroupName
                     new List<GroupResponse>(), // ChildGroups
                     new List<UserResponse>(), // Users
@@ -492,17 +492,17 @@ public class TenantGrpcClientService
             if (response.Success && response.ResultData.Length > 0)
             {
                 var roles = ProtoSerializer.Deserialize<List<Role>>(response.ResultData.ToByteArray());
-                var roleResponses = roles.Select(r => new RoleResponse(
-                    r.Id,
-                    r.Name,
-                    r.Parents.FirstOrDefault()?.Id,
+                var roleResponses = roles?.Select(r => new RoleResponse(
+                    r?.Id ?? 0,
+                    r?.Name ?? string.Empty,
+                    r?.Parents?.FirstOrDefault()?.Id,
                     null, // GroupName
                     new List<UserResponse>(), // Users
                     new List<PermissionResponse>(), // Permissions
                     DateTime.UtcNow, // CreatedAt - placeholder
                     null // UpdatedAt
                 )).ToList();
-                var result = new RoleListResponse(roleResponses, roles.Count, command.Page, command.PageSize);
+                var result = new RoleListResponse(roleResponses ?? new List<RoleResponse>(), roles?.Count ?? 0, command.Page, command.PageSize);
                 
                 return result;
             }
@@ -522,9 +522,9 @@ public class TenantGrpcClientService
             {
                 var role = ProtoSerializer.Deserialize<Role>(response.ResultData.ToByteArray());
                 var result = new RoleResponse(
-                    role.Id,
-                    role.Name,
-                    role.Parents.FirstOrDefault()?.Id,
+                    role?.Id ?? 0,
+                    role?.Name ?? string.Empty,
+                    role?.Parents?.FirstOrDefault()?.Id,
                     null, // GroupName
                     new List<UserResponse>(), // Users
                     new List<PermissionResponse>(), // Permissions
@@ -550,9 +550,9 @@ public class TenantGrpcClientService
             {
                 var role = ProtoSerializer.Deserialize<Role>(response.ResultData.ToByteArray());
                 var result = new RoleResponse(
-                    role.Id,
-                    role.Name,
-                    role.Parents.FirstOrDefault()?.Id,
+                    role?.Id ?? 0,
+                    role?.Name ?? string.Empty,
+                    role?.Parents?.FirstOrDefault()?.Id,
                     null, // GroupName
                     new List<UserResponse>(), // Users
                     new List<PermissionResponse>(), // Permissions
@@ -578,9 +578,9 @@ public class TenantGrpcClientService
             {
                 var role = ProtoSerializer.Deserialize<Role>(response.ResultData.ToByteArray());
                 var result = new RoleResponse(
-                    role.Id,
-                    role.Name,
-                    role.Parents.FirstOrDefault()?.Id,
+                    role?.Id ?? 0,
+                    role?.Name ?? string.Empty,
+                    role?.Parents?.FirstOrDefault()?.Id,
                     null, // GroupName
                     new List<UserResponse>(), // Users
                     new List<PermissionResponse>(), // Permissions
@@ -617,9 +617,9 @@ public class TenantGrpcClientService
             if (response.Success && response.ResultData.Length > 0)
             {
                 var permissions = ProtoSerializer.Deserialize<List<Permission>>(response.ResultData.ToByteArray());
-                var permissionResponses = permissions.Select(p => new PermissionResponse(
-                    command.EntityId, p.Uri, p.HttpVerb.ToString(), p.Grant, p.Deny, p.Scheme.ToString())).ToList();
-                var result = new PermissionListResponse(permissionResponses, permissions.Count, command.Page, command.PageSize);
+                var permissionResponses = permissions?.Select(p => new PermissionResponse(
+                    command.EntityId, p?.Uri ?? string.Empty, p?.HttpVerb.ToString() ?? string.Empty, p?.Grant ?? false, p?.Deny ?? false, p?.Scheme.ToString() ?? string.Empty)).ToList();
+                var result = new PermissionListResponse(permissionResponses ?? new List<PermissionResponse>(), permissions?.Count ?? 0, command.Page, command.PageSize);
                 
                 return result;
             }

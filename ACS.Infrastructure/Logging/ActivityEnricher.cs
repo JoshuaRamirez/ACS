@@ -8,6 +8,7 @@ namespace ACS.Infrastructure.Logging;
 /// </summary>
 public static class ActivityEnricher
 {
+    private static readonly ActivitySource ActivitySource = new("ACS.Infrastructure");
     /// <summary>
     /// Creates an activity with correlation information
     /// </summary>
@@ -16,7 +17,7 @@ public static class ActivityEnricher
         ICorrelationService correlationService,
         ActivityKind kind = ActivityKind.Internal)
     {
-        var activity = Activity.StartActivity(activityName, kind);
+        var activity = ActivitySource.StartActivity(activityName, kind);
         if (activity == null)
             return null;
 
@@ -75,7 +76,7 @@ public static class ActivityEnricher
         ActivityKind kind = ActivityKind.Internal)
     {
         var childCorrelationId = correlationService.CreateChildCorrelationId();
-        var activity = Activity.StartActivity(activityName, kind);
+        var activity = ActivitySource.StartActivity(activityName, kind);
         
         if (activity == null)
             return null;

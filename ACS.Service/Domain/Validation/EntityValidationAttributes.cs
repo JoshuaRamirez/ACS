@@ -1,41 +1,45 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
+using ACS.Service.Services;
 
 namespace ACS.Service.Domain.Validation;
 
 /// <summary>
 /// Validates that an entity name is unique within its scope
 /// </summary>
+[AttributeUsage(AttributeTargets.Class | AttributeTargets.Property | AttributeTargets.Field, AllowMultiple = false)]
 public class UniqueEntityNameAttribute : DomainValidationAttribute
 {
     public Type EntityType { get; set; } = typeof(Entity);
     public string? ScopeProperty { get; set; }
     public bool CaseInsensitive { get; set; } = true;
 
-    public override ValidationResult? ValidateInDomain(object? value, ValidationContext validationContext, IDomainValidationContext domainContext)
+    public override System.ComponentModel.DataAnnotations.ValidationResult? ValidateInDomain(object? value, ValidationContext validationContext, IDomainValidationContext domainContext)
     {
         if (value is not string name || string.IsNullOrEmpty(name))
-            return ValidationResult.Success;
+            return System.ComponentModel.DataAnnotations.ValidationResult.Success;
 
         var entity = validationContext.ObjectInstance as Entity;
         if (entity == null)
-            return new ValidationResult("Validation can only be applied to Entity types");
+            return new System.ComponentModel.DataAnnotations.ValidationResult("Validation can only be applied to Entity types", validationContext.MemberName != null ? new[] { validationContext.MemberName } : Array.Empty<string>());
 
         // Check cache first
         var cacheKey = $"unique_name_{EntityType.Name}_{name}_{ScopeProperty}";
-        var cachedResult = domainContext.ValidationCache.GetAsync<bool?>(cacheKey).Result;
-        if (cachedResult.HasValue)
+        var cachedResult = domainContext.ValidationCache.GetAsync<string>(cacheKey).Result;
+        if (cachedResult != null && bool.TryParse(cachedResult, out var isUnique))
         {
-            return cachedResult.Value ? ValidationResult.Success : 
-                new ValidationResult($"An entity with name '{name}' already exists");
+            return isUnique ? System.ComponentModel.DataAnnotations.ValidationResult.Success : 
+                new System.ComponentModel.DataAnnotations.ValidationResult($"An entity with name '{name}' already exists", validationContext.MemberName != null ? new[] { validationContext.MemberName } : Array.Empty<string>());
         }
 
-        // Query database
-        var query = domainContext.DbContext.Set(EntityType).AsQueryable();
+        // Query database using reflection-based approach since EntityType is runtime Type
+        var setMethod = typeof(DbContext).GetMethod("Set", new Type[0])!.MakeGenericMethod(EntityType);
+        var dbSet = setMethod.Invoke(domainContext.DbContext, null);
+        var query = (IQueryable<object>)dbSet!;
         
         if (CaseInsensitive)
-            query = query.Where(e => EF.Property<string>(e, "Name").ToLower() == name.ToLower());
+            query = query.Where(e => EF.Functions.Like(EF.Property<string>(e, "Name"), name));
         else
             query = query.Where(e => EF.Property<string>(e, "Name") == name);
 
@@ -54,28 +58,29 @@ public class UniqueEntityNameAttribute : DomainValidationAttribute
         var exists = query.Any();
         
         // Cache result
-        _ = domainContext.ValidationCache.SetAsync(cacheKey, !exists, domainContext.Configuration.CacheExpiration);
+        _ = domainContext.ValidationCache.SetAsync(cacheKey, (!exists).ToString(), domainContext.Configuration.CacheExpiration);
 
-        return exists ? new ValidationResult($"An entity with name '{name}' already exists") : ValidationResult.Success;
+        return exists ? new System.ComponentModel.DataAnnotations.ValidationResult($"An entity with name '{name}' already exists", validationContext.MemberName != null ? new[] { validationContext.MemberName } : Array.Empty<string>()) : System.ComponentModel.DataAnnotations.ValidationResult.Success;
     }
 }
 
 /// <summary>
 /// Validates that a hierarchy doesn't create cycles
 /// </summary>
+[AttributeUsage(AttributeTargets.Class | AttributeTargets.Property | AttributeTargets.Field, AllowMultiple = false)]
 public class NoCyclicHierarchyAttribute : DomainValidationAttribute
 {
     public int MaxDepth { get; set; } = 50;
 
-    public override ValidationResult? ValidateInDomain(object? value, ValidationContext validationContext, IDomainValidationContext domainContext)
+    public override System.ComponentModel.DataAnnotations.ValidationResult? ValidateInDomain(object? value, ValidationContext validationContext, IDomainValidationContext domainContext)
     {
         var entity = validationContext.ObjectInstance as Entity;
         if (entity == null || value is not Entity parentEntity)
-            return ValidationResult.Success;
+            return System.ComponentModel.DataAnnotations.ValidationResult.Success;
 
         // Cannot be parent of itself
         if (entity.Id == parentEntity.Id && entity.Id > 0)
-            return new ValidationResult("Entity cannot be its own parent");
+            return new System.ComponentModel.DataAnnotations.ValidationResult("Entity cannot be its own parent", validationContext.MemberName != null ? new[] { validationContext.MemberName } : Array.Empty<string>());
 
         // Check for cycles using breadth-first search
         var visited = new HashSet<int>();
@@ -90,7 +95,7 @@ public class NoCyclicHierarchyAttribute : DomainValidationAttribute
             
             // If we find the original entity in the parent chain, there's a cycle
             if (current.Id == entity.Id && entity.Id > 0)
-                return new ValidationResult("Adding this parent would create a circular hierarchy");
+                return new System.ComponentModel.DataAnnotations.ValidationResult("Adding this parent would create a circular hierarchy", validationContext.MemberName != null ? new[] { validationContext.MemberName } : Array.Empty<string>());
 
             // Add current entity's parents to queue
             foreach (var parent in current.Parents)
@@ -106,15 +111,16 @@ public class NoCyclicHierarchyAttribute : DomainValidationAttribute
         }
 
         if (depth >= MaxDepth)
-            return new ValidationResult($"Hierarchy depth exceeds maximum of {MaxDepth} levels");
+            return new System.ComponentModel.DataAnnotations.ValidationResult($"Hierarchy depth exceeds maximum of {MaxDepth} levels", validationContext.MemberName != null ? new[] { validationContext.MemberName } : Array.Empty<string>());
 
-        return ValidationResult.Success;
+        return System.ComponentModel.DataAnnotations.ValidationResult.Success;
     }
 }
 
 /// <summary>
 /// Validates maximum number of children for an entity
 /// </summary>
+[AttributeUsage(AttributeTargets.Class | AttributeTargets.Property | AttributeTargets.Field, AllowMultiple = false)]
 public class MaxChildrenAttribute : DomainValidationAttribute
 {
     public int Maximum { get; }
@@ -124,22 +130,23 @@ public class MaxChildrenAttribute : DomainValidationAttribute
         Maximum = maximum;
     }
 
-    public override ValidationResult? ValidateInDomain(object? value, ValidationContext validationContext, IDomainValidationContext domainContext)
+    public override System.ComponentModel.DataAnnotations.ValidationResult? ValidateInDomain(object? value, ValidationContext validationContext, IDomainValidationContext domainContext)
     {
         var entity = validationContext.ObjectInstance as Entity;
         if (entity == null)
-            return ValidationResult.Success;
+            return System.ComponentModel.DataAnnotations.ValidationResult.Success;
 
         if (entity.Children.Count >= Maximum)
-            return new ValidationResult($"Entity cannot have more than {Maximum} children");
+            return new System.ComponentModel.DataAnnotations.ValidationResult($"Entity cannot have more than {Maximum} children", validationContext.MemberName != null ? new[] { validationContext.MemberName } : Array.Empty<string>());
 
-        return ValidationResult.Success;
+        return System.ComponentModel.DataAnnotations.ValidationResult.Success;
     }
 }
 
 /// <summary>
 /// Validates that URI patterns are well-formed
 /// </summary>
+[AttributeUsage(AttributeTargets.Class | AttributeTargets.Property | AttributeTargets.Field, AllowMultiple = false)]
 public class ValidUriPatternAttribute : DomainValidationAttribute
 {
     public bool AllowWildcards { get; set; } = true;
@@ -149,18 +156,18 @@ public class ValidUriPatternAttribute : DomainValidationAttribute
     private static readonly Regex UriParameterRegex = new(@"\{[a-zA-Z_][a-zA-Z0-9_]*\}", RegexOptions.Compiled);
     private static readonly Regex WildcardRegex = new(@"\*+", RegexOptions.Compiled);
 
-    public override ValidationResult? ValidateInDomain(object? value, ValidationContext validationContext, IDomainValidationContext domainContext)
+    public override System.ComponentModel.DataAnnotations.ValidationResult? ValidateInDomain(object? value, ValidationContext validationContext, IDomainValidationContext domainContext)
     {
         if (value is not string uri || string.IsNullOrEmpty(uri))
-            return ValidationResult.Success;
+            return System.ComponentModel.DataAnnotations.ValidationResult.Success;
 
         // Check for wildcards if not allowed
         if (!AllowWildcards && WildcardRegex.IsMatch(uri))
-            return new ValidationResult("URI pattern cannot contain wildcards");
+            return new System.ComponentModel.DataAnnotations.ValidationResult("URI pattern cannot contain wildcards", validationContext.MemberName != null ? new[] { validationContext.MemberName } : Array.Empty<string>());
 
         // Check for parameters if not allowed
         if (!AllowParameters && UriParameterRegex.IsMatch(uri))
-            return new ValidationResult("URI pattern cannot contain parameters");
+            return new System.ComponentModel.DataAnnotations.ValidationResult("URI pattern cannot contain parameters", validationContext.MemberName != null ? new[] { validationContext.MemberName } : Array.Empty<string>());
 
         // Validate URI format (excluding parameters and wildcards for validation)
         var cleanUri = uri;
@@ -183,44 +190,46 @@ public class ValidUriPatternAttribute : DomainValidationAttribute
             if (AllowedSchemes != null && AllowedSchemes.Length > 0)
             {
                 if (!AllowedSchemes.Contains(parsedUri.Scheme, StringComparer.OrdinalIgnoreCase))
-                    return new ValidationResult($"URI scheme must be one of: {string.Join(", ", AllowedSchemes)}");
+                    return new System.ComponentModel.DataAnnotations.ValidationResult($"URI scheme must be one of: {string.Join(", ", AllowedSchemes)}", validationContext.MemberName != null ? new[] { validationContext.MemberName } : Array.Empty<string>());
             }
         }
         catch (UriFormatException ex)
         {
-            return new ValidationResult($"Invalid URI format: {ex.Message}");
+            return new System.ComponentModel.DataAnnotations.ValidationResult($"Invalid URI format: {ex.Message}", validationContext.MemberName != null ? new[] { validationContext.MemberName } : Array.Empty<string>());
         }
 
-        return ValidationResult.Success;
+        return System.ComponentModel.DataAnnotations.ValidationResult.Success;
     }
 }
 
 /// <summary>
 /// Validates that permission combinations are valid
 /// </summary>
+[AttributeUsage(AttributeTargets.Class | AttributeTargets.Property | AttributeTargets.Field, AllowMultiple = false)]
 public class ValidPermissionCombinationAttribute : DomainValidationAttribute
 {
-    public override ValidationResult? ValidateInDomain(object? value, ValidationContext validationContext, IDomainValidationContext domainContext)
+    public override System.ComponentModel.DataAnnotations.ValidationResult? ValidateInDomain(object? value, ValidationContext validationContext, IDomainValidationContext domainContext)
     {
         var permission = validationContext.ObjectInstance as Permission;
         if (permission == null)
-            return ValidationResult.Success;
+            return System.ComponentModel.DataAnnotations.ValidationResult.Success;
 
         // Cannot both grant and deny the same permission
         if (permission.Grant && permission.Deny)
-            return new ValidationResult("Permission cannot both grant and deny access");
+            return new System.ComponentModel.DataAnnotations.ValidationResult("Permission cannot both grant and deny access", validationContext.MemberName != null ? new[] { validationContext.MemberName } : Array.Empty<string>());
 
         // Must have either grant or deny set
         if (!permission.Grant && !permission.Deny)
-            return new ValidationResult("Permission must either grant or deny access");
+            return new System.ComponentModel.DataAnnotations.ValidationResult("Permission must either grant or deny access", validationContext.MemberName != null ? new[] { validationContext.MemberName } : Array.Empty<string>());
 
-        return ValidationResult.Success;
+        return System.ComponentModel.DataAnnotations.ValidationResult.Success;
     }
 }
 
 /// <summary>
 /// Validates that a user has required permissions to perform an operation
 /// </summary>
+[AttributeUsage(AttributeTargets.Method | AttributeTargets.Class, AllowMultiple = true)]
 public class RequiresPermissionAttribute : DomainValidationAttribute
 {
     public string Resource { get; }
@@ -232,29 +241,30 @@ public class RequiresPermissionAttribute : DomainValidationAttribute
         Verb = verb;
     }
 
-    public override ValidationResult? ValidateInDomain(object? value, ValidationContext validationContext, IDomainValidationContext domainContext)
+    public override System.ComponentModel.DataAnnotations.ValidationResult? ValidateInDomain(object? value, ValidationContext validationContext, IDomainValidationContext domainContext)
     {
         var userContext = domainContext.UserContext;
         if (userContext == null)
-            return new ValidationResult("User context required for permission validation");
+            return new System.ComponentModel.DataAnnotations.ValidationResult("User context required for permission validation", validationContext.MemberName != null ? new[] { validationContext.MemberName } : Array.Empty<string>());
 
         // Check if user has required permission
         // This would typically use IPermissionEvaluationService
-        var permissionService = domainContext.ServiceProvider.GetService<IPermissionEvaluationService>();
+        var permissionService = domainContext.ServiceProvider.GetService(typeof(IPermissionEvaluationService)) as IPermissionEvaluationService;
         if (permissionService != null)
         {
             var hasPermission = permissionService.HasPermissionAsync(userContext.UserId, Resource, Verb).Result;
             if (!hasPermission)
-                return new ValidationResult($"Insufficient permissions. Required: {Verb} on {Resource}");
+                return new System.ComponentModel.DataAnnotations.ValidationResult($"Insufficient permissions. Required: {Verb} on {Resource}", validationContext.MemberName != null ? new[] { validationContext.MemberName } : Array.Empty<string>());
         }
 
-        return ValidationResult.Success;
+        return System.ComponentModel.DataAnnotations.ValidationResult.Success;
     }
 }
 
 /// <summary>
 /// Validates business rules specific to entity relationships
 /// </summary>
+[AttributeUsage(AttributeTargets.Class | AttributeTargets.Property | AttributeTargets.Field, AllowMultiple = false)]
 public class ValidEntityRelationshipAttribute : DomainValidationAttribute
 {
     public string RelationshipType { get; }
@@ -266,11 +276,11 @@ public class ValidEntityRelationshipAttribute : DomainValidationAttribute
         RelationshipType = relationshipType;
     }
 
-    public override ValidationResult? ValidateInDomain(object? value, ValidationContext validationContext, IDomainValidationContext domainContext)
+    public override System.ComponentModel.DataAnnotations.ValidationResult? ValidateInDomain(object? value, ValidationContext validationContext, IDomainValidationContext domainContext)
     {
         var entity = validationContext.ObjectInstance as Entity;
         if (entity == null || value is not Entity relatedEntity)
-            return ValidationResult.Success;
+            return System.ComponentModel.DataAnnotations.ValidationResult.Success;
 
         // Check allowed types
         if (AllowedRelatedTypes != null && AllowedRelatedTypes.Length > 0)
@@ -279,7 +289,7 @@ public class ValidEntityRelationshipAttribute : DomainValidationAttribute
             if (!AllowedRelatedTypes.Any(t => t.IsAssignableFrom(relatedType)))
             {
                 var allowedNames = string.Join(", ", AllowedRelatedTypes.Select(t => t.Name));
-                return new ValidationResult($"Related entity must be one of: {allowedNames}");
+                return new System.ComponentModel.DataAnnotations.ValidationResult($"Related entity must be one of: {allowedNames}", validationContext.MemberName != null ? new[] { validationContext.MemberName } : Array.Empty<string>());
             }
         }
 
@@ -294,10 +304,10 @@ public class ValidEntityRelationshipAttribute : DomainValidationAttribute
             };
 
             if (currentCount >= MaxRelationships.Value)
-                return new ValidationResult($"Maximum {RelationshipType} relationships ({MaxRelationships.Value}) exceeded");
+                return new System.ComponentModel.DataAnnotations.ValidationResult($"Maximum {RelationshipType} relationships ({MaxRelationships.Value}) exceeded", validationContext.MemberName != null ? new[] { validationContext.MemberName } : Array.Empty<string>());
         }
 
-        return ValidationResult.Success;
+        return System.ComponentModel.DataAnnotations.ValidationResult.Success;
     }
 }
 

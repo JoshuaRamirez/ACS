@@ -208,7 +208,7 @@ public class ProjectionService : IProjectionService
                     .ToList(),
                 ResourceTypes = _context.UriAccesses
                     .Where(ua => ua.PermissionScheme.EntityId == r.EntityId)
-                    .Select(ua => ua.Resource.Uri.Split('/')[0])
+                    .Select(ua => ua.Resource.Uri.Split('/', StringSplitOptions.None)[0])
                     .Distinct()
                     .ToList()
             })
@@ -250,12 +250,12 @@ public class ProjectionService : IProjectionService
         var query = _context.UriAccesses.AsNoTracking();
         
         if (entityIds != null && entityIds.Any())
-            query = query.Where(ua => entityIds.Contains(ua.PermissionScheme.EntityId));
+            query = query.Where(ua => ua.PermissionScheme.EntityId.HasValue && entityIds.Contains(ua.PermissionScheme.EntityId.Value));
 
         return await query
             .Select(ua => new PermissionMatrixEntry
             {
-                EntityId = ua.PermissionScheme.EntityId,
+                EntityId = ua.PermissionScheme.EntityId ?? 0,
                 EntityType = ua.PermissionScheme.Entity.EntityType,
                 EntityName = ua.PermissionScheme.Entity.EntityType == "User"
                     ? ua.PermissionScheme.Entity.Users.First().Name
@@ -284,7 +284,7 @@ public class ProjectionService : IProjectionService
             {
                 ResourceId = r.Id,
                 ResourceUri = r.Uri,
-                ResourceType = r.Uri.Split('/').FirstOrDefault() ?? "Unknown",
+                ResourceType = r.Uri.Split('/', StringSplitOptions.None).FirstOrDefault() ?? "Unknown",
                 TotalAccessRules = r.UriAccesses.Count(),
                 GrantRules = r.UriAccesses.Count(ua => ua.Grant),
                 DenyRules = r.UriAccesses.Count(ua => ua.Deny),
@@ -443,12 +443,12 @@ public class ProjectionService : IProjectionService
 
     #region Custom Projections
 
-    public async Task<IEnumerable<T>> ExecuteProjectionAsync<T>(IQueryable<T> query, CancellationToken cancellationToken = default)
+    public async Task<IEnumerable<T>> ExecuteProjectionAsync<T>(IQueryable<T> query, CancellationToken cancellationToken = default) where T : class
     {
         return await query.AsNoTracking().ToListAsync(cancellationToken);
     }
 
-    public async Task<PagedProjectionResult<T>> GetPagedProjectionAsync<T>(IQueryable<T> query, int pageNumber, int pageSize, CancellationToken cancellationToken = default)
+    public async Task<PagedProjectionResult<T>> GetPagedProjectionAsync<T>(IQueryable<T> query, int pageNumber, int pageSize, CancellationToken cancellationToken = default) where T : class
     {
         if (pageNumber < 1) pageNumber = 1;
         if (pageSize < 1) pageSize = 10;

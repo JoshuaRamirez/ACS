@@ -260,7 +260,7 @@ public class DataArchivingService : IDataArchivingService
                     ArchivePath = reader.GetString(5),
                     Status = Enum.Parse<ArchiveStatus>(reader.GetString(6)),
                     CreatedBy = reader.GetString(7),
-                    Metadata = reader.IsDBNull(8) ? null : reader.GetString(8)
+                    Metadata = reader.IsDBNull(8) ? string.Empty : reader.GetString(8)
                 });
             }
 
@@ -313,7 +313,7 @@ public class DataArchivingService : IDataArchivingService
         try
         {
             _logger.LogWarning("Starting data purge. RetentionDays: {RetentionDays}, Tables: {Tables}",
-                options.RetentionDays, string.Join(", ", options.TablesToP purge));
+                options.RetentionDays, string.Join(", ", options.TablesToPurge));
 
             // Step 1: Create backup before purge if requested
             if (options.CreateBackupBeforePurge)
@@ -764,7 +764,7 @@ public class DataArchivingService : IDataArchivingService
     }
 
     // Additional helper methods would be implemented here...
-    private async Task<string> LocateArchiveFileAsync(string archiveId, CancellationToken cancellationToken) => await Task.FromResult<string>(null);
+    private async Task<string> LocateArchiveFileAsync(string archiveId, CancellationToken cancellationToken) => await Task.FromResult(string.Empty);
     private async Task<string> DecompressArchiveAsync(string archivePath, CancellationToken cancellationToken) => await Task.FromResult(archivePath);
     private async Task<ArchiveManifest> ReadArchiveManifestAsync(string archivePath, CancellationToken cancellationToken) => await Task.FromResult(new ArchiveManifest());
     private async Task GenerateArchiveManifestAsync(ArchiveResult result, DataToArchive data, CancellationToken cancellationToken) => await Task.CompletedTask;
@@ -873,7 +873,7 @@ public class PurgeOptions
 public class ComplianceReportOptions
 {
     public ComplianceType ComplianceType { get; set; }
-    public string ReportPeriod { get; set; }
+    public string ReportPeriod { get; set; } = string.Empty;
     public DateTime FromDate { get; set; }
     public DateTime ToDate { get; set; }
     public ExportFormat ExportFormat { get; set; } = ExportFormat.Json;
@@ -882,16 +882,16 @@ public class ComplianceReportOptions
 
 public class ArchiveResult
 {
-    public string ArchiveId { get; set; }
+    public string ArchiveId { get; set; } = string.Empty;
     public bool Success { get; set; }
-    public string Message { get; set; }
-    public string Error { get; set; }
+    public string Message { get; set; } = string.Empty;
+    public string Error { get; set; } = string.Empty;
     public DateTime StartTime { get; set; }
     public DateTime EndTime { get; set; }
     public TimeSpan Duration => EndTime - StartTime;
-    public ArchiveOptions Options { get; set; }
-    public string ArchivePath { get; set; }
-    public string CompressedPath { get; set; }
+    public ArchiveOptions Options { get; set; } = new();
+    public string ArchivePath { get; set; } = string.Empty;
+    public string CompressedPath { get; set; } = string.Empty;
     public long ArchiveSize { get; set; }
     public long CompressedSize { get; set; }
     public int RecordsIdentified { get; set; }
@@ -903,13 +903,13 @@ public class ArchiveResult
 
 public class RestoreArchiveResult
 {
-    public string ArchiveId { get; set; }
+    public string ArchiveId { get; set; } = string.Empty;
     public bool Success { get; set; }
-    public string Message { get; set; }
+    public string Message { get; set; } = string.Empty;
     public DateTime StartTime { get; set; }
     public DateTime EndTime { get; set; }
     public TimeSpan Duration => EndTime - StartTime;
-    public string ArchivePath { get; set; }
+    public string ArchivePath { get; set; } = string.Empty;
     public int RecordsRestored { get; set; }
     public List<string> TablesRestored { get; set; } = new();
     public List<DataConflict> Conflicts { get; set; } = new();
@@ -920,50 +920,50 @@ public class RestoreArchiveResult
 
 public class ArchiveInfo
 {
-    public string ArchiveId { get; set; }
+    public string ArchiveId { get; set; } = string.Empty;
     public ArchiveType ArchiveType { get; set; }
     public DateTime ArchiveDate { get; set; }
     public long RecordsArchived { get; set; }
     public long ArchiveSize { get; set; }
-    public string ArchivePath { get; set; }
+    public string ArchivePath { get; set; } = string.Empty;
     public ArchiveStatus Status { get; set; }
-    public string CreatedBy { get; set; }
-    public string Metadata { get; set; }
+    public string CreatedBy { get; set; } = string.Empty;
+    public string Metadata { get; set; } = string.Empty;
 }
 
 public class PurgeResult
 {
     public bool Success { get; set; }
-    public string Message { get; set; }
+    public string Message { get; set; } = string.Empty;
     public DateTime StartTime { get; set; }
     public DateTime EndTime { get; set; }
     public TimeSpan Duration => EndTime - StartTime;
-    public PurgeOptions Options { get; set; }
+    public PurgeOptions Options { get; set; } = new();
     public int RecordsIdentified { get; set; }
     public int RecordsPurged { get; set; }
     public int RecordsArchived { get; set; }
     public List<string> TablesPurged { get; set; } = new();
-    public string ArchiveId { get; set; }
+    public string ArchiveId { get; set; } = string.Empty;
     public bool BackupCreated { get; set; }
     public List<string> Errors { get; set; } = new();
 }
 
 public class ComplianceReport
 {
-    public string ReportId { get; set; }
+    public string ReportId { get; set; } = string.Empty;
     public DateTime GeneratedAt { get; set; }
-    public string ReportPeriod { get; set; }
+    public string ReportPeriod { get; set; } = string.Empty;
     public ComplianceType ComplianceType { get; set; }
     public double ComplianceScore { get; set; }
-    public DataRetentionCompliance DataRetentionCompliance { get; set; }
-    public DataResidencyCompliance DataResidencyCompliance { get; set; }
-    public UserDataAccessAudit UserDataAccess { get; set; }
-    public EncryptionCompliance EncryptionCompliance { get; set; }
-    public GdprMetrics GdprMetrics { get; set; }
-    public HipaaMetrics HipaaMetrics { get; set; }
+    public DataRetentionCompliance DataRetentionCompliance { get; set; } = new();
+    public DataResidencyCompliance DataResidencyCompliance { get; set; } = new();
+    public UserDataAccessAudit UserDataAccess { get; set; } = new();
+    public EncryptionCompliance EncryptionCompliance { get; set; } = new();
+    public GdprMetrics GdprMetrics { get; set; } = new();
+    public HipaaMetrics HipaaMetrics { get; set; } = new();
     public List<ComplianceViolation> Violations { get; set; } = new();
     public List<string> Recommendations { get; set; } = new();
-    public string ExportPath { get; set; }
+    public string ExportPath { get; set; } = string.Empty;
     public List<string> Errors { get; set; } = new();
 }
 
@@ -999,12 +999,12 @@ internal class DeleteResult
 {
     public bool Success { get; set; }
     public int RecordsDeleted { get; set; }
-    public string Error { get; set; }
+    public string Error { get; set; } = string.Empty;
 }
 
 internal class ArchiveManifest
 {
-    public string Version { get; set; }
+    public string Version { get; set; } = string.Empty;
     public DateTime CreatedAt { get; set; }
     public List<string> Tables { get; set; } = new();
     public Dictionary<string, List<string>> TableColumns { get; set; } = new();
@@ -1013,7 +1013,7 @@ internal class ArchiveManifest
 internal class ValidationResult
 {
     public bool IsCompatible { get; set; }
-    public string Reason { get; set; }
+    public string Reason { get; set; } = string.Empty;
     public List<string> Warnings { get; set; } = new();
 }
 
@@ -1045,16 +1045,16 @@ internal class ConflictResolutionResult
 
 public class DataConflict
 {
-    public string TableName { get; set; }
-    public string RecordId { get; set; }
-    public string ConflictType { get; set; }
-    public object ExistingValue { get; set; }
-    public object NewValue { get; set; }
+    public string TableName { get; set; } = string.Empty;
+    public string RecordId { get; set; } = string.Empty;
+    public string ConflictType { get; set; } = string.Empty;
+    public object ExistingValue { get; set; } = new();
+    public object NewValue { get; set; } = new();
 }
 
 public class RetentionPolicy
 {
-    public string TableName { get; set; }
+    public string TableName { get; set; } = string.Empty;
     public int RetentionDays { get; set; }
     public bool IsActive { get; set; }
 }
@@ -1106,10 +1106,10 @@ public class HipaaMetrics
 
 public class ComplianceViolation
 {
-    public string ViolationType { get; set; }
-    public string Description { get; set; }
+    public string ViolationType { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
     public DateTime DetectedAt { get; set; }
-    public string Severity { get; set; }
+    public string Severity { get; set; } = string.Empty;
 }
 
 #endregion

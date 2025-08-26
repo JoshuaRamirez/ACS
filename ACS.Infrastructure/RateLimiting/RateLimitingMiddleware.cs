@@ -81,7 +81,7 @@ public class RateLimitingMiddleware
         // 1. Check context items (set by tenant resolution middleware)
         if (context.Items.TryGetValue("TenantId", out var tenantIdObj))
         {
-            return tenantIdObj.ToString() ?? "unknown";
+            return tenantIdObj?.ToString() ?? "unknown";
         }
 
         // 2. Check custom header

@@ -28,7 +28,7 @@ public class InMemoryRateLimitStorage : IRateLimitStorage, IDisposable
             null, TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(5));
     }
 
-    public async Task<RateLimitStorageData?> GetAsync(string key, CancellationToken cancellationToken = default)
+    public Task<RateLimitStorageData?> GetAsync(string key, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(key);
         
@@ -38,7 +38,7 @@ public class InMemoryRateLimitStorage : IRateLimitStorage, IDisposable
             if (data.ExpiresAt > DateTime.UtcNow)
             {
                 _logger.LogTrace("Retrieved rate limit data for key {Key}", key);
-                return CloneStorageData(data);
+                return Task.FromResult<RateLimitStorageData?>(CloneStorageData(data));
             }
             else
             {
@@ -48,10 +48,10 @@ public class InMemoryRateLimitStorage : IRateLimitStorage, IDisposable
             }
         }
         
-        return null;
+        return Task.FromResult<RateLimitStorageData?>(null);
     }
 
-    public async Task SetAsync(string key, RateLimitStorageData data, CancellationToken cancellationToken = default)
+    public Task SetAsync(string key, RateLimitStorageData data, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(key);
         ArgumentNullException.ThrowIfNull(data);
@@ -67,9 +67,11 @@ public class InMemoryRateLimitStorage : IRateLimitStorage, IDisposable
         
         _logger.LogTrace("Stored rate limit data for key {Key} with {TimestampCount} timestamps", 
             key, data.Timestamps.Count);
+        
+        return Task.CompletedTask;
     }
 
-    public async Task RemoveAsync(string key, CancellationToken cancellationToken = default)
+    public Task RemoveAsync(string key, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(key);
         
@@ -78,9 +80,11 @@ public class InMemoryRateLimitStorage : IRateLimitStorage, IDisposable
             UpdateTenantStats(key, -1);
             _logger.LogTrace("Removed rate limit data for key {Key}", key);
         }
+        
+        return Task.CompletedTask;
     }
 
-    public async Task<IEnumerable<RateLimitStorageData>> GetByPrefixAsync(string prefix, CancellationToken cancellationToken = default)
+    public Task<IEnumerable<RateLimitStorageData>> GetByPrefixAsync(string prefix, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(prefix);
         
@@ -104,7 +108,7 @@ public class InMemoryRateLimitStorage : IRateLimitStorage, IDisposable
         }
         
         _logger.LogTrace("Found {Count} entries with prefix {Prefix}", results.Count, prefix);
-        return results;
+        return Task.FromResult<IEnumerable<RateLimitStorageData>>(results);
     }
 
     public async Task CleanupExpiredAsync(CancellationToken cancellationToken = default)
@@ -157,13 +161,13 @@ public class InMemoryRateLimitStorage : IRateLimitStorage, IDisposable
         }
     }
 
-    public async Task<RateLimitStorageStats> GetStatsAsync(CancellationToken cancellationToken = default)
+    public Task<RateLimitStorageStats> GetStatsAsync(CancellationToken cancellationToken = default)
     {
         var now = DateTime.UtcNow;
         var totalEntries = _storage.Count;
         var expiredEntries = _storage.Values.Count(v => v.ExpiresAt <= now);
         
-        return new RateLimitStorageStats
+        var result = new RateLimitStorageStats
         {
             TotalEntries = totalEntries,
             ExpiredEntries = expiredEntries,
@@ -172,6 +176,8 @@ public class InMemoryRateLimitStorage : IRateLimitStorage, IDisposable
             AverageResponseTime = TimeSpan.FromMilliseconds(1), // In-memory is fast
             TenantCounts = new Dictionary<string, long>(_tenantRequestCounts)
         };
+        
+        return Task.FromResult(result);
     }
 
     private RateLimitStorageData CloneStorageData(RateLimitStorageData original)

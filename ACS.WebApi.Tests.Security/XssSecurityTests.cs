@@ -332,7 +332,7 @@ public class XssSecurityTests : SecurityTestBase
         
         if (createResponse.StatusCode == HttpStatusCode.Created)
         {
-            var responseContent = await response.Content.ReadAsStringAsync();
+            var responseContent = await createResponse.Content.ReadAsStringAsync();
             
             // Assert - Special characters should be properly encoded in JSON
             if (responseContent.Contains("Test"))

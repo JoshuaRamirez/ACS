@@ -1,5 +1,9 @@
 using ACS.WebApi.Tests.Performance.Infrastructure;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NBomber.CSharp;
+using FluentAssertions;
+using System.Net.Http.Headers;
+using System.Text;
 
 namespace ACS.WebApi.Tests.Performance.StressTests;
 
@@ -22,39 +26,41 @@ public class ApiStressTests : PerformanceTestBase
     }
 
     [TestMethod]
-    public async Task StressTest_GradualLoadIncrease_ShouldIdentifyBreakingPoint()
+    public Task StressTest_GradualLoadIncrease_ShouldIdentifyBreakingPoint()
     {
         var scenario = Scenario.Create("gradual_load_increase", async context =>
         {
             var request = CreateAuthenticatedRequest(HttpMethod.Get, "/api/users?page=1&size=10");
             var response = await HttpClient.SendAsync(request);
 
-            return response.IsSuccessStatusCode ? Response.Ok() : Response.Fail($"Status: {response.StatusCode}");
+            return response.IsSuccessStatusCode ? Response.Ok() : Response.Fail<object>(null, $"Status: {response.StatusCode}");
         })
         .WithLoadSimulations(
             // Gradually increase load to find breaking point
-            Simulation.InjectPerSec(rate: 10, during: TimeSpan.FromSeconds(30)),
-            Simulation.InjectPerSec(rate: 25, during: TimeSpan.FromSeconds(30)),
-            Simulation.InjectPerSec(rate: 50, during: TimeSpan.FromSeconds(30)),
-            Simulation.InjectPerSec(rate: 100, during: TimeSpan.FromSeconds(30)),
-            Simulation.InjectPerSec(rate: 200, during: TimeSpan.FromSeconds(30))
+            Simulation.KeepConstant(copies: 10, during: TimeSpan.FromSeconds(30)),
+            Simulation.KeepConstant(copies: 25, during: TimeSpan.FromSeconds(30)),
+            Simulation.KeepConstant(copies: 50, during: TimeSpan.FromSeconds(30)),
+            Simulation.KeepConstant(copies: 100, during: TimeSpan.FromSeconds(30)),
+            Simulation.KeepConstant(copies: 200, during: TimeSpan.FromSeconds(30))
         );
 
         var stats = NBomberRunner
             .RegisterScenarios(scenario)
             .Run();
 
-        PrintScenarioResults("Gradual Load Increase Stress Test", stats);
+        // PrintScenarioResults("Gradual Load Increase Stress Test", stats); // TODO: Fix stats type mismatch
 
         // Document the breaking point
         Console.WriteLine($"Error Rate: {(double)stats.AllFailCount / stats.AllRequestCount * 100:F2}%");
         
         // The system should handle at least moderate load without complete failure
         (stats.AllOkCount > 0).Should().BeTrue("System should handle some requests even under stress");
+        
+        return Task.CompletedTask;
     }
 
     [TestMethod]
-    public async Task StressTest_HighConcurrency_ShouldMaintainStability()
+    public Task StressTest_HighConcurrency_ShouldMaintainStability()
     {
         var scenario = Scenario.Create("high_concurrency", async context =>
         {
@@ -70,7 +76,7 @@ public class ApiStressTests : PerformanceTestBase
             var request = CreateAuthenticatedRequest(HttpMethod.Get, endpoint);
             var response = await HttpClient.SendAsync(request);
 
-            return response.IsSuccessStatusCode ? Response.Ok() : Response.Fail($"Status: {response.StatusCode}");
+            return response.IsSuccessStatusCode ? Response.Ok() : Response.Fail<object>(null, $"Status: {response.StatusCode}");
         })
         .WithLoadSimulations(
             Simulation.KeepConstant(copies: GetMaxVirtualUsers(), during: GetTestDuration())
@@ -80,16 +86,18 @@ public class ApiStressTests : PerformanceTestBase
             .RegisterScenarios(scenario)
             .Run();
 
-        PrintScenarioResults("High Concurrency Stress Test", stats);
+        // PrintScenarioResults("High Concurrency Stress Test", stats); // TODO: Fix stats type mismatch
 
         // Assertions for stress conditions
         stats.AllOkCount.Should().BeGreaterThan(0, "System should process some requests under high concurrency");
         var errorRate = (double)stats.AllFailCount / stats.AllRequestCount;
         errorRate.Should().BeLessThan(0.5, "Error rate should be less than 50% even under stress");
+        
+        return Task.CompletedTask;
     }
 
     [TestMethod]
-    public async Task StressTest_DatabaseIntensiveOperations_ShouldHandleDbLoad()
+    public Task StressTest_DatabaseIntensiveOperations_ShouldHandleDbLoad()
     {
         var userCounter = 0;
 
@@ -108,11 +116,11 @@ public class ApiStressTests : PerformanceTestBase
             var request = CreateAuthenticatedRequest(HttpMethod.Get, operation);
             var response = await HttpClient.SendAsync(request);
 
-            return response.IsSuccessStatusCode ? Response.Ok() : Response.Fail($"Status: {response.StatusCode}");
+            return response.IsSuccessStatusCode ? Response.Ok() : Response.Fail<object>(null, $"Status: {response.StatusCode}");
         })
-        .WithWeight(80)
+        // .WithWeight(80) // TODO: WithWeight not available in this NBomber version
         .WithLoadSimulations(
-            Simulation.InjectPerSec(rate: 30, during: GetTestDuration())
+            Simulation.KeepConstant(copies: 30, during: GetTestDuration())
         );
 
         var writeScenario = Scenario.Create("database_write_stress", async context =>
@@ -129,27 +137,29 @@ public class ApiStressTests : PerformanceTestBase
             request.Content = CreateJsonContent(newUser);
 
             var response = await HttpClient.SendAsync(request);
-            return response.IsSuccessStatusCode ? Response.Ok() : Response.Fail($"Status: {response.StatusCode}");
+            return response.IsSuccessStatusCode ? Response.Ok() : Response.Fail<object>(null, $"Status: {response.StatusCode}");
         })
-        .WithWeight(20)
+        // .WithWeight(20) // TODO: WithWeight not available in this NBomber version
         .WithLoadSimulations(
-            Simulation.InjectPerSec(rate: 10, during: GetTestDuration())
+            Simulation.KeepConstant(copies: 10, during: GetTestDuration())
         );
 
         var stats = NBomberRunner
             .RegisterScenarios(readScenario, writeScenario)
             .Run();
 
-        PrintScenarioResults("Database Intensive Operations Stress Test", stats);
+        // PrintScenarioResults("Database Intensive Operations Stress Test", stats); // TODO: Fix stats type mismatch
 
         // Database operations should complete even under stress
         stats.AllOkCount.Should().BeGreaterThan(0);
         var errorRate = (double)stats.AllFailCount / stats.AllRequestCount;
         errorRate.Should().BeLessThan(0.3, "Database should handle stress with acceptable error rate");
+        
+        return Task.CompletedTask;
     }
 
     [TestMethod]
-    public async Task StressTest_MemoryIntensiveOperations_ShouldHandleMemoryPressure()
+    public Task StressTest_MemoryIntensiveOperations_ShouldHandleMemoryPressure()
     {
         var scenario = Scenario.Create("memory_intensive_operations", async context =>
         {
@@ -166,56 +176,60 @@ public class ApiStressTests : PerformanceTestBase
             var request = CreateAuthenticatedRequest(HttpMethod.Get, operation, useAdminToken: true);
             var response = await HttpClient.SendAsync(request);
 
-            return response.IsSuccessStatusCode ? Response.Ok() : Response.Fail($"Status: {response.StatusCode}");
+            return response.IsSuccessStatusCode ? Response.Ok() : Response.Fail<object>(null, $"Status: {response.StatusCode}");
         })
         .WithLoadSimulations(
-            Simulation.InjectPerSec(rate: 20, during: GetTestDuration())
+            Simulation.KeepConstant(copies: 20, during: GetTestDuration())
         );
 
         var stats = NBomberRunner
             .RegisterScenarios(scenario)
             .Run();
 
-        PrintScenarioResults("Memory Intensive Operations Stress Test", stats);
+        // PrintScenarioResults("Memory Intensive Operations Stress Test", stats); // TODO: Fix stats type mismatch
 
         // System should handle memory-intensive operations
         stats.AllOkCount.Should().BeGreaterThan(0);
         var errorRate = (double)stats.AllFailCount / stats.AllRequestCount;
         errorRate.Should().BeLessThan(0.4, "System should handle memory pressure with acceptable error rate");
+        
+        return Task.CompletedTask;
     }
 
     [TestMethod]
-    public async Task StressTest_BurstTraffic_ShouldHandleTrafficSpikes()
+    public Task StressTest_BurstTraffic_ShouldHandleTrafficSpikes()
     {
         var scenario = Scenario.Create("burst_traffic", async context =>
         {
             var request = CreateAuthenticatedRequest(HttpMethod.Get, "/api/users");
             var response = await HttpClient.SendAsync(request);
 
-            return response.IsSuccessStatusCode ? Response.Ok() : Response.Fail($"Status: {response.StatusCode}");
+            return response.IsSuccessStatusCode ? Response.Ok() : Response.Fail<object>(null, $"Status: {response.StatusCode}");
         })
         .WithLoadSimulations(
             // Simulate traffic bursts
-            Simulation.InjectPerSec(rate: 5, during: TimeSpan.FromSeconds(10)),   // Calm period
-            Simulation.InjectPerSec(rate: 100, during: TimeSpan.FromSeconds(15)), // Burst
-            Simulation.InjectPerSec(rate: 5, during: TimeSpan.FromSeconds(10)),   // Calm period
-            Simulation.InjectPerSec(rate: 150, during: TimeSpan.FromSeconds(15)), // Larger burst
-            Simulation.InjectPerSec(rate: 5, during: TimeSpan.FromSeconds(10))    // Recovery
+            Simulation.KeepConstant(copies: 5, during: TimeSpan.FromSeconds(10)),   // Calm period
+            Simulation.KeepConstant(copies: 100, during: TimeSpan.FromSeconds(15)), // Burst
+            Simulation.KeepConstant(copies: 5, during: TimeSpan.FromSeconds(10)),   // Calm period
+            Simulation.KeepConstant(copies: 150, during: TimeSpan.FromSeconds(15)), // Larger burst
+            Simulation.KeepConstant(copies: 5, during: TimeSpan.FromSeconds(10))    // Recovery
         );
 
         var stats = NBomberRunner
             .RegisterScenarios(scenario)
             .Run();
 
-        PrintScenarioResults("Burst Traffic Stress Test", stats);
+        // PrintScenarioResults("Burst Traffic Stress Test", stats); // TODO: Fix stats type mismatch
 
         // System should recover from traffic bursts
         stats.AllOkCount.Should().BeGreaterThan(0);
         Console.WriteLine($"System handled {stats.AllOkCount} requests during traffic bursts");
+        
+        return Task.CompletedTask;
     }
 
     [TestMethod]
-    public async Task StressTest_LongRunningConnections_ShouldHandleConnectionLoad()
+    public Task StressTest_LongRunningConnections_ShouldHandleConnectionLoad()
     {
         var scenario = Scenario.Create("long_running_connections", async context =>
         {
@@ -225,7 +239,7 @@ public class ApiStressTests : PerformanceTestBase
             var request = CreateAuthenticatedRequest(HttpMethod.Get, "/api/users?page=1&size=10");
             var response = await HttpClient.SendAsync(request);
 
-            return response.IsSuccessStatusCode ? Response.Ok() : Response.Fail($"Status: {response.StatusCode}");
+            return response.IsSuccessStatusCode ? Response.Ok() : Response.Fail<object>(null, $"Status: {response.StatusCode}");
         })
         .WithLoadSimulations(
             Simulation.KeepConstant(copies: 50, during: TimeSpan.FromMinutes(2))
@@ -235,16 +249,18 @@ public class ApiStressTests : PerformanceTestBase
             .RegisterScenarios(scenario)
             .Run();
 
-        PrintScenarioResults("Long Running Connections Stress Test", stats);
+        // PrintScenarioResults("Long Running Connections Stress Test", stats); // TODO: Fix stats type mismatch
 
         // Connection pool should handle long-running connections
         stats.AllOkCount.Should().BeGreaterThan(0);
         var errorRate = (double)stats.AllFailCount / stats.AllRequestCount;
         errorRate.Should().BeLessThan(0.2, "Connection handling should be robust under stress");
+        
+        return Task.CompletedTask;
     }
 
     [TestMethod]
-    public async Task StressTest_ErrorRecovery_ShouldRecoverFromErrors()
+    public Task StressTest_ErrorRecovery_ShouldRecoverFromErrors()
     {
         var scenario = Scenario.Create("error_recovery", async context =>
         {
@@ -252,7 +268,7 @@ public class ApiStressTests : PerformanceTestBase
             var validRequest = CreateAuthenticatedRequest(HttpMethod.Get, "/api/users");
             var invalidRequest = CreateAuthenticatedRequest(HttpMethod.Get, "/api/nonexistent");
             var malformedRequest = CreateAuthenticatedRequest(HttpMethod.Post, "/api/users");
-            malformedRequest.Content = new StringContent("invalid json", Encoding.UTF8, "application/json");
+            malformedRequest.Content = new StringContent("invalid json", Encoding.UTF8, new MediaTypeHeaderValue("application/json"));
 
             var requests = new[] { validRequest, invalidRequest, malformedRequest };
             var request = requests[Random.Shared.Next(requests.Length)];
@@ -262,21 +278,23 @@ public class ApiStressTests : PerformanceTestBase
             // Consider 4xx as OK for this test since we're intentionally sending bad requests
             return response.IsSuccessStatusCode || ((int)response.StatusCode >= 400 && (int)response.StatusCode < 500)
                 ? Response.Ok() 
-                : Response.Fail($"Unexpected status: {response.StatusCode}");
+                : Response.Fail<object>(null, $"Unexpected status: {response.StatusCode}");
         })
         .WithLoadSimulations(
-            Simulation.InjectPerSec(rate: 25, during: GetTestDuration())
+            Simulation.KeepConstant(copies: 25, during: GetTestDuration())
         );
 
         var stats = NBomberRunner
             .RegisterScenarios(scenario)
             .Run();
 
-        PrintScenarioResults("Error Recovery Stress Test", stats);
+        // PrintScenarioResults("Error Recovery Stress Test", stats); // TODO: Fix stats type mismatch
 
         // System should handle mixed valid/invalid requests
         stats.AllOkCount.Should().BeGreaterThan(0);
         var errorRate = (double)stats.AllFailCount / stats.AllRequestCount;
         errorRate.Should().BeLessThan(0.1, "System should gracefully handle mixed request types");
+        
+        return Task.CompletedTask;
     }
 }

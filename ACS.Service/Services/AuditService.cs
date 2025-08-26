@@ -1,7 +1,10 @@
 using ACS.Service.Data;
 using ACS.Service.Data.Models;
+using ACS.Service.Compliance;
+using ACS.Service.Domain;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -384,12 +387,12 @@ public class AuditService : IAuditService
 
     #region Compliance Reporting
 
-    public async Task<ComplianceReport> GenerateGDPRReportAsync(string userId, DateTime? startDate = null, DateTime? endDate = null)
+    public async Task<ACS.Service.Compliance.ComplianceReport> GenerateGDPRReportAsync(string userId, DateTime? startDate = null, DateTime? endDate = null)
     {
-        var report = new ComplianceReport
+        var report = new ACS.Service.Compliance.ComplianceReport
         {
-            ReportType = "GDPR",
-            GeneratedAt = DateTime.UtcNow,
+            Framework = ComplianceFramework.GDPR,
+            GeneratedDate = DateTime.UtcNow,
             StartDate = startDate ?? DateTime.UtcNow.AddDays(-30),
             EndDate = endDate ?? DateTime.UtcNow,
             IsCompliant = true
@@ -428,13 +431,12 @@ public class AuditService : IAuditService
         if (oldDataCount > 0)
         {
             report.IsCompliant = false;
-            report.Violations.Add(new ComplianceViolation
+            report.Violations.Add(new ACS.Service.Compliance.ComplianceViolation
             {
-                Regulation = "GDPR",
-                Requirement = "Data retention limits",
-                ViolationType = "Excessive retention",
-                Severity = "Medium",
-                DetectedAt = DateTime.UtcNow
+                Description = "Data retention limits exceeded",
+                Requirement = "GDPR - Data retention compliance",
+                Severity = ComplianceSeverity.Medium,
+                DetectedDate = DateTime.UtcNow
             });
         }
 
@@ -445,12 +447,12 @@ public class AuditService : IAuditService
         return report;
     }
 
-    public async Task<ComplianceReport> GenerateSOC2ReportAsync(DateTime startDate, DateTime endDate)
+    public async Task<ACS.Service.Compliance.ComplianceReport> GenerateSOC2ReportAsync(DateTime startDate, DateTime endDate)
     {
-        var report = new ComplianceReport
+        var report = new ACS.Service.Compliance.ComplianceReport
         {
-            ReportType = "SOC2",
-            GeneratedAt = DateTime.UtcNow,
+            Framework = ComplianceFramework.SOC2,
+            GeneratedDate = DateTime.UtcNow,
             StartDate = startDate,
             EndDate = endDate,
             IsCompliant = true
@@ -509,13 +511,12 @@ public class AuditService : IAuditService
             report.IsCompliant = false;
             foreach (var violation in accessViolations.Take(10))
             {
-                report.Violations.Add(new ComplianceViolation
+                report.Violations.Add(new ACS.Service.Compliance.ComplianceViolation
                 {
-                    Regulation = "SOC2",
-                    Requirement = "Confidentiality",
-                    ViolationType = "Unauthorized access attempt",
-                    Severity = violation.Severity,
-                    DetectedAt = violation.OccurredAt
+                    Description = "Unauthorized access attempt detected",
+                    Requirement = "SOC2 - Confidentiality controls",
+                    Severity = ComplianceSeverity.High,
+                    DetectedDate = violation.OccurredAt
                 });
             }
         }
@@ -528,12 +529,12 @@ public class AuditService : IAuditService
         return report;
     }
 
-    public async Task<ComplianceReport> GenerateHIPAAReportAsync(DateTime startDate, DateTime endDate)
+    public async Task<ACS.Service.Compliance.ComplianceReport> GenerateHIPAAReportAsync(DateTime startDate, DateTime endDate)
     {
-        var report = new ComplianceReport
+        var report = new ACS.Service.Compliance.ComplianceReport
         {
-            ReportType = "HIPAA",
-            GeneratedAt = DateTime.UtcNow,
+            Framework = ComplianceFramework.HIPAA,
+            GeneratedDate = DateTime.UtcNow,
             StartDate = startDate,
             EndDate = endDate,
             IsCompliant = true
@@ -575,13 +576,12 @@ public class AuditService : IAuditService
             report.IsCompliant = false;
             foreach (var violation in phiViolations)
             {
-                report.Violations.Add(new ComplianceViolation
+                report.Violations.Add(new ACS.Service.Compliance.ComplianceViolation
                 {
-                    Regulation = "HIPAA",
-                    Requirement = "PHI Access Control",
-                    ViolationType = "Unauthorized PHI access attempt",
-                    Severity = "Critical",
-                    DetectedAt = violation.OccurredAt
+                    Description = "Unauthorized PHI access attempt",
+                    Requirement = "HIPAA - PHI Access Control",
+                    Severity = ComplianceSeverity.Critical,
+                    DetectedDate = violation.OccurredAt
                 });
             }
         }
@@ -593,12 +593,12 @@ public class AuditService : IAuditService
         return report;
     }
 
-    public async Task<ComplianceReport> GeneratePCIDSSReportAsync(DateTime startDate, DateTime endDate)
+    public async Task<ACS.Service.Compliance.ComplianceReport> GeneratePCIDSSReportAsync(DateTime startDate, DateTime endDate)
     {
-        var report = new ComplianceReport
+        var report = new ACS.Service.Compliance.ComplianceReport
         {
-            ReportType = "PCI-DSS",
-            GeneratedAt = DateTime.UtcNow,
+            Framework = ComplianceFramework.PCI_DSS,
+            GeneratedDate = DateTime.UtcNow,
             StartDate = startDate,
             EndDate = endDate,
             IsCompliant = true
@@ -643,12 +643,12 @@ public class AuditService : IAuditService
         return report;
     }
 
-    public async Task<ComplianceReport> GenerateCustomComplianceReportAsync(string reportType, Dictionary<string, object> parameters)
+    public Task<ACS.Service.Compliance.ComplianceReport> GenerateCustomComplianceReportAsync(string reportType, Dictionary<string, object> parameters)
     {
-        var report = new ComplianceReport
+        var report = new ACS.Service.Compliance.ComplianceReport
         {
-            ReportType = reportType,
-            GeneratedAt = DateTime.UtcNow,
+            Framework = ComplianceFramework.GDPR, // Default framework, should be parameterized
+            GeneratedDate = DateTime.UtcNow,
             StartDate = parameters.ContainsKey("StartDate") ? (DateTime)parameters["StartDate"] : DateTime.UtcNow.AddDays(-30),
             EndDate = parameters.ContainsKey("EndDate") ? (DateTime)parameters["EndDate"] : DateTime.UtcNow,
             IsCompliant = true
@@ -661,7 +661,7 @@ public class AuditService : IAuditService
         }
 
         _logger.LogInformation("Generated custom compliance report of type {ReportType}", reportType);
-        return report;
+        return Task.FromResult(report);
     }
 
     #endregion
@@ -1472,33 +1472,52 @@ public class AuditService : IAuditService
         var date = asOfDate ?? DateTime.UtcNow;
         
         // Check compliance based on regulation
-        var report = regulation.ToUpper() switch
+        ACS.Service.Compliance.ComplianceReport report = regulation.ToUpper() switch
         {
             "GDPR" => await GenerateGDPRReportAsync("", date.AddMonths(-1), date),
             "SOC2" => await GenerateSOC2ReportAsync(date.AddMonths(-1), date),
             "HIPAA" => await GenerateHIPAAReportAsync(date.AddMonths(-1), date),
             "PCI-DSS" => await GeneratePCIDSSReportAsync(date.AddMonths(-1), date),
-            _ => new ComplianceReport { IsCompliant = true }
+            _ => await Task.FromResult(new ACS.Service.Compliance.ComplianceReport { IsCompliant = true })
         };
 
+        // Return compliance status directly from Services.ComplianceReport
         return report.IsCompliant;
     }
 
-    public async Task<IEnumerable<ComplianceViolation>> GetComplianceViolationsAsync(string? regulation = null, DateTime? startDate = null, DateTime? endDate = null)
+    public async Task<IEnumerable<ACS.Service.Domain.ComplianceViolation>> GetComplianceViolationsAsync(string? regulation = null, DateTime? startDate = null, DateTime? endDate = null)
     {
-        var violations = new List<ComplianceViolation>();
+        var violations = new List<ACS.Service.Domain.ComplianceViolation>();
 
         // Get violations from various compliance reports
         if (regulation == null || regulation == "GDPR")
         {
             var gdprReport = await GenerateGDPRReportAsync("", startDate, endDate);
-            violations.AddRange(gdprReport.Violations);
+            // Convert Services.ComplianceViolation to Domain.ComplianceViolation  
+            var convertedViolations = gdprReport.Violations.Select(v => new ACS.Service.Domain.ComplianceViolation
+            {
+                ViolationType = v.Requirement,
+                Description = v.Description,
+                Severity = v.Severity.ToString(),
+                DetectedAt = v.DetectedDate,
+                IsRemediated = false // Compliance violations don't have this field
+            });
+            violations.AddRange(convertedViolations);
         }
 
         if (regulation == null || regulation == "SOC2")
         {
             var soc2Report = await GenerateSOC2ReportAsync(startDate ?? DateTime.UtcNow.AddMonths(-1), endDate ?? DateTime.UtcNow);
-            violations.AddRange(soc2Report.Violations);
+            // Convert Services.ComplianceViolation to Domain.ComplianceViolation
+            var convertedViolations = soc2Report.Violations.Select(v => new ACS.Service.Domain.ComplianceViolation
+            {
+                ViolationType = v.Requirement,
+                Description = v.Description,
+                Severity = v.Severity.ToString(),
+                DetectedAt = v.DetectedDate,
+                IsRemediated = false // Compliance violations don't have this field
+            });
+            violations.AddRange(convertedViolations);
         }
 
         return violations;

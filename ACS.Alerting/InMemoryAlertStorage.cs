@@ -21,7 +21,7 @@ public class InMemoryAlertStorage : IAlertStorage
         _alerts = new ConcurrentDictionary<string, AlertHistory>();
     }
 
-    public async Task StoreAlertAsync(AlertHistory alert, CancellationToken cancellationToken = default)
+    public Task StoreAlertAsync(AlertHistory alert, CancellationToken cancellationToken = default)
     {
         if (alert == null) throw new ArgumentNullException(nameof(alert));
 
@@ -33,54 +33,54 @@ public class InMemoryAlertStorage : IAlertStorage
 
         _logger.LogDebug("Stored alert {AlertId} with severity {Severity}", alert.Id, alert.Severity);
 
-        await Task.CompletedTask;
+        return Task.CompletedTask;
     }
 
-    public async Task UpdateAlertAsync(AlertHistory alert, CancellationToken cancellationToken = default)
+    public Task UpdateAlertAsync(AlertHistory alert, CancellationToken cancellationToken = default)
     {
         if (alert == null) throw new ArgumentNullException(nameof(alert));
 
         if (!_alerts.ContainsKey(alert.Id))
         {
             _logger.LogWarning("Alert with ID {AlertId} not found for update", alert.Id);
-            return;
+            return Task.CompletedTask;
         }
 
         _alerts.TryUpdate(alert.Id, alert, _alerts[alert.Id]);
         _logger.LogDebug("Updated alert {AlertId}", alert.Id);
 
-        await Task.CompletedTask;
+        return Task.CompletedTask;
     }
 
-    public async Task<AlertHistory?> GetAlertAsync(string alertId, CancellationToken cancellationToken = default)
+    public Task<AlertHistory?> GetAlertAsync(string alertId, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrEmpty(alertId)) return null;
+        if (string.IsNullOrEmpty(alertId)) return Task.FromResult<AlertHistory?>(null);
 
         _alerts.TryGetValue(alertId, out var alert);
-        return await Task.FromResult(alert);
+        return Task.FromResult(alert);
     }
 
-    public async Task<IEnumerable<AlertHistory>> GetAlertHistoryAsync(DateTime startTime, DateTime endTime, CancellationToken cancellationToken = default)
+    public Task<IEnumerable<AlertHistory>> GetAlertHistoryAsync(DateTime startTime, DateTime endTime, CancellationToken cancellationToken = default)
     {
         var alerts = _alerts.Values
             .Where(a => a.CreatedAt >= startTime && a.CreatedAt <= endTime)
             .OrderByDescending(a => a.CreatedAt)
             .ToList();
 
-        return await Task.FromResult(alerts);
+        return Task.FromResult<IEnumerable<AlertHistory>>(alerts);
     }
 
-    public async Task<IEnumerable<AlertHistory>> GetActiveAlertsAsync(CancellationToken cancellationToken = default)
+    public Task<IEnumerable<AlertHistory>> GetActiveAlertsAsync(CancellationToken cancellationToken = default)
     {
         var activeAlerts = _alerts.Values
             .Where(a => a.Status == AlertStatus.Active)
             .OrderByDescending(a => a.CreatedAt)
             .ToList();
 
-        return await Task.FromResult(activeAlerts);
+        return Task.FromResult<IEnumerable<AlertHistory>>(activeAlerts);
     }
 
-    public async Task<IEnumerable<AlertHistory>> GetAlertsByTenantAsync(string tenantId, DateTime? since = null, CancellationToken cancellationToken = default)
+    public Task<IEnumerable<AlertHistory>> GetAlertsByTenantAsync(string tenantId, DateTime? since = null, CancellationToken cancellationToken = default)
     {
         var query = _alerts.Values.Where(a => a.TenantId == tenantId);
         
@@ -88,10 +88,10 @@ public class InMemoryAlertStorage : IAlertStorage
             query = query.Where(a => a.CreatedAt >= since.Value);
 
         var alerts = query.OrderByDescending(a => a.CreatedAt).ToList();
-        return await Task.FromResult(alerts);
+        return Task.FromResult<IEnumerable<AlertHistory>>(alerts);
     }
 
-    public async Task<IEnumerable<AlertHistory>> GetAlertsBySeverityAsync(AlertSeverity severity, DateTime? since = null, CancellationToken cancellationToken = default)
+    public Task<IEnumerable<AlertHistory>> GetAlertsBySeverityAsync(AlertSeverity severity, DateTime? since = null, CancellationToken cancellationToken = default)
     {
         var query = _alerts.Values.Where(a => a.Severity == severity);
         
@@ -99,10 +99,10 @@ public class InMemoryAlertStorage : IAlertStorage
             query = query.Where(a => a.CreatedAt >= since.Value);
 
         var alerts = query.OrderByDescending(a => a.CreatedAt).ToList();
-        return await Task.FromResult(alerts);
+        return Task.FromResult<IEnumerable<AlertHistory>>(alerts);
     }
 
-    public async Task<AlertStatistics> GetAlertStatisticsAsync(DateTime startTime, DateTime endTime, CancellationToken cancellationToken = default)
+    public Task<AlertStatistics> GetAlertStatisticsAsync(DateTime startTime, DateTime endTime, CancellationToken cancellationToken = default)
     {
         var alertsInRange = _alerts.Values
             .Where(a => a.CreatedAt >= startTime && a.CreatedAt <= endTime)
@@ -161,10 +161,10 @@ public class InMemoryAlertStorage : IAlertStorage
                 .Average(a => (a.AcknowledgedAt!.Value - a.CreatedAt).TotalMinutes);
         }
 
-        return await Task.FromResult(statistics);
+        return Task.FromResult(statistics);
     }
 
-    public async Task CleanupOldAlertsAsync(TimeSpan retentionPeriod, CancellationToken cancellationToken = default)
+    public Task CleanupOldAlertsAsync(TimeSpan retentionPeriod, CancellationToken cancellationToken = default)
     {
         var cutoffTime = DateTime.UtcNow - retentionPeriod;
         var alertsToRemove = _alerts.Values
@@ -185,12 +185,12 @@ public class InMemoryAlertStorage : IAlertStorage
                 removedCount, cutoffTime);
         }
 
-        await Task.CompletedTask;
+        return Task.CompletedTask;
     }
 
-    public async Task<IEnumerable<AlertHistory>> SearchAlertsAsync(AlertSearchCriteria criteria, CancellationToken cancellationToken = default)
+    public Task<IEnumerable<AlertHistory>> SearchAlertsAsync(AlertSearchCriteria criteria, CancellationToken cancellationToken = default)
     {
-        if (criteria == null) return Enumerable.Empty<AlertHistory>();
+        if (criteria == null) return Task.FromResult(Enumerable.Empty<AlertHistory>());
 
         var query = _alerts.Values.AsQueryable();
 
@@ -261,6 +261,6 @@ public class InMemoryAlertStorage : IAlertStorage
             query = query.Take(criteria.Take.Value);
 
         var results = query.ToList();
-        return await Task.FromResult(results);
+        return Task.FromResult<IEnumerable<AlertHistory>>(results);
     }
 }

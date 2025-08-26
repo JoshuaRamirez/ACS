@@ -3,6 +3,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using System.Globalization;
+using ACS.Service.Infrastructure;
+using ACS.Service.Domain;
 
 namespace ACS.Service.Services;
 
@@ -160,7 +162,7 @@ public class ScheduledBackupService : BackgroundService
 
             using var scope = _serviceProvider.CreateScope();
             var backupService = scope.ServiceProvider.GetRequiredService<IDatabaseBackupService>();
-            var alertingService = scope.ServiceProvider.GetService<IAlertingService>();
+            // Alerting service not implemented - using logging instead
 
             var options = new BackupOptions
             {
@@ -181,50 +183,19 @@ public class ScheduledBackupService : BackgroundService
                     backupType, FormatFileSize(result.FileSizeBytes));
 
                 // Send success alert if configured
-                if (schedule.SendSuccessAlerts && alertingService != null)
+                if (schedule.SendSuccessAlerts)
                 {
-                    await alertingService.RaiseAlertAsync(new Alert
-                    {
-                        Id = Guid.NewGuid().ToString(),
-                        Title = $"Database Backup Successful",
-                        Message = $"{backupType} backup completed successfully. Size: {FormatFileSize(result.FileSizeBytes)}",
-                        Severity = AlertSeverity.Info,
-                        Category = AlertCategory.Database,
-                        Source = "ScheduledBackupService",
-                        CreatedAt = DateTime.UtcNow,
-                        Metadata = new Dictionary<string, string>
-                        {
-                            ["BackupType"] = backupType.ToString(),
-                            ["BackupPath"] = result.BackupPath,
-                            ["Size"] = result.FileSizeBytes.ToString(),
-                            ["Duration"] = result.Duration.TotalSeconds.ToString("F2")
-                        }
-                    });
+                    _logger.LogInformation("Database Backup Successful: {BackupType} backup completed successfully. Size: {FileSize}, Path: {BackupPath}",
+                        backupType, FormatFileSize(result.FileSizeBytes), result.BackupPath);
                 }
             }
             else
             {
                 _logger.LogError("Scheduled {BackupType} backup failed: {Message}", backupType, result.Message);
 
-                // Send failure alert
-                if (alertingService != null)
-                {
-                    await alertingService.RaiseAlertAsync(new Alert
-                    {
-                        Id = Guid.NewGuid().ToString(),
-                        Title = $"Database Backup Failed",
-                        Message = $"{backupType} backup failed: {result.Message}",
-                        Severity = AlertSeverity.Critical,
-                        Category = AlertCategory.Database,
-                        Source = "ScheduledBackupService",
-                        CreatedAt = DateTime.UtcNow,
-                        Metadata = new Dictionary<string, string>
-                        {
-                            ["BackupType"] = backupType.ToString(),
-                            ["Error"] = result.Error ?? result.Message
-                        }
-                    });
-                }
+                // Log failure alert
+                _logger.LogError("Database Backup Failed: {BackupType} backup failed: {Message}",
+                    backupType, result.Message);
 
                 // Retry if configured
                 if (schedule.RetryOnFailure && schedule.RetryCount > 0)
@@ -379,23 +350,6 @@ public class ScheduledBackupService : BackgroundService
 
 #region Configuration Models
 
-public enum ScheduleType
-{
-    Daily,
-    Weekly,
-    Interval
-}
-
-public interface IScheduleBase
-{
-    bool Enabled { get; set; }
-    ScheduleType ScheduleType { get; set; }
-    string DailyAt { get; set; }
-    string WeeklyOn { get; set; }
-    string WeeklyAt { get; set; }
-    int IntervalHours { get; set; }
-}
-
 public class BackupSchedule : IScheduleBase
 {
     public bool Enabled { get; set; } = true;
@@ -403,8 +357,10 @@ public class BackupSchedule : IScheduleBase
     public string DailyAt { get; set; } = "02:00:00";
     public string WeeklyOn { get; set; } = "Sunday";
     public string WeeklyAt { get; set; } = "02:00:00";
+    public int MonthlyDay { get; set; } = 1;
+    public string MonthlyAt { get; set; } = "02:00:00";
     public int IntervalHours { get; set; } = 24;
-    public string BackupPath { get; set; }
+    public string BackupPath { get; set; } = string.Empty;
     public bool Compress { get; set; } = true;
     public bool UseNativeCompression { get; set; } = true;
     public bool VerifyAfterBackup { get; set; } = true;
@@ -422,6 +378,8 @@ public class CleanupSchedule : IScheduleBase
     public string DailyAt { get; set; } = "03:00:00";
     public string WeeklyOn { get; set; } = "Sunday";
     public string WeeklyAt { get; set; } = "03:00:00";
+    public int MonthlyDay { get; set; } = 1;
+    public string MonthlyAt { get; set; } = "03:00:00";
     public int IntervalHours { get; set; } = 24;
     public int RetentionDays { get; set; } = 30;
 }
@@ -429,10 +387,10 @@ public class CleanupSchedule : IScheduleBase
 public class BackupScheduleOptions
 {
     public bool Enabled { get; set; } = true;
-    public BackupSchedule FullBackup { get; set; }
-    public BackupSchedule DifferentialBackup { get; set; }
-    public BackupSchedule TransactionLogBackup { get; set; }
-    public CleanupSchedule CleanupSchedule { get; set; }
+    public BackupSchedule FullBackup { get; set; } = new();
+    public BackupSchedule DifferentialBackup { get; set; } = new();
+    public BackupSchedule TransactionLogBackup { get; set; } = new();
+    public CleanupSchedule CleanupSchedule { get; set; } = new();
 }
 
 #endregion

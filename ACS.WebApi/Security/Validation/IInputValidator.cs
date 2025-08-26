@@ -75,7 +75,7 @@ public interface IInputValidator
     /// <summary>
     /// Validate and sanitize complex object
     /// </summary>
-    T ValidateAndSanitizeObject<T>(T obj) where T : class;
+    T? ValidateAndSanitizeObject<T>(T? obj) where T : class;
 
     /// <summary>
     /// Get validation errors for an object
@@ -160,8 +160,14 @@ public class InputValidationOptions
         @"(\b(SELECT|INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|EXEC|EXECUTE|UNION|FROM|WHERE|ORDER BY|GROUP BY|HAVING)\b)",
         @"(--|\#|\/\*|\*\/)",
         @"(;|\||&&)",
-        @"(\bOR\b|\bAND\b)[\s]*['\"]?[\s]*[=<>]",
-        @"['\"][\s]*(\bOR\b|\bAND\b)",
+        @"(\bOR\b|\bAND\b)[\s]*'[\s]*=",
+        @"(\bOR\b|\bAND\b)[\s]*""[\s]*=",
+        @"(\bOR\b|\bAND\b)[\s]*'[\s]*<",
+        @"(\bOR\b|\bAND\b)[\s]*""[\s]*<",
+        @"(\bOR\b|\bAND\b)[\s]*'[\s]*>",
+        @"(\bOR\b|\bAND\b)[\s]*""[\s]*>",
+        @"'[\s]*(\bOR\b|\bAND\b)",
+        @"""[\s]*(\bOR\b|\bAND\b)",
         @"(xp_|sp_|@@)",
         @"(WAITFOR|DELAY|BENCHMARK)",
         @"(INTO\s+(OUTFILE|DUMPFILE))"

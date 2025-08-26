@@ -98,9 +98,9 @@ public class PermissionEvaluationService : IPermissionEvaluationService
             // Log security-relevant denials
             if (!result.IsAllowed)
             {
-                activity?.SetTag("permission.denial_reason", result.DenialReason ?? "Insufficient permissions");
+                activity?.SetTag("permission.denial_reason", result.Reason ?? "Insufficient permissions");
                 _logger.LogWarning("PERMISSION DENIED: Entity:{EntityId} attempted access to URI:{Uri} with verb:{HttpVerb}. Reason:{Reason}", 
-                    entityId, uri, httpVerb, result.DenialReason ?? "Insufficient permissions");
+                    entityId, uri, httpVerb, result.Reason ?? "Insufficient permissions");
             }
             
             return result.IsAllowed;
@@ -404,7 +404,7 @@ public class PermissionEvaluationService : IPermissionEvaluationService
 
         // Check cache first
         var cacheKey = $"eval_{entityId}_{uri}_{httpVerb}";
-        if (_cache.TryGetValue<PermissionEvaluationResult>(cacheKey, out var cachedResult))
+        if (_cache.TryGetValue<PermissionEvaluationResult>(cacheKey, out var cachedResult) && cachedResult != null)
         {
             cachedResult.FromCache = true;
             cachedResult.EvaluationTime = stopwatch.Elapsed;
@@ -559,7 +559,7 @@ public class PermissionEvaluationService : IPermissionEvaluationService
         return false;
     }
 
-    public async Task<bool> ValidateConditionAsync(string condition, Dictionary<string, object> context)
+    public Task<bool> ValidateConditionAsync(string condition, Dictionary<string, object> context)
     {
         // Simple condition evaluation - in production, use expression trees or rules engine
         try
@@ -567,18 +567,18 @@ public class PermissionEvaluationService : IPermissionEvaluationService
             // Example conditions: "role == 'admin'", "department == 'IT'", "time >= '09:00'"
             var parts = condition.Split(' ');
             if (parts.Length != 3)
-                return false;
+                return Task.FromResult(false);
             
             var contextKey = parts[0];
             var op = parts[1];
             var expectedValue = parts[2].Trim('\'', '"');
             
             if (!context.ContainsKey(contextKey))
-                return false;
+                return Task.FromResult(false);
             
             var actualValue = context[contextKey]?.ToString() ?? "";
             
-            return op switch
+            var result = op switch
             {
                 "==" => actualValue.Equals(expectedValue, StringComparison.OrdinalIgnoreCase),
                 "!=" => !actualValue.Equals(expectedValue, StringComparison.OrdinalIgnoreCase),
@@ -589,11 +589,13 @@ public class PermissionEvaluationService : IPermissionEvaluationService
                 "contains" => actualValue.Contains(expectedValue, StringComparison.OrdinalIgnoreCase),
                 _ => false
             };
+            
+            return Task.FromResult(result);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error validating condition: {Condition}", condition);
-            return false;
+            return Task.FromResult(false);
         }
     }
 
@@ -658,7 +660,7 @@ public class PermissionEvaluationService : IPermissionEvaluationService
 
     public async Task<CacheStatistics> GetCacheStatisticsAsync()
     {
-        _cacheStats.TotalEntries = _cache.Count;
+        _cacheStats.TotalEntries = 0; // IMemoryCache doesn't expose Count in .NET 9
         _cacheStats.CacheSizeBytes = GC.GetTotalMemory(false); // Approximation
         return await Task.FromResult(_cacheStats);
     }
@@ -1056,9 +1058,9 @@ public class PermissionEvaluationService : IPermissionEvaluationService
             EntityId = entityId,
             DirectPermissions = (await GetDirectPermissionsAsync(entityId)).ToList(),
             InheritedPermissions = (await GetInheritedPermissionsAsync(entityId)).ToList(),
-            ConditionalPermissions = (await GetConditionalPermissionsAsync(entityId)).ToList(),
-            TemporaryPermissions = (await GetTemporaryPermissionsAsync(entityId)).ToList(),
-            DelegatedPermissions = (await GetDelegatedPermissionsAsync(entityId)).ToList(),
+            ConditionalPermissions = (await GetConditionalPermissionsAsync(entityId)).Cast<Permission>().ToList(),
+            TemporaryPermissions = (await GetTemporaryPermissionsAsync(entityId)).Cast<Permission>().ToList(),
+            DelegatedPermissions = (await GetDelegatedPermissionsAsync(entityId)).Cast<Permission>().ToList(),
             EffectivePermissions = await GetEffectivePermissionsAsync(entityId),
             Conflicts = (await DetectPermissionConflictsAsync(entityId)).ToList(),
             GeneratedAt = DateTime.UtcNow

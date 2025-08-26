@@ -222,7 +222,7 @@ public class SpecificationService : ISpecificationService
         }
     }
 
-    public async Task<SpecificationValidationResult> ValidateSpecificationAsync<T>(ISpecification<T> specification) where T : class
+    public Task<SpecificationValidationResult> ValidateSpecificationAsync<T>(ISpecification<T> specification) where T : class
     {
         var result = new SpecificationValidationResult
         {
@@ -275,7 +275,7 @@ public class SpecificationService : ISpecificationService
                 specification.GetType().Name, typeof(T).Name);
         }
 
-        return result;
+        return Task.FromResult(result);
     }
 
     private IQueryable<T> GetQueryable<T>() where T : class
@@ -286,7 +286,7 @@ public class SpecificationService : ISpecificationService
             nameof(User) => _dbContext.Users.Cast<T>(),
             nameof(Group) => _dbContext.Groups.Cast<T>(),
             nameof(Role) => _dbContext.Roles.Cast<T>(),
-            nameof(Permission) => _dbContext.Permissions.Cast<T>(),
+            nameof(Permission) => _dbContext.EntityPermissions.Cast<T>(),
             nameof(Resource) => _dbContext.Resources.Cast<T>(),
             _ => _dbContext.Set<T>()
         };

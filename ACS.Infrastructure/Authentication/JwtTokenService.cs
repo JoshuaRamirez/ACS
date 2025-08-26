@@ -201,6 +201,6 @@ public class AuthenticationContext
     public DateTime AuthenticatedAt { get; set; } = DateTime.UtcNow;
     
     public bool IsInRole(string role) => Roles.Contains(role);
-    public bool HasClaim(string claimType) => Principal.HasClaim(claimType, null);
+    public bool HasClaim(string claimType) => Principal.HasClaim(c => c.Type == claimType);
     public string? GetClaimValue(string claimType) => Principal.FindFirst(claimType)?.Value;
 }

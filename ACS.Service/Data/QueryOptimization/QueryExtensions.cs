@@ -26,7 +26,7 @@ public static class QueryExtensions
     /// <summary>
     /// Conditionally include related data with then include based on a predicate
     /// </summary>
-    public static IIncludableQueryable<T, TProperty> ThenIncludeIf<T, TPreviousProperty, TProperty>(
+    public static IQueryable<T> ThenIncludeIf<T, TPreviousProperty, TProperty>(
         this IIncludableQueryable<T, TPreviousProperty> query,
         bool condition,
         Expression<Func<TPreviousProperty, TProperty>> navigationPropertyPath)
@@ -239,6 +239,7 @@ public static class QueryExtensions
         int pageSize, 
         bool includeTotalCount = true,
         CancellationToken cancellationToken = default)
+        where T : class
     {
         if (pageNumber < 1) pageNumber = 1;
         if (pageSize < 1) pageSize = 10;

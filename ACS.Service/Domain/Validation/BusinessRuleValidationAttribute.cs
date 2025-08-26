@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using ACS.Service.Services;
 
 namespace ACS.Service.Domain.Validation;
 
@@ -29,13 +30,13 @@ public abstract class BusinessRuleValidationAttribute : DomainValidationAttribut
     /// </summary>
     public string ErrorCode { get; set; } = string.Empty;
     
-    protected ValidationResult CreateRuleViolationResult(string message, string[]? memberNames = null)
+    protected System.ComponentModel.DataAnnotations.ValidationResult CreateRuleViolationResult(string message, string[]? memberNames = null)
     {
         var errorMessage = string.IsNullOrEmpty(ErrorCode) 
             ? message 
             : $"[{ErrorCode}] {message}";
             
-        return new ValidationResult(errorMessage, memberNames);
+        return new System.ComponentModel.DataAnnotations.ValidationResult(errorMessage, memberNames?.AsEnumerable());
     }
     
     protected bool CanBypassRule(IDomainValidationContext domainContext)
@@ -68,13 +69,13 @@ public class MaxUserRolesBusinessRuleAttribute : BusinessRuleValidationAttribute
         ErrorCode = "MAX_ROLES_EXCEEDED";
     }
 
-    public override ValidationResult? ValidateInDomain(object? value, ValidationContext validationContext, IDomainValidationContext domainContext)
+    public override System.ComponentModel.DataAnnotations.ValidationResult? ValidateInDomain(object? value, ValidationContext validationContext, IDomainValidationContext domainContext)
     {
         if (validationContext.ObjectInstance is not User user)
-            return ValidationResult.Success;
+            return System.ComponentModel.DataAnnotations.ValidationResult.Success;
 
         if (CanBypassRule(domainContext))
-            return ValidationResult.Success;
+            return System.ComponentModel.DataAnnotations.ValidationResult.Success;
 
         // Count current roles (this would need to be adapted based on your User model)
         var roleCount = 0; // user.Roles?.Count ?? 0; // Adjust based on actual User model
@@ -86,7 +87,7 @@ public class MaxUserRolesBusinessRuleAttribute : BusinessRuleValidationAttribute
                 new[] { nameof(User) });
         }
 
-        return ValidationResult.Success;
+        return System.ComponentModel.DataAnnotations.ValidationResult.Success;
     }
 }
 
@@ -105,13 +106,13 @@ public class GroupMemberLimitsBusinessRuleAttribute : BusinessRuleValidationAttr
         ErrorCode = "GROUP_CAPACITY_EXCEEDED";
     }
 
-    public override ValidationResult? ValidateInDomain(object? value, ValidationContext validationContext, IDomainValidationContext domainContext)
+    public override System.ComponentModel.DataAnnotations.ValidationResult? ValidateInDomain(object? value, ValidationContext validationContext, IDomainValidationContext domainContext)
     {
         if (validationContext.ObjectInstance is not Group group)
-            return ValidationResult.Success;
+            return System.ComponentModel.DataAnnotations.ValidationResult.Success;
 
         if (CanBypassRule(domainContext))
-            return ValidationResult.Success;
+            return System.ComponentModel.DataAnnotations.ValidationResult.Success;
 
         // This would need to be implemented based on your actual Group model
         // For now, we'll use placeholder logic
@@ -128,7 +129,7 @@ public class GroupMemberLimitsBusinessRuleAttribute : BusinessRuleValidationAttr
         if (totalCount > MaxTotalMembers)
             return CreateRuleViolationResult($"Group cannot contain more than {MaxTotalMembers} total members. Current: {totalCount}");
 
-        return ValidationResult.Success;
+        return System.ComponentModel.DataAnnotations.ValidationResult.Success;
     }
 }
 
@@ -147,13 +148,13 @@ public class LeastPrivilegeBusinessRuleAttribute : BusinessRuleValidationAttribu
         Severity = RuleSeverity.Warning;
     }
 
-    public override ValidationResult? ValidateInDomain(object? value, ValidationContext validationContext, IDomainValidationContext domainContext)
+    public override System.ComponentModel.DataAnnotations.ValidationResult? ValidateInDomain(object? value, ValidationContext validationContext, IDomainValidationContext domainContext)
     {
         if (validationContext.ObjectInstance is not Role role)
-            return ValidationResult.Success;
+            return System.ComponentModel.DataAnnotations.ValidationResult.Success;
 
         if (CanBypassRule(domainContext))
-            return ValidationResult.Success;
+            return System.ComponentModel.DataAnnotations.ValidationResult.Success;
 
         // Check for prohibited permission combinations
         if (ProhibitedCombinations != null)
@@ -191,7 +192,7 @@ public class LeastPrivilegeBusinessRuleAttribute : BusinessRuleValidationAttribu
             }
         }
 
-        return ValidationResult.Success;
+        return System.ComponentModel.DataAnnotations.ValidationResult.Success;
     }
 }
 
@@ -210,13 +211,13 @@ public class TemporalPermissionBusinessRuleAttribute : BusinessRuleValidationAtt
         ErrorCode = "INVALID_TIME_WINDOW";
     }
 
-    public override ValidationResult? ValidateInDomain(object? value, ValidationContext validationContext, IDomainValidationContext domainContext)
+    public override System.ComponentModel.DataAnnotations.ValidationResult? ValidateInDomain(object? value, ValidationContext validationContext, IDomainValidationContext domainContext)
     {
         if (validationContext.ObjectInstance is not TemporaryPermission tempPerm)
-            return ValidationResult.Success;
+            return System.ComponentModel.DataAnnotations.ValidationResult.Success;
 
         if (CanBypassRule(domainContext))
-            return ValidationResult.Success;
+            return System.ComponentModel.DataAnnotations.ValidationResult.Success;
 
         var now = DateTime.UtcNow;
         var duration = tempPerm.ExpiresAt - tempPerm.GrantedAt;
@@ -237,7 +238,7 @@ public class TemporalPermissionBusinessRuleAttribute : BusinessRuleValidationAtt
         if (tempPerm.ExpiresAt <= now)
             return CreateRuleViolationResult("Temporary permission cannot expire in the past");
 
-        return ValidationResult.Success;
+        return System.ComponentModel.DataAnnotations.ValidationResult.Success;
     }
 }
 
@@ -257,13 +258,13 @@ public class SegregationOfDutiesBusinessRuleAttribute : BusinessRuleValidationAt
         Severity = RuleSeverity.Critical;
     }
 
-    public override ValidationResult? ValidateInDomain(object? value, ValidationContext validationContext, IDomainValidationContext domainContext)
+    public override System.ComponentModel.DataAnnotations.ValidationResult? ValidateInDomain(object? value, ValidationContext validationContext, IDomainValidationContext domainContext)
     {
         if (validationContext.ObjectInstance is not User user)
-            return ValidationResult.Success;
+            return System.ComponentModel.DataAnnotations.ValidationResult.Success;
 
         if (CanBypassRule(domainContext))
-            return ValidationResult.Success;
+            return System.ComponentModel.DataAnnotations.ValidationResult.Success;
 
         // Check if user already has conflicting role
         // This would need to be implemented based on your actual User-Role relationship
@@ -275,7 +276,7 @@ public class SegregationOfDutiesBusinessRuleAttribute : BusinessRuleValidationAt
                 $"User cannot have both current role and '{ConflictingRole}' due to segregation of duties policy");
         }
 
-        return ValidationResult.Success;
+        return System.ComponentModel.DataAnnotations.ValidationResult.Success;
     }
 }
 
@@ -294,13 +295,13 @@ public class ResourceAccessPatternBusinessRuleAttribute : BusinessRuleValidation
         ErrorCode = "INVALID_ACCESS_PATTERN";
     }
 
-    public override ValidationResult? ValidateInDomain(object? value, ValidationContext validationContext, IDomainValidationContext domainContext)
+    public override System.ComponentModel.DataAnnotations.ValidationResult? ValidateInDomain(object? value, ValidationContext validationContext, IDomainValidationContext domainContext)
     {
         if (validationContext.ObjectInstance is not Permission permission)
-            return ValidationResult.Success;
+            return System.ComponentModel.DataAnnotations.ValidationResult.Success;
 
         if (CanBypassRule(domainContext))
-            return ValidationResult.Success;
+            return System.ComponentModel.DataAnnotations.ValidationResult.Success;
 
         // Check restricted patterns
         if (RestrictedPatterns != null)
@@ -334,8 +335,8 @@ public class ResourceAccessPatternBusinessRuleAttribute : BusinessRuleValidation
         if (TimeWindow.HasValue)
         {
             var now = DateTime.UtcNow.TimeOfDay;
-            var windowStart = TimeOfDay.Parse("09:00:00");
-            var windowEnd = TimeOfDay.Parse("17:00:00");
+            var windowStart = TimeSpan.Parse("09:00:00");
+            var windowEnd = TimeSpan.Parse("17:00:00");
             
             if (now < windowStart || now > windowEnd)
             {
@@ -343,7 +344,7 @@ public class ResourceAccessPatternBusinessRuleAttribute : BusinessRuleValidation
             }
         }
 
-        return ValidationResult.Success;
+        return System.ComponentModel.DataAnnotations.ValidationResult.Success;
     }
 }
 
@@ -361,7 +362,7 @@ public class AuditTrailBusinessRuleAttribute : BusinessRuleValidationAttribute
         ErrorCode = "AUDIT_REQUIREMENT_NOT_MET";
     }
 
-    public override ValidationResult? ValidateInDomain(object? value, ValidationContext validationContext, IDomainValidationContext domainContext)
+    public override System.ComponentModel.DataAnnotations.ValidationResult? ValidateInDomain(object? value, ValidationContext validationContext, IDomainValidationContext domainContext)
     {
         var operationType = domainContext.OperationContext.OperationType;
         
@@ -384,7 +385,7 @@ public class AuditTrailBusinessRuleAttribute : BusinessRuleValidationAttribute
             }
         }
 
-        return ValidationResult.Success;
+        return System.ComponentModel.DataAnnotations.ValidationResult.Success;
     }
 }
 
@@ -403,7 +404,7 @@ public class DataRetentionBusinessRuleAttribute : BusinessRuleValidationAttribut
         ErrorCode = "DATA_RETENTION_VIOLATION";
     }
 
-    public override ValidationResult? ValidateInDomain(object? value, ValidationContext validationContext, IDomainValidationContext domainContext)
+    public override System.ComponentModel.DataAnnotations.ValidationResult? ValidateInDomain(object? value, ValidationContext validationContext, IDomainValidationContext domainContext)
     {
         if (RequiresConsentForStorage && PersonalDataFields != null)
         {
@@ -420,6 +421,6 @@ public class DataRetentionBusinessRuleAttribute : BusinessRuleValidationAttribut
             }
         }
 
-        return ValidationResult.Success;
+        return System.ComponentModel.DataAnnotations.ValidationResult.Success;
     }
 }

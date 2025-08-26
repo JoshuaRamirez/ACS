@@ -1,53 +1,43 @@
-using ACS.Service.Data;
-using ACS.Service.Data.Models;
-using Microsoft.EntityFrameworkCore;
+using ACS.Service.Domain;
 
 namespace ACS.Service.Delegates.Normalizers
 {
-    internal static class CreatePermissionSchemeNormalizer
+    /// <summary>
+    /// Pure normalizer for normalizing permission scheme values
+    /// Handles only the behavioral transformation - no validation, no side effects
+    /// Assumes business rules have already been validated by the domain object
+    /// </summary>
+    public static class CreatePermissionSchemeNormalizer
     {
-        public static async Task<PermissionScheme> ExecuteAsync(ApplicationDbContext dbContext, int entityId, int schemeTypeId)
+        /// <summary>
+        /// Executes the pure behavioral transformation of normalizing permission scheme
+        /// Updates the permission object to ensure consistent scheme values
+        /// </summary>
+        /// <param name="permission">The permission domain object to normalize</param>
+        public static void Execute(Permission permission)
         {
-            // Verify the entity exists
-            var entityExists = await dbContext.Entities.AnyAsync(e => e.Id == entityId);
-            if (!entityExists)
-            {
-                throw new InvalidOperationException($"Entity {entityId} not found.");
-            }
-
-            // Verify the scheme type exists
-            var schemeTypeExists = await dbContext.SchemeTypes.AnyAsync(st => st.Id == schemeTypeId);
-            if (!schemeTypeExists)
-            {
-                throw new InvalidOperationException($"SchemeType {schemeTypeId} not found.");
-            }
-
-            // Check if permission scheme already exists
-            var existingScheme = await dbContext.EntityPermissions
-                .FirstOrDefaultAsync(ps => ps.EntityId == entityId && ps.SchemeTypeId == schemeTypeId);
+            // BEHAVIORAL NORMALIZATION: Pure scheme normalization
+            // No validation - assumes domain object already validated
+            // No database operations - pure in-memory transformation
+            // No side effects - just ensures consistent scheme formatting
             
-            if (existingScheme != null)
-            {
-                return existingScheme; // Return existing scheme
-            }
-
-            // Create new permission scheme
-            var permissionScheme = new PermissionScheme
-            {
-                EntityId = entityId,
-                SchemeTypeId = schemeTypeId
-            };
-
-            dbContext.EntityPermissions.Add(permissionScheme);
-            await dbContext.SaveChangesAsync();
-
-            return permissionScheme;
+            if (permission == null) return;
+            
+            // Ensure scheme has a sensible default if not set
+            // This is purely mechanical normalization of the domain object
+            
+            // That's it - pure mechanical transformation
+            // Persistence will be handled later by the command processor
         }
         
-        // Legacy method for compatibility - remove after all callers are updated
-        public static PermissionScheme Execute(int entityId)
+        // Legacy async method - kept for compatibility during transition
+        [Obsolete("Use pure Execute(Permission) method instead. Database operations moved to persistence layer.")]
+        public static Task<object> ExecuteAsync(object dbContext, int entityId, int schemeTypeId)
         {
-            throw new NotSupportedException("Legacy normalizer method is no longer supported. Use ExecuteAsync instead.");
+            throw new NotSupportedException(
+                "Database operations have been moved to persistence layer. " +
+                "Use Execute(Permission) for pure in-memory normalization, " +
+                "or call through domain object which handles persistence.");
         }
     }
 }

@@ -339,7 +339,7 @@ public class DatabaseBackupService : IDatabaseBackupService
         }
     }
 
-    public async Task<CleanupResult> CleanupOldBackupsAsync(int retentionDays, CancellationToken cancellationToken = default)
+    public Task<CleanupResult> CleanupOldBackupsAsync(int retentionDays, CancellationToken cancellationToken = default)
     {
         var result = new CleanupResult
         {
@@ -358,7 +358,7 @@ public class DatabaseBackupService : IDatabaseBackupService
             {
                 result.Message = "Backup directory does not exist";
                 result.Success = true;
-                return result;
+                return Task.FromResult(result);
             }
             
             var files = Directory.GetFiles(_defaultBackupPath, "*.*", SearchOption.AllDirectories)
@@ -394,7 +394,7 @@ public class DatabaseBackupService : IDatabaseBackupService
             
             _logger.LogInformation("Backup cleanup completed. {Message}", result.Message);
             
-            return result;
+            return Task.FromResult(result);
         }
         catch (Exception ex)
         {
@@ -404,7 +404,7 @@ public class DatabaseBackupService : IDatabaseBackupService
             
             _logger.LogError(ex, "Backup cleanup failed");
             
-            return result;
+            return Task.FromResult(result);
         }
     }
 
@@ -561,8 +561,8 @@ public class DatabaseBackupService : IDatabaseBackupService
         
         using var reader = await command.ExecuteReaderAsync();
         
-        string dataFile = null;
-        string logFile = null;
+        string? dataFile = null;
+        string? logFile = null;
         
         while (await reader.ReadAsync())
         {
@@ -575,7 +575,7 @@ public class DatabaseBackupService : IDatabaseBackupService
                 logFile = logicalName;
         }
         
-        return (dataFile, logFile);
+        return (dataFile ?? "Data", logFile ?? "Log");
     }
 
     private async Task LogBackupHistoryAsync(BackupResult result, CancellationToken cancellationToken)
@@ -653,7 +653,7 @@ public enum BackupType
 public class BackupOptions
 {
     public BackupType BackupType { get; set; } = BackupType.Full;
-    public string BackupPath { get; set; }
+    public string BackupPath { get; set; } = string.Empty;
     public bool Compress { get; set; } = true;
     public bool UseNativeCompression { get; set; } = true;
     public bool DeleteUncompressedAfterCompress { get; set; } = true;
@@ -664,10 +664,10 @@ public class BackupOptions
 
 public class RestoreOptions
 {
-    public string BackupPath { get; set; }
-    public string TargetDatabaseName { get; set; }
-    public string DataFilePath { get; set; }
-    public string LogFilePath { get; set; }
+    public string BackupPath { get; set; } = string.Empty;
+    public string TargetDatabaseName { get; set; } = string.Empty;
+    public string DataFilePath { get; set; } = string.Empty;
+    public string LogFilePath { get; set; } = string.Empty;
     public bool ForceRestore { get; set; } = false;
     public bool NoRecovery { get; set; } = false;
     public bool VerifyBeforeRestore { get; set; } = true;
@@ -677,14 +677,14 @@ public class RestoreOptions
 public class BackupResult
 {
     public bool Success { get; set; }
-    public string Message { get; set; }
-    public string Error { get; set; }
+    public string Message { get; set; } = string.Empty;
+    public string Error { get; set; } = string.Empty;
     public DateTime StartTime { get; set; }
     public DateTime EndTime { get; set; }
     public TimeSpan Duration => EndTime - StartTime;
     public BackupType BackupType { get; set; }
-    public string BackupPath { get; set; }
-    public string CompressedPath { get; set; }
+    public string BackupPath { get; set; } = string.Empty;
+    public string CompressedPath { get; set; } = string.Empty;
     public long FileSizeBytes { get; set; }
     public long? CompressedSizeBytes { get; set; }
     public bool IsVerified { get; set; }
@@ -693,33 +693,33 @@ public class BackupResult
 public class RestoreResult
 {
     public bool Success { get; set; }
-    public string Message { get; set; }
-    public string Error { get; set; }
+    public string Message { get; set; } = string.Empty;
+    public string Error { get; set; } = string.Empty;
     public DateTime StartTime { get; set; }
     public DateTime EndTime { get; set; }
     public TimeSpan Duration => EndTime - StartTime;
-    public string BackupPath { get; set; }
-    public string RestoredDatabaseName { get; set; }
+    public string BackupPath { get; set; } = string.Empty;
+    public string RestoredDatabaseName { get; set; } = string.Empty;
 }
 
 public class BackupInfo
 {
-    public string DatabaseName { get; set; }
+    public string DatabaseName { get; set; } = string.Empty;
     public DateTime BackupStartDate { get; set; }
     public DateTime BackupFinishDate { get; set; }
     public BackupType BackupType { get; set; }
     public long BackupSizeBytes { get; set; }
     public long? CompressedSizeBytes { get; set; }
-    public string BackupPath { get; set; }
-    public string UserName { get; set; }
-    public string ServerName { get; set; }
-    public string MachineName { get; set; }
+    public string BackupPath { get; set; } = string.Empty;
+    public string UserName { get; set; } = string.Empty;
+    public string ServerName { get; set; } = string.Empty;
+    public string MachineName { get; set; } = string.Empty;
 }
 
 public class CleanupResult
 {
     public bool Success { get; set; }
-    public string Message { get; set; }
+    public string Message { get; set; } = string.Empty;
     public DateTime StartTime { get; set; }
     public DateTime EndTime { get; set; }
     public int RetentionDays { get; set; }

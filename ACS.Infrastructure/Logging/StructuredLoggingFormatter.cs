@@ -27,7 +27,7 @@ public class StructuredLoggingFormatter : ConsoleFormatter
         if (!_options.Enabled)
         {
             // Fall back to simple format
-            textWriter.WriteLine($"{logEntry.Timestamp:yyyy-MM-dd HH:mm:ss.fff} [{logEntry.LogLevel}] {logEntry.Category}: {logEntry.Formatter(logEntry.State, logEntry.Exception)}");
+            textWriter.WriteLine($"{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss.fff} [{logEntry.LogLevel}] {logEntry.Category}: {logEntry.Formatter(logEntry.State, logEntry.Exception)}");
             return;
         }
 
@@ -95,7 +95,7 @@ public class StructuredLoggingFormatter : ConsoleFormatter
     {
         var logObject = new LogObject
         {
-            Timestamp = _options.IncludeTimestamp ? logEntry.Timestamp : DateTime.MinValue,
+            Timestamp = _options.IncludeTimestamp ? DateTime.UtcNow : DateTime.MinValue,
             Level = logEntry.LogLevel.ToString(),
             Category = GetShortCategory(logEntry.Category),
             Message = logEntry.Formatter(logEntry.State, logEntry.Exception),

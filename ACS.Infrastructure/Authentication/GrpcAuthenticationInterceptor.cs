@@ -38,7 +38,7 @@ public class GrpcAuthenticationInterceptor : Interceptor
                 method, requestType, peer);
 
             // Extract authentication information from gRPC metadata
-            var authContext = await AuthenticateRequestAsync(context);
+            var authContext = AuthenticateRequest(context);
             
             if (authContext == null)
             {
@@ -55,7 +55,7 @@ public class GrpcAuthenticationInterceptor : Interceptor
             }));
 
             // Authorize the request
-            var isAuthorized = await AuthorizeRequestAsync(context, authContext);
+            var isAuthorized = AuthorizeRequest(context, authContext);
             if (!isAuthorized)
             {
                 _logger.LogWarning("GRPC AUTHORIZATION DENIED: User {UserId} in tenant {TenantId} denied access to {Method} from {Peer}", 
@@ -88,7 +88,7 @@ public class GrpcAuthenticationInterceptor : Interceptor
         }
     }
 
-    private async Task<AuthenticationContext?> AuthenticateRequestAsync(ServerCallContext context)
+    private AuthenticationContext? AuthenticateRequest(ServerCallContext context)
     {
         try
         {
@@ -134,11 +134,9 @@ public class GrpcAuthenticationInterceptor : Interceptor
             _logger.LogWarning(ex, "Failed to authenticate gRPC request");
             return null;
         }
-
-        await Task.CompletedTask;
     }
 
-    private async Task<bool> AuthorizeRequestAsync(ServerCallContext context, AuthenticationContext authContext)
+    private bool AuthorizeRequest(ServerCallContext context, AuthenticationContext authContext)
     {
         try
         {
@@ -177,8 +175,6 @@ public class GrpcAuthenticationInterceptor : Interceptor
             _logger.LogError(ex, "Error in authorization check");
             return false;
         }
-
-        await Task.CompletedTask;
     }
 
     private static string? ExtractTokenFromHeader(string authHeaderValue)

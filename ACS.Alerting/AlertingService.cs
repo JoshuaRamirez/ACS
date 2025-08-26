@@ -306,7 +306,7 @@ public class AlertingService : IAlertingService
         };
     }
 
-    private async Task<List<string>> GetNotificationTargetsAsync(NotificationChannel channel, AlertRequest alert, CancellationToken cancellationToken)
+    private Task<List<string>> GetNotificationTargetsAsync(NotificationChannel channel, AlertRequest alert, CancellationToken cancellationToken)
     {
         // In a real implementation, this would look up targets from configuration or a database
         // For now, return configured default targets
@@ -316,11 +316,11 @@ public class AlertingService : IAlertingService
         
         if (configuredTargets?.Any() == true)
         {
-            return configuredTargets.ToList();
+            return Task.FromResult(configuredTargets.ToList());
         }
 
         // Fallback defaults
-        return channel switch
+        var result = channel switch
         {
             NotificationChannel.Email => new[] { "admin@company.com", "ops@company.com" }.ToList(),
             NotificationChannel.Slack => new[] { "#alerts", "#ops" }.ToList(),
@@ -328,6 +328,7 @@ public class AlertingService : IAlertingService
             NotificationChannel.LogFile => new[] { "/var/log/alerts.log" }.ToList(),
             _ => new List<string>()
         };
+        return Task.FromResult(result);
     }
 
     private string FormatAlertSubject(AlertRequest alert)

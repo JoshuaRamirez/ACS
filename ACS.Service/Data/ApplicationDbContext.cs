@@ -10,18 +10,18 @@ namespace ACS.Service.Data
         {
         }
 
-        public static ApplicationDbContext Instance { get; set; } = null!;
-
-        public DbSet<Entity> Entities { get; set; }
-        public DbSet<User> Users { get; set; }
-        public DbSet<Role> Roles { get; set; }
-        public DbSet<Group> Groups { get; set; }
+        public DbSet<Models.Entity> Entities { get; set; }
+        public DbSet<Models.User> Users { get; set; }
+        public DbSet<Models.Role> Roles { get; set; }
+        public DbSet<Models.Group> Groups { get; set; }
         public DbSet<VerbType> VerbTypes { get; set; }
         public DbSet<SchemeType> SchemeTypes { get; set; }
-        public DbSet<Resource> Resources { get; set; }
+        public DbSet<Models.Resource> Resources { get; set; }
         public DbSet<PermissionScheme> EntityPermissions { get; set; }
         public DbSet<UriAccess> UriAccesses { get; set; }
         public DbSet<AuditLog> AuditLogs { get; set; }
+        public DbSet<Domain.ConsentRecord> ConsentRecords { get; set; }
+        public DbSet<Domain.DataBreachRecord> DataBreachRecords { get; set; }
         
         // Junction table DbSets
         public DbSet<UserGroup> UserGroups { get; set; }
@@ -41,8 +41,8 @@ namespace ACS.Service.Data
                 entity.Property(e => e.CreatedAt).IsRequired();
                 entity.Property(e => e.UpdatedAt).IsRequired();
                 
-                entity.HasCheckConstraint("CK_Entity_EntityType", 
-                    "[EntityType] IN ('User', 'Group', 'Role')");
+                entity.ToTable(t => t.HasCheckConstraint("CK_Entity_EntityType", 
+                    "[EntityType] IN ('User', 'Group', 'Role')"));
             });
 
             // User configuration
@@ -176,8 +176,8 @@ namespace ACS.Service.Data
                 entity.Property(gh => gh.CreatedAt).IsRequired();
                 
                 entity.HasIndex(gh => new { gh.ParentGroupId, gh.ChildGroupId }).IsUnique();
-                entity.HasCheckConstraint("CK_GroupHierarchy_NoSelfReference", 
-                    "[ParentGroupId] != [ChildGroupId]");
+                entity.ToTable(t => t.HasCheckConstraint("CK_GroupHierarchy_NoSelfReference", 
+                    "[ParentGroupId] != [ChildGroupId]"));
                 
                 entity.HasOne(gh => gh.ParentGroup)
                     .WithMany(g => g.ChildGroupRelations)
@@ -234,8 +234,8 @@ namespace ACS.Service.Data
                 entity.Property(ua => ua.Grant).IsRequired();
                 entity.Property(ua => ua.Deny).IsRequired();
                 
-                entity.HasCheckConstraint("CK_UriAccess_Grant_Deny_Exclusive", 
-                    "([Grant] = 1 AND [Deny] = 0) OR ([Grant] = 0 AND [Deny] = 1)");
+                entity.ToTable(t => t.HasCheckConstraint("CK_UriAccess_Grant_Deny_Exclusive", 
+                    "([Grant] = 1 AND [Deny] = 0) OR ([Grant] = 0 AND [Deny] = 1)"));
                 
                 entity.HasOne(ua => ua.Resource)
                     .WithMany()

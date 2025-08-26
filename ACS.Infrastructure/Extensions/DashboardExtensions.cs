@@ -17,20 +17,16 @@ public static class DashboardExtensions
         this IServiceCollection services, 
         IConfiguration configuration)
     {
-        // Register the dashboard service
-        services.AddSingleton<ConsoleDashboardService>();
-        
-        // Add as hosted service if enabled
-        var enableDashboard = configuration.GetValue<bool>("Dashboard:Enabled", false);
-        if (enableDashboard)
-        {
-            services.AddHostedService<ConsoleDashboardService>(provider => 
-                provider.GetRequiredService<ConsoleDashboardService>());
-        }
+        // TODO: ConsoleDashboardService is in ACS.Service which cannot be referenced from Infrastructure
+        // Register dashboard service when circular dependency is resolved
+        // services.AddSingleton<ConsoleDashboardService>();
         
         // Configure dashboard options
         services.Configure<DashboardOptions>(
             configuration.GetSection("Dashboard"));
+        
+        // Log dashboard configuration
+        services.AddLogging();
         
         return services;
     }

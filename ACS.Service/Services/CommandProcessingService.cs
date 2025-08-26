@@ -26,7 +26,7 @@ public class CommandProcessingService : ICommandProcessingService
     public async Task<TResult> ExecuteCommandAsync<TResult>(Infrastructure.WebRequestCommand command)
     {
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-        var commandId = command.CommandId;
+        var commandId = command.RequestId;
         var commandType = command.GetType().Name;
         var userId = command.UserId;
         
@@ -56,7 +56,7 @@ public class CommandProcessingService : ICommandProcessingService
     public async Task ExecuteCommandAsync(Infrastructure.WebRequestCommand command)
     {
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-        var commandId = command.CommandId;
+        var commandId = command.RequestId;
         var commandType = command.GetType().Name;
         var userId = command.UserId;
         
@@ -273,7 +273,25 @@ public class CommandProcessingService : ICommandProcessingService
         // Handle parent group relationship if specified
         if (command.ParentGroupId.HasValue)
         {
-            await AddGroupToGroupNormalizer.ExecuteAsync(_dbContext, group.Id, command.ParentGroupId.Value, command.UserId);
+            // Load domain objects for normalizer
+            var parentGroup = await _dbContext.Groups.Include(g => g.Entity)
+                .FirstOrDefaultAsync(g => g.Id == command.ParentGroupId.Value);
+            if (parentGroup != null)
+            {
+                var childGroupDomain = new Domain.Group { Id = group.Id, Name = group.Name };
+                var parentGroupDomain = new Domain.Group { Id = parentGroup.Id, Name = parentGroup.Name };
+                
+                AddGroupToGroupNormalizer.Execute(childGroupDomain, parentGroupDomain);
+                
+                // Create junction table entry
+                var groupHierarchy = new Data.Models.GroupHierarchy 
+                { 
+                    ChildGroupId = group.Id, 
+                    ParentGroupId = parentGroup.Id 
+                };
+                _dbContext.GroupHierarchies.Add(groupHierarchy);
+                await _dbContext.SaveChangesAsync();
+            }
         }
 
         return group;
@@ -337,7 +355,21 @@ public class CommandProcessingService : ICommandProcessingService
         // Handle group relationship if specified
         if (command.GroupId.HasValue)
         {
-            await AddRoleToGroupNormalizer.ExecuteAsync(_dbContext, command.GroupId.Value, role.Id, command.UserId);
+            // Load domain objects for normalizer
+            var group = await _dbContext.Groups.Include(g => g.Entity)
+                .FirstOrDefaultAsync(g => g.Id == command.GroupId.Value);
+            if (group != null)
+            {
+                var roleDomain = new Domain.Role { Id = role.Id, Name = role.Name };
+                var groupDomain = new Domain.Group { Id = group.Id, Name = group.Name };
+                
+                AddRoleToGroupNormalizer.Execute(roleDomain, groupDomain);
+                
+                // Create junction table entry
+                var groupRole = new Data.Models.GroupRole { GroupId = group.Id, RoleId = role.Id };
+                _dbContext.GroupRoles.Add(groupRole);
+                await _dbContext.SaveChangesAsync();
+            }
         }
 
         return role;
@@ -346,22 +378,98 @@ public class CommandProcessingService : ICommandProcessingService
     // Command handlers that don't return results
     private async Task HandleAddUserToGroupCommand(Infrastructure.AddUserToGroupCommand command)
     {
-        await AddUserToGroupNormalizer.ExecuteAsync(_dbContext, command.TargetUserId, command.GroupId, command.UserId);
+        // Load domain objects
+        var user = await _dbContext.Users.Include(u => u.Entity)
+            .FirstOrDefaultAsync(u => u.Id == command.TargetUserId);
+        var group = await _dbContext.Groups.Include(g => g.Entity)
+            .FirstOrDefaultAsync(g => g.Id == command.GroupId);
+
+        if (user != null && group != null)
+        {
+            var userDomain = new Domain.User { Id = user.Id, Name = user.Name };
+            var groupDomain = new Domain.Group { Id = group.Id, Name = group.Name };
+            
+            AddUserToGroupNormalizer.Execute(userDomain, groupDomain);
+            
+            // Create junction table entry
+            var userGroup = new Data.Models.UserGroup { UserId = user.Id, GroupId = group.Id };
+            _dbContext.UserGroups.Add(userGroup);
+            await _dbContext.SaveChangesAsync();
+        }
     }
 
     private async Task HandleRemoveUserFromGroupCommand(Infrastructure.RemoveUserFromGroupCommand command)
     {
-        await RemoveUserFromGroupNormalizer.ExecuteAsync(_dbContext, command.TargetUserId, command.GroupId);
+        // Load domain objects
+        var user = await _dbContext.Users.Include(u => u.Entity)
+            .FirstOrDefaultAsync(u => u.Id == command.TargetUserId);
+        var group = await _dbContext.Groups.Include(g => g.Entity)
+            .FirstOrDefaultAsync(g => g.Id == command.GroupId);
+
+        if (user != null && group != null)
+        {
+            var userDomain = new Domain.User { Id = user.Id, Name = user.Name };
+            var groupDomain = new Domain.Group { Id = group.Id, Name = group.Name };
+            
+            RemoveUserFromGroupNormalizer.Execute(userDomain, groupDomain);
+            
+            // Remove junction table entry
+            var userGroup = await _dbContext.UserGroups
+                .FirstOrDefaultAsync(ug => ug.UserId == user.Id && ug.GroupId == group.Id);
+            if (userGroup != null)
+            {
+                _dbContext.UserGroups.Remove(userGroup);
+                await _dbContext.SaveChangesAsync();
+            }
+        }
     }
 
     private async Task HandleAssignUserToRoleCommand(Infrastructure.AssignUserToRoleCommand command)
     {
-        await AssignUserToRoleNormalizer.ExecuteAsync(_dbContext, command.TargetUserId, command.RoleId, command.UserId);
+        // Load domain objects
+        var user = await _dbContext.Users.Include(u => u.Entity)
+            .FirstOrDefaultAsync(u => u.Id == command.TargetUserId);
+        var role = await _dbContext.Roles.Include(r => r.Entity)
+            .FirstOrDefaultAsync(r => r.Id == command.RoleId);
+
+        if (user != null && role != null)
+        {
+            var userDomain = new Domain.User { Id = user.Id, Name = user.Name };
+            var roleDomain = new Domain.Role { Id = role.Id, Name = role.Name };
+            
+            AssignUserToRoleNormalizer.Execute(userDomain, roleDomain);
+            
+            // Create junction table entry
+            var userRole = new Data.Models.UserRole { UserId = user.Id, RoleId = role.Id };
+            _dbContext.UserRoles.Add(userRole);
+            await _dbContext.SaveChangesAsync();
+        }
     }
 
     private async Task HandleUnAssignUserFromRoleCommand(Infrastructure.UnAssignUserFromRoleCommand command)
     {
-        await UnAssignUserFromRoleNormalizer.ExecuteAsync(_dbContext, command.TargetUserId, command.RoleId);
+        // Load domain objects
+        var user = await _dbContext.Users.Include(u => u.Entity)
+            .FirstOrDefaultAsync(u => u.Id == command.TargetUserId);
+        var role = await _dbContext.Roles.Include(r => r.Entity)
+            .FirstOrDefaultAsync(r => r.Id == command.RoleId);
+
+        if (user != null && role != null)
+        {
+            var userDomain = new Domain.User { Id = user.Id, Name = user.Name };
+            var roleDomain = new Domain.Role { Id = role.Id, Name = role.Name };
+            
+            UnAssignUserFromRoleNormalizer.Execute(userDomain, roleDomain);
+            
+            // Remove junction table entry
+            var userRole = await _dbContext.UserRoles
+                .FirstOrDefaultAsync(ur => ur.UserId == user.Id && ur.RoleId == role.Id);
+            if (userRole != null)
+            {
+                _dbContext.UserRoles.Remove(userRole);
+                await _dbContext.SaveChangesAsync();
+            }
+        }
     }
 
     private async Task HandleDeleteUserCommand(Infrastructure.DeleteUserCommand command)

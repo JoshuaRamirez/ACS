@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using Microsoft.Extensions.Configuration;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -72,10 +73,12 @@ public static class OpenTelemetryConfiguration
         "acs_command_processing_duration_seconds", "Command processing duration in seconds");
 
     public static readonly ObservableGauge<long> ActiveTenants = ServiceMeter.CreateObservableGauge<long>(
-        "acs_active_tenants", "Number of active tenants");
+        "acs_active_tenants", 
+        () => 0); // Placeholder - implement actual tenant counting
 
     public static readonly ObservableGauge<long> ActiveUsers = ServiceMeter.CreateObservableGauge<long>(
-        "acs_active_users", "Number of active users");
+        "acs_active_users", 
+        () => 0); // Placeholder - implement actual user counting
 
     /// <summary>
     /// Configures OpenTelemetry for ASP.NET Core applications
@@ -85,7 +88,7 @@ public static class OpenTelemetryConfiguration
         var resourceBuilder = CreateResourceBuilder(environment);
 
         services.AddOpenTelemetry()
-            .ConfigureResource(resource => resource.Clear().Merge(resourceBuilder))
+            .ConfigureResource(resource => resource.Clear().AddAttributes(resourceBuilder.Build().Attributes))
             .WithTracing(tracing =>
             {
                 ConfigureTracing(tracing, configuration, "WebApi");
@@ -118,7 +121,7 @@ public static class OpenTelemetryConfiguration
             });
 
         services.AddOpenTelemetry()
-            .ConfigureResource(resource => resource.Clear().Merge(resourceBuilder))
+            .ConfigureResource(resource => resource.Clear().AddAttributes(resourceBuilder.Build().Attributes))
             .WithTracing(tracing =>
             {
                 ConfigureTracing(tracing, configuration, "VerticalHost");
@@ -333,11 +336,11 @@ public static class OpenTelemetryConfiguration
                     break;
 
                 case "prometheus":
+                    // Note: Prometheus exporter configuration depends on specific OpenTelemetry.Exporter.Prometheus package
+                    // For now, log the configuration - replace with actual prometheus exporter when package is available
                     var prometheusEndpoint = configuration.GetValue<string>("OpenTelemetry:PrometheusEndpoint") ?? "/metrics";
-                    metrics.AddPrometheusExporter(options =>
-                    {
-                        options.HttpListenerPrefixes = new[] { $"http://localhost:9090{prometheusEndpoint}" };
-                    });
+                    // TODO: Install OpenTelemetry.Exporter.Prometheus package and uncomment:
+                    // metrics.AddPrometheusExporter();
                     break;
 
                 case "console":

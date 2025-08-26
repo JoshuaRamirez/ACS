@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.Reflection;
 using ACS.Service.Data;
+using ACS.Service.Services;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Caching.Memory;
 
@@ -14,7 +15,7 @@ public interface IValidationService
     /// <summary>
     /// Validates an entity with all applicable domain rules
     /// </summary>
-    Task<ValidationResult> ValidateEntityAsync<T>(T entity, string operationType = "Update") where T : class;
+    Task<System.ComponentModel.DataAnnotations.ValidationResult> ValidateEntityAsync<T>(T entity, string operationType = "Update") where T : class;
     
     /// <summary>
     /// Validates multiple entities in bulk
@@ -76,10 +77,10 @@ public class ValidationService : IValidationService
         _configuration = configuration;
     }
 
-    public async Task<ValidationResult> ValidateEntityAsync<T>(T entity, string operationType = "Update") where T : class
+    public async Task<System.ComponentModel.DataAnnotations.ValidationResult> ValidateEntityAsync<T>(T entity, string operationType = "Update") where T : class
     {
         if (entity == null)
-            return ValidationResult.Success!;
+            return System.ComponentModel.DataAnnotations.ValidationResult.Success!;
 
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         
@@ -91,10 +92,10 @@ public class ValidationService : IValidationService
             _domainContext.OperationContext.StartTime = DateTime.UtcNow;
 
             var validationContext = new ValidationContext(entity);
-            var results = new List<ValidationResult>();
+            var results = new List<System.ComponentModel.DataAnnotations.ValidationResult>();
 
             // 1. Validate data annotations and basic attributes
-            var dataAnnotationResults = new List<ValidationResult>();
+            var dataAnnotationResults = new List<System.ComponentModel.DataAnnotations.ValidationResult>();
             if (!Validator.TryValidateObject(entity, validationContext, dataAnnotationResults, true))
             {
                 results.AddRange(dataAnnotationResults);
@@ -106,23 +107,29 @@ public class ValidationService : IValidationService
 
             // 3. Validate business rules
             var businessRuleResults = await ValidateBusinessRulesAsync(entity);
-            results.AddRange(businessRuleResults.AllErrors);
+            if (!businessRuleResults.IsValid)
+            {
+                results.AddRange(businessRuleResults.AllErrors);
+            }
 
             // 4. Validate domain invariants
             var invariantResults = await ValidateInvariantsAsync(entity);
-            results.AddRange(invariantResults.AllErrors);
+            if (!invariantResults.IsValid)
+            {
+                results.AddRange(invariantResults.AllErrors);
+            }
 
             // 5. Log validation performance
             stopwatch.Stop();
             _logger.LogDebug("Entity validation for {EntityType} took {ElapsedMs}ms", 
                 typeof(T).Name, stopwatch.ElapsedMilliseconds);
 
-            return results.Any() ? new ValidationResult(results) : ValidationResult.Success!;
+            return results.Any() ? new System.ComponentModel.DataAnnotations.ValidationResult("Validation failed") : System.ComponentModel.DataAnnotations.ValidationResult.Success!;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error validating entity of type {EntityType}", typeof(T).Name);
-            return new ValidationResult($"Validation error: {ex.Message}");
+            return new System.ComponentModel.DataAnnotations.ValidationResult($"Validation error: {ex.Message}", new string[0]);
         }
     }
 
@@ -153,7 +160,11 @@ public class ValidationService : IValidationService
 
             foreach (var item in validationResults)
             {
-                results[item.Entity] = item.Result;
+                // Convert System.ComponentModel.DataAnnotations.ValidationResult to domain ValidationResult
+                var domainValidationResult = item.Result.ErrorMessage != null 
+                    ? new ValidationResult(new[] { item.Result })
+                    : ValidationResult.Success;
+                results[item.Entity] = domainValidationResult;
             }
 
             // Validate cross-entity invariants
@@ -182,7 +193,7 @@ public class ValidationService : IValidationService
         }
     }
 
-    public async Task<ValidationResult> ValidateBusinessRulesAsync<T>(T entity, IDictionary<string, object>? context = null) where T : class
+    public Task<ValidationResult> ValidateBusinessRulesAsync<T>(T entity, IDictionary<string, object>? context = null) where T : class
     {
         var results = new List<System.ComponentModel.DataAnnotations.ValidationResult>();
         var validationContext = new ValidationContext(entity);
@@ -207,10 +218,10 @@ public class ValidationService : IValidationService
 
             try
             {
-                var result = attribute.ValidateInDomain(entity, validationContext, _domainContext);
-                if (result != null && result != System.ComponentModel.DataAnnotations.ValidationResult.Success)
+                var validationResult = attribute.ValidateInDomain(entity, validationContext, _domainContext);
+                if (validationResult != null && validationResult != System.ComponentModel.DataAnnotations.ValidationResult.Success)
                 {
-                    results.Add(result);
+                    results.Add(validationResult);
                     
                     // Stop on first critical error
                     if (attribute is BusinessRuleValidationAttribute businessRule && 
@@ -228,20 +239,20 @@ public class ValidationService : IValidationService
             }
         }
 
-        return results.Any() ? new ValidationResult(results) : ValidationResult.Success!;
+        return Task.FromResult(results.Any() ? new ValidationResult(results) : ValidationResult.Success!);
     }
 
-    public async Task<ValidationResult> ValidateInvariantsAsync<T>(T entity) where T : class
+    public Task<ValidationResult> ValidateInvariantsAsync<T>(T entity) where T : class
     {
         try
         {
             var invariantResults = DomainInvariants.ValidateInvariants(entity, _domainContext);
-            return invariantResults.Any() ? new ValidationResult(invariantResults) : ValidationResult.Success!;
+            return Task.FromResult(invariantResults.Any() ? new ValidationResult(invariantResults) : ValidationResult.Success!);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error validating invariants for {EntityType}", typeof(T).Name);
-            return new ValidationResult($"Invariant validation error: {ex.Message}");
+            return Task.FromResult(new ValidationResult(new[] { new System.ComponentModel.DataAnnotations.ValidationResult($"Invariant validation error: {ex.Message}") }));
         }
     }
 
@@ -255,11 +266,11 @@ public class ValidationService : IValidationService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error validating system invariants");
-            return new ValidationResult($"System invariant validation error: {ex.Message}");
+            return new ValidationResult(new System.ComponentModel.DataAnnotations.ValidationResult($"System invariant validation error: {ex.Message}"));
         }
     }
 
-    public async Task<ValidationResult> ValidatePropertyAsync<T>(T entity, string propertyName, object? value) where T : class
+    public Task<ValidationResult> ValidatePropertyAsync<T>(T entity, string propertyName, object? value) where T : class
     {
         var validationContext = new ValidationContext(entity) { MemberName = propertyName };
         var results = new List<System.ComponentModel.DataAnnotations.ValidationResult>();
@@ -291,7 +302,7 @@ public class ValidationService : IValidationService
             }
         }
 
-        return results.Any() ? new ValidationResult(results) : ValidationResult.Success!;
+        return Task.FromResult(results.Any() ? new ValidationResult(results) : ValidationResult.Success!);
     }
 
     public async Task<bool> IsOperationAllowedAsync<T>(T entity, string operationType, IDictionary<string, object>? context = null) where T : class
@@ -309,7 +320,7 @@ public class ValidationService : IValidationService
                 _ => HttpVerb.GET
             };
 
-            var permissionService = _domainContext.ServiceProvider.GetService<IPermissionEvaluationService>();
+            var permissionService = _domainContext.ServiceProvider.GetService(typeof(IPermissionEvaluationService)) as IPermissionEvaluationService;
             if (permissionService != null)
             {
                 var hasPermission = await permissionService.HasPermissionAsync(
@@ -333,7 +344,7 @@ public class ValidationService : IValidationService
             : new EntityValidationSettings();
     }
 
-    public async Task UpdateValidationConfigurationAsync(ValidationConfiguration configuration)
+    public Task UpdateValidationConfigurationAsync(ValidationConfiguration configuration)
     {
         // In a real implementation, this would persist the configuration
         // For now, we'll just update the in-memory configuration
@@ -349,9 +360,10 @@ public class ValidationService : IValidationService
         _configuration.CacheExpiration = configuration.CacheExpiration;
 
         _logger.LogInformation("Validation configuration updated");
+        return Task.CompletedTask;
     }
 
-    private async Task<IEnumerable<System.ComponentModel.DataAnnotations.ValidationResult>> ValidateDomainAttributesAsync<T>(T entity, ValidationContext validationContext) where T : class
+    private Task<IEnumerable<System.ComponentModel.DataAnnotations.ValidationResult>> ValidateDomainAttributesAsync<T>(T entity, ValidationContext validationContext) where T : class
     {
         var results = new List<System.ComponentModel.DataAnnotations.ValidationResult>();
         var domainAttributes = GetDomainValidationAttributes(typeof(T));
@@ -363,10 +375,10 @@ public class ValidationService : IValidationService
 
             try
             {
-                var result = attribute.ValidateInDomain(entity, validationContext, _domainContext);
-                if (result != null && result != System.ComponentModel.DataAnnotations.ValidationResult.Success)
+                var validationResult = attribute.ValidateInDomain(entity, validationContext, _domainContext);
+                if (validationResult != null && validationResult != System.ComponentModel.DataAnnotations.ValidationResult.Success)
                 {
-                    results.Add(result);
+                    results.Add(validationResult);
                 }
             }
             catch (Exception ex)
@@ -377,7 +389,7 @@ public class ValidationService : IValidationService
             }
         }
 
-        return results;
+        return Task.FromResult<IEnumerable<System.ComponentModel.DataAnnotations.ValidationResult>>(results);
     }
 
     private IEnumerable<DomainValidationAttribute> GetDomainValidationAttributes(Type type)

@@ -1,67 +1,52 @@
-using ACS.Service.Data;
-using ACS.Service.Data.Models;
-using Microsoft.EntityFrameworkCore;
+using ACS.Service.Domain;
 
 namespace ACS.Service.Delegates.Normalizers
 {
+    /// <summary>
+    /// Pure normalizer for adding a user to a group
+    /// Handles only the behavioral transformation - no validation, no side effects
+    /// Assumes business rules have already been validated by the domain object
+    /// </summary>
     public static class AddUserToGroupNormalizer
     {
-        public static async Task ExecuteAsync(ApplicationDbContext dbContext, int userId, int groupId, string createdBy)
+        /// <summary>
+        /// Executes the pure behavioral transformation of adding a user to a group
+        /// Updates the in-memory object graph to maintain bidirectional relationships
+        /// </summary>
+        /// <param name="user">The user domain object to add</param>
+        /// <param name="group">The group domain object to add the user to</param>
+        public static void Execute(User user, Group group)
         {
-            // Verify the user and group exist
-            var userExists = await dbContext.Users.AnyAsync(u => u.Id == userId);
-            if (!userExists)
-            {
-                throw new InvalidOperationException($"User {userId} not found.");
-            }
-
-            var groupExists = await dbContext.Groups.AnyAsync(g => g.Id == groupId);
-            if (!groupExists)
-            {
-                throw new InvalidOperationException($"Group {groupId} not found.");
-            }
-
-            // Check if relationship already exists
-            var existingRelation = await dbContext.UserGroups
-                .FirstOrDefaultAsync(ug => ug.UserId == userId && ug.GroupId == groupId);
+            // BEHAVIORAL NORMALIZATION: Pure graph manipulation
+            // No validation - assumes domain object already validated
+            // No database operations - pure in-memory transformation
+            // No side effects - just ensures bidirectional consistency
             
-            if (existingRelation != null)
+            // Add user to group's children if not already there
+            if (!group.Children.Contains(user))
             {
-                return; // Relationship already exists, nothing to do
-            }
-
-            // Create the new relationship
-            var userGroup = new UserGroup
-            {
-                UserId = userId,
-                GroupId = groupId,
-                CreatedBy = createdBy,
-                CreatedAt = DateTime.UtcNow
-            };
-
-            dbContext.UserGroups.Add(userGroup);
-            
-            // Update the UpdatedAt timestamp for both entities
-            var user = await dbContext.Users.FindAsync(userId);
-            var group = await dbContext.Groups.FindAsync(groupId);
-            
-            if (user != null)
-            {
-                user.UpdatedAt = DateTime.UtcNow;
-                dbContext.Users.Update(user);
+                group.Children.Add(user);
             }
             
-            if (group != null)
+            // Add group to user's parents if not already there
+            if (!user.Parents.Contains(group))
             {
-                group.UpdatedAt = DateTime.UtcNow;
-                dbContext.Groups.Update(group);
+                user.Parents.Add(group);
             }
+            
+            // That's it - pure mechanical transformation
+            // Persistence will be handled later by the command processor
         }
         
-        // Legacy method for compatibility - remove after domain layer is updated
-        public static void Execute(int userId, int groupId)
+        // Legacy async method - kept for compatibility during transition
+        // TODO: Remove after all callers updated to use pure Execute method
+        [Obsolete("Use pure Execute(User, Group) method instead. Database operations moved to persistence layer.")]
+        public static Task ExecuteAsync(object dbContext, int userId, int groupId, string createdBy)
         {
-            throw new NotSupportedException("Legacy normalizer method is no longer supported. Use ExecuteAsync instead.");
+            throw new NotSupportedException(
+                "Database operations have been moved to persistence layer. " +
+                "Use Execute(User, Group) for pure in-memory normalization, " +
+                "or call through domain object which handles persistence.");
         }
     }
 }

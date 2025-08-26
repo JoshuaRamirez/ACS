@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
-using ACS.WebApi.DTOs;
+using ACS.WebApi.Resources;
+using ACS.WebApi.Models.Responses;
 using ACS.Infrastructure.Services;
 using ACS.Infrastructure;
 
@@ -27,7 +28,7 @@ public class HealthController : ControllerBase
     /// Get health status of the WebApi and current tenant process
     /// </summary>
     [HttpGet]
-    public Task<ActionResult<ApiResponse<HealthCheckResponse>>> GetHealth()
+    public Task<ActionResult<ApiResponse<HealthCheckResource>>> GetHealth()
     {
         try
         {
@@ -43,7 +44,7 @@ public class HealthController : ControllerBase
                 var tenantProcessInfo = _tenantContextService.GetTenantProcessInfo();
                 var grpcChannel = _tenantContextService.GetGrpcChannel();
 
-                details["tenantId"] = tenantId;
+                details["tenantId"] = tenantId ?? "unknown";
                 details["tenantProcess"] = tenantProcessInfo != null ? "healthy" : "unavailable";
                 details["grpcChannel"] = grpcChannel != null ? "connected" : "disconnected";
 
@@ -61,9 +62,9 @@ public class HealthController : ControllerBase
             }
 
             var status = details.ContainsKey("tenantError") ? "degraded" : "healthy";
-            var response = new HealthCheckResponse(status, details);
+            var response = new HealthCheckResource { Status = status, Details = details };
 
-            return Task.FromResult<ActionResult<ApiResponse<HealthCheckResponse>>>(Ok(new ApiResponse<HealthCheckResponse>(true, response)));
+            return Task.FromResult<ActionResult<ApiResponse<HealthCheckResource>>>(Ok(new ApiResponse<HealthCheckResource> { Success = true, Data = response }));
         }
         catch (Exception ex)
         {
@@ -76,8 +77,8 @@ public class HealthController : ControllerBase
                 ["timestamp"] = DateTime.UtcNow
             };
 
-            var errorResponse = new HealthCheckResponse("unhealthy", errorDetails);
-            return Task.FromResult<ActionResult<ApiResponse<HealthCheckResponse>>>(StatusCode(500, new ApiResponse<HealthCheckResponse>(false, errorResponse, "Health check failed")));
+            var errorResponse = new HealthCheckResource { Status = "unhealthy", Details = errorDetails };
+            return Task.FromResult<ActionResult<ApiResponse<HealthCheckResource>>>(StatusCode(500, new ApiResponse<HealthCheckResource> { Success = false, Data = errorResponse, Message = "Health check failed" }));
         }
     }
 
@@ -85,7 +86,7 @@ public class HealthController : ControllerBase
     /// Get health status of the current tenant process via gRPC
     /// </summary>
     [HttpGet("tenant")]
-    public async Task<ActionResult<ApiResponse<TenantHealthResponse>>> GetTenantHealth()
+    public async Task<ActionResult<ApiResponse<TenantHealthResource>>> GetTenantHealth()
     {
         try
         {
@@ -94,17 +95,18 @@ public class HealthController : ControllerBase
             
             if (channel == null)
             {
-                var unhealthyResponse = new TenantHealthResponse(
-                    tenantId,
-                    false,
-                    DateTime.UtcNow,
-                    0,
-                    0,
-                    0,
-                    $"Tenant process not available for tenant {tenantId}"
-                );
+                var unhealthyResponse = new TenantHealthResource
+                {
+                    TenantId = tenantId ?? string.Empty,
+                    IsHealthy = false,
+                    CheckTime = DateTime.UtcNow,
+                    UptimeSeconds = 0,
+                    ActiveConnections = 0,
+                    CommandsProcessed = 0,
+                    Message = $"Tenant process not available for tenant {tenantId}"
+                };
                 
-                return Ok(new ApiResponse<TenantHealthResponse>(true, unhealthyResponse));
+                return Ok(new ApiResponse<TenantHealthResource> { Success = true, Data = unhealthyResponse });
             }
 
             var client = new ACS.Core.Grpc.VerticalService.VerticalServiceClient(channel);
@@ -113,34 +115,36 @@ public class HealthController : ControllerBase
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
             var healthResponse = await client.HealthCheckAsync(request, cancellationToken: cts.Token);
             
-            var response = new TenantHealthResponse(
-                tenantId,
-                healthResponse.Healthy,
-                DateTime.UtcNow,
-                healthResponse.UptimeSeconds,
-                healthResponse.ActiveConnections,
-                healthResponse.CommandsProcessed,
-                healthResponse.Healthy ? "Healthy" : "Unhealthy"
-            );
+            var response = new TenantHealthResource
+            {
+                TenantId = tenantId ?? string.Empty,
+                IsHealthy = healthResponse.Healthy,
+                CheckTime = DateTime.UtcNow,
+                UptimeSeconds = healthResponse.UptimeSeconds,
+                ActiveConnections = healthResponse.ActiveConnections,
+                CommandsProcessed = healthResponse.CommandsProcessed,
+                Message = healthResponse.Healthy ? "Healthy" : "Unhealthy"
+            };
 
-            return Ok(new ApiResponse<TenantHealthResponse>(true, response));
+            return Ok(new ApiResponse<TenantHealthResource> { Success = true, Data = response });
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error checking tenant health");
             
             var tenantId = _tenantContextService.GetTenantId();
-            var unhealthyResponse = new TenantHealthResponse(
-                tenantId,
-                false,
-                DateTime.UtcNow,
-                0,
-                0,
-                0,
-                ex.Message
-            );
+            var unhealthyResponse = new TenantHealthResource
+            {
+                TenantId = tenantId ?? string.Empty,
+                IsHealthy = false,
+                CheckTime = DateTime.UtcNow,
+                UptimeSeconds = 0,
+                ActiveConnections = 0,
+                CommandsProcessed = 0,
+                Message = ex.Message
+            };
             
-            return Ok(new ApiResponse<TenantHealthResponse>(true, unhealthyResponse));
+            return Ok(new ApiResponse<TenantHealthResource> { Success = true, Data = unhealthyResponse });
         }
     }
 
@@ -200,12 +204,12 @@ public class HealthController : ControllerBase
                 ["processes"] = processHealthChecks
             };
 
-            return Ok(new ApiResponse<Dictionary<string, object>>(true, details));
+            return Ok(new ApiResponse<Dictionary<string, object>> { Success = true, Data = details });
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to get processes health status");
-            return StatusCode(500, new ApiResponse<Dictionary<string, object>>(false, null, "Failed to get processes health"));
+            return StatusCode(500, new ACS.WebApi.DTOs.ApiResponse<Dictionary<string, object>>(false, null, "Failed to get processes health", new List<string>()));
         }
     }
 
@@ -213,23 +217,24 @@ public class HealthController : ControllerBase
     /// Get comprehensive health status including WebApi and all tenant processes
     /// </summary>
     [HttpGet("detailed")]
-    public async Task<ActionResult<ApiResponse<DetailedHealthResponse>>> GetDetailedHealth()
+    public async Task<ActionResult<ApiResponse<DetailedHealthResource>>> GetDetailedHealth()
     {
         try
         {
-            var webApiHealth = new HealthStatusResponse(
-                "WebApi",
-                true,
-                DateTime.UtcNow,
-                "Healthy",
-                new Dictionary<string, object>
+            var webApiHealth = new HealthCheckResponse
+            {
+                Name = "WebApi",
+                Status = "Healthy",
+                Duration = TimeSpan.FromMilliseconds(50),
+                Description = "Web API health check",
+                Data = new Dictionary<string, object>
                 {
                     { "version", "1.0.0" },
                     { "environment", Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Development" }
                 }
-            );
+            };
 
-            var tenantHealths = new List<TenantHealthResponse>();
+            var tenantHealths = new List<SystemHealthResponse>();
             
             try
             {
@@ -245,28 +250,35 @@ public class HealthController : ControllerBase
                         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
                         var healthResponse = await client.HealthCheckAsync(new ACS.Core.Grpc.HealthRequest(), cancellationToken: cts.Token);
                         
-                        tenantHealths.Add(new TenantHealthResponse(
-                            processInfo.TenantId,
-                            healthResponse.Healthy,
-                            DateTime.UtcNow,
-                            healthResponse.UptimeSeconds,
-                            healthResponse.ActiveConnections,
-                            healthResponse.CommandsProcessed,
-                            healthResponse.Healthy ? "Healthy" : "Unhealthy"
-                        ));
+                        tenantHealths.Add(new SystemHealthResponse
+                        {
+                            OverallStatus = healthResponse.Healthy ? "Healthy" : "Unhealthy",
+                            CheckedAt = DateTime.UtcNow,
+                            PerformanceMetrics = new Dictionary<string, object>
+                            {
+                                { "uptime", healthResponse.UptimeSeconds },
+                                { "activeConnections", healthResponse.ActiveConnections },
+                                { "commandsProcessed", healthResponse.CommandsProcessed },
+                                { "tenantId", processInfo.TenantId }
+                            }
+                        });
                     }
                     catch (Exception ex)
                     {
                         _logger.LogWarning(ex, "Failed to check health for tenant {TenantId}", processInfo.TenantId);
-                        tenantHealths.Add(new TenantHealthResponse(
-                            processInfo.TenantId,
-                            false,
-                            DateTime.UtcNow,
-                            0,
-                            0,
-                            0,
-                            ex.Message
-                        ));
+                        tenantHealths.Add(new SystemHealthResponse
+                        {
+                            OverallStatus = "Unhealthy",
+                            CheckedAt = DateTime.UtcNow,
+                            PerformanceMetrics = new Dictionary<string, object>
+                            {
+                                { "uptime", 0 },
+                                { "activeConnections", 0 },
+                                { "commandsProcessed", 0 },
+                                { "tenantId", processInfo.TenantId },
+                                { "error", ex.Message }
+                            }
+                        });
                     }
                 }
             }
@@ -275,21 +287,37 @@ public class HealthController : ControllerBase
                 _logger.LogError(ex, "Failed to get tenant processes for health check");
             }
 
-            var overallHealthy = webApiHealth.IsHealthy && tenantHealths.All(t => t.IsHealthy);
+            var overallHealthy = webApiHealth.Status == "Healthy" && tenantHealths.All(t => t.OverallStatus == "Healthy");
 
-            var detailedHealth = new DetailedHealthResponse(
-                overallHealthy,
-                DateTime.UtcNow,
-                webApiHealth,
-                tenantHealths
-            );
+            var detailedHealth = new DetailedHealthResource
+            {
+                OverallHealthy = overallHealthy,
+                CheckTime = DateTime.UtcNow,
+                WebApiHealth = new HealthStatusResource
+                {
+                    Component = webApiHealth.Name,
+                    IsHealthy = webApiHealth.Status == "Healthy",
+                    CheckTime = DateTime.UtcNow,
+                    Message = webApiHealth.Description
+                },
+                TenantHealths = tenantHealths.Select(t => new TenantHealthResource
+                {
+                    TenantId = t.PerformanceMetrics.GetValueOrDefault("tenantId", "")?.ToString() ?? string.Empty,
+                    IsHealthy = t.OverallStatus == "Healthy",
+                    CheckTime = t.CheckedAt,
+                    UptimeSeconds = Convert.ToInt64(t.PerformanceMetrics.GetValueOrDefault("uptime", 0)),
+                    ActiveConnections = Convert.ToInt32(t.PerformanceMetrics.GetValueOrDefault("activeConnections", 0)),
+                    CommandsProcessed = Convert.ToInt64(t.PerformanceMetrics.GetValueOrDefault("commandsProcessed", 0)),
+                    Message = ((IReadOnlyDictionary<string, object?>)t.PerformanceMetrics).GetValueOrDefault("error", null)?.ToString()
+                }).ToList()
+            };
 
-            return Ok(new ApiResponse<DetailedHealthResponse>(true, detailedHealth));
+            return Ok(new ACS.WebApi.DTOs.ApiResponse<DetailedHealthResource>(true, detailedHealth, "", new List<string>()));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error performing detailed health check");
-            return StatusCode(500, new ApiResponse<DetailedHealthResponse>(false, null, "Detailed health check failed"));
+            return StatusCode(500, new ACS.WebApi.DTOs.ApiResponse<DetailedHealthResource>(false, null, "Detailed health check failed", new List<string>()));
         }
     }
 }

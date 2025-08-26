@@ -25,7 +25,25 @@ public class TenantDatabasePersistenceService
     {
         try
         {
-            await Delegates.Normalizers.AddUserToGroupNormalizer.ExecuteAsync(_dbContext, userId, groupId, "system");
+            // Load domain objects
+            var user = await _dbContext.Users.Include(u => u.Entity)
+                .FirstOrDefaultAsync(u => u.Id == userId);
+            var group = await _dbContext.Groups.Include(g => g.Entity)
+                .FirstOrDefaultAsync(g => g.Id == groupId);
+
+            if (user == null) throw new InvalidOperationException($"User {userId} not found");
+            if (group == null) throw new InvalidOperationException($"Group {groupId} not found");
+
+            // Convert to domain objects and execute normalizer
+            var userDomain = new Domain.User { Id = user.Id, Name = user.Name };
+            var groupDomain = new Domain.Group { Id = group.Id, Name = group.Name };
+            
+            Delegates.Normalizers.AddUserToGroupNormalizer.Execute(userDomain, groupDomain);
+            
+            // Create junction table entry
+            var userGroup = new Data.Models.UserGroup { UserId = userId, GroupId = groupId };
+            _dbContext.UserGroups.Add(userGroup);
+            
             await _dbContext.SaveChangesAsync();
 
             _logger.LogInformation("Persisted: Added user {UserId} to group {GroupId}", userId, groupId);
@@ -41,7 +59,29 @@ public class TenantDatabasePersistenceService
     {
         try
         {
-            await Delegates.Normalizers.RemoveUserFromGroupNormalizer.ExecuteAsync(_dbContext, userId, groupId);
+            // Load domain objects
+            var user = await _dbContext.Users.Include(u => u.Entity)
+                .FirstOrDefaultAsync(u => u.Id == userId);
+            var group = await _dbContext.Groups.Include(g => g.Entity)
+                .FirstOrDefaultAsync(g => g.Id == groupId);
+
+            if (user == null) throw new InvalidOperationException($"User {userId} not found");
+            if (group == null) throw new InvalidOperationException($"Group {groupId} not found");
+
+            // Convert to domain objects and execute normalizer
+            var userDomain = new Domain.User { Id = user.Id, Name = user.Name };
+            var groupDomain = new Domain.Group { Id = group.Id, Name = group.Name };
+            
+            Delegates.Normalizers.RemoveUserFromGroupNormalizer.Execute(userDomain, groupDomain);
+            
+            // Remove junction table entry
+            var userGroup = await _dbContext.UserGroups
+                .FirstOrDefaultAsync(ug => ug.UserId == userId && ug.GroupId == groupId);
+            if (userGroup != null)
+            {
+                _dbContext.UserGroups.Remove(userGroup);
+            }
+            
             await _dbContext.SaveChangesAsync();
 
             _logger.LogInformation("Persisted: Removed user {UserId} from group {GroupId}", userId, groupId);
@@ -61,7 +101,25 @@ public class TenantDatabasePersistenceService
     {
         try
         {
-            await Delegates.Normalizers.AssignUserToRoleNormalizer.ExecuteAsync(_dbContext, userId, roleId, "system");
+            // Load domain objects
+            var user = await _dbContext.Users.Include(u => u.Entity)
+                .FirstOrDefaultAsync(u => u.Id == userId);
+            var role = await _dbContext.Roles.Include(r => r.Entity)
+                .FirstOrDefaultAsync(r => r.Id == roleId);
+
+            if (user == null) throw new InvalidOperationException($"User {userId} not found");
+            if (role == null) throw new InvalidOperationException($"Role {roleId} not found");
+
+            // Convert to domain objects and execute normalizer
+            var userDomain = new Domain.User { Id = user.Id, Name = user.Name };
+            var roleDomain = new Domain.Role { Id = role.Id, Name = role.Name };
+            
+            Delegates.Normalizers.AssignUserToRoleNormalizer.Execute(userDomain, roleDomain);
+            
+            // Create junction table entry
+            var userRole = new Data.Models.UserRole { UserId = userId, RoleId = roleId };
+            _dbContext.UserRoles.Add(userRole);
+            
             await _dbContext.SaveChangesAsync();
 
             _logger.LogInformation("Persisted: Assigned user {UserId} to role {RoleId}", userId, roleId);
@@ -77,7 +135,29 @@ public class TenantDatabasePersistenceService
     {
         try
         {
-            await Delegates.Normalizers.UnAssignUserFromRoleNormalizer.ExecuteAsync(_dbContext, userId, roleId);
+            // Load domain objects
+            var user = await _dbContext.Users.Include(u => u.Entity)
+                .FirstOrDefaultAsync(u => u.Id == userId);
+            var role = await _dbContext.Roles.Include(r => r.Entity)
+                .FirstOrDefaultAsync(r => r.Id == roleId);
+
+            if (user == null) throw new InvalidOperationException($"User {userId} not found");
+            if (role == null) throw new InvalidOperationException($"Role {roleId} not found");
+
+            // Convert to domain objects and execute normalizer
+            var userDomain = new Domain.User { Id = user.Id, Name = user.Name };
+            var roleDomain = new Domain.Role { Id = role.Id, Name = role.Name };
+            
+            Delegates.Normalizers.UnAssignUserFromRoleNormalizer.Execute(userDomain, roleDomain);
+            
+            // Remove junction table entry
+            var userRole = await _dbContext.UserRoles
+                .FirstOrDefaultAsync(ur => ur.UserId == userId && ur.RoleId == roleId);
+            if (userRole != null)
+            {
+                _dbContext.UserRoles.Remove(userRole);
+            }
+            
             await _dbContext.SaveChangesAsync();
 
             _logger.LogInformation("Persisted: Unassigned user {UserId} from role {RoleId}", userId, roleId);
@@ -93,12 +173,29 @@ public class TenantDatabasePersistenceService
 
     #region Group-Role Persistence
     
-    // Temporarily simplified - delegates to normalizer
     public virtual async Task PersistAddRoleToGroupAsync(int groupId, int roleId)
     {
         try
         {
-            await Delegates.Normalizers.AddRoleToGroupNormalizer.ExecuteAsync(_dbContext, groupId, roleId, "system");
+            // Load domain objects
+            var group = await _dbContext.Groups.Include(g => g.Entity)
+                .FirstOrDefaultAsync(g => g.Id == groupId);
+            var role = await _dbContext.Roles.Include(r => r.Entity)
+                .FirstOrDefaultAsync(r => r.Id == roleId);
+
+            if (group == null) throw new InvalidOperationException($"Group {groupId} not found");
+            if (role == null) throw new InvalidOperationException($"Role {roleId} not found");
+
+            // Convert to domain objects and execute normalizer
+            var groupDomain = new Domain.Group { Id = group.Id, Name = group.Name };
+            var roleDomain = new Domain.Role { Id = role.Id, Name = role.Name };
+            
+            Delegates.Normalizers.AddRoleToGroupNormalizer.Execute(roleDomain, groupDomain);
+            
+            // Create junction table entry
+            var groupRole = new Data.Models.GroupRole { GroupId = groupId, RoleId = roleId };
+            _dbContext.GroupRoles.Add(groupRole);
+            
             await _dbContext.SaveChangesAsync();
             _logger.LogInformation("Persisted: Added role {RoleId} to group {GroupId}", roleId, groupId);
         }
@@ -177,7 +274,7 @@ public class TenantDatabasePersistenceService
 
             if (resource == null)
             {
-                resource = new Resource
+                resource = new Data.Models.Resource
                 {
                     Uri = permission.Uri
                 };

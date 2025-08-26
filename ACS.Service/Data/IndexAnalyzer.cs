@@ -128,9 +128,9 @@ public class IndexAnalyzer : IIndexAnalyzer
                 AverageImpact = reader.GetDouble(2),
                 TotalSeeksScans = reader.GetInt64(3),
                 TableName = reader.GetString(4),
-                EqualityColumns = reader.IsDBNull(5) ? null : reader.GetString(5),
-                InequalityColumns = reader.IsDBNull(6) ? null : reader.GetString(6),
-                IncludedColumns = reader.IsDBNull(7) ? null : reader.GetString(7),
+                EqualityColumns = reader.IsDBNull(5) ? string.Empty : reader.GetString(5),
+                InequalityColumns = reader.IsDBNull(6) ? string.Empty : reader.GetString(6),
+                IncludedColumns = reader.IsDBNull(7) ? string.Empty : reader.GetString(7),
                 UniqueCompiles = reader.GetInt64(8),
                 LastUserSeek = reader.IsDBNull(9) ? null : reader.GetDateTime(9),
                 CreateStatement = reader.GetString(10)
@@ -421,7 +421,7 @@ public class IndexAnalyzer : IIndexAnalyzer
                 Index1 = reader.GetString(2),
                 Index2 = reader.GetString(3),
                 KeyColumns = reader.GetString(4),
-                IncludedColumns = reader.IsDBNull(5) ? null : reader.GetString(5)
+                IncludedColumns = reader.IsDBNull(5) ? string.Empty : reader.GetString(5)
             });
         }
 
@@ -497,7 +497,7 @@ public class IndexAnalyzer : IIndexAnalyzer
 public class IndexAnalysisReport
 {
     public DateTime AnalysisDate { get; set; }
-    public string DatabaseName { get; set; }
+    public string DatabaseName { get; set; } = string.Empty;
     public int TotalIndexes { get; set; }
     public double HealthScore { get; set; }
     public List<IndexStatistic> IndexStatistics { get; set; } = new();
@@ -510,10 +510,10 @@ public class IndexAnalysisReport
 
 public class IndexStatistic
 {
-    public string SchemaName { get; set; }
-    public string TableName { get; set; }
-    public string IndexName { get; set; }
-    public string IndexType { get; set; }
+    public string SchemaName { get; set; } = string.Empty;
+    public string TableName { get; set; } = string.Empty;
+    public string IndexName { get; set; } = string.Empty;
+    public string IndexType { get; set; } = string.Empty;
     public long UserSeeks { get; set; }
     public long UserScans { get; set; }
     public long UserLookups { get; set; }
@@ -532,21 +532,21 @@ public class MissingIndexRecommendation
     public double AverageCost { get; set; }
     public double AverageImpact { get; set; }
     public long TotalSeeksScans { get; set; }
-    public string TableName { get; set; }
-    public string EqualityColumns { get; set; }
-    public string InequalityColumns { get; set; }
-    public string IncludedColumns { get; set; }
+    public string TableName { get; set; } = string.Empty;
+    public string EqualityColumns { get; set; } = string.Empty;
+    public string InequalityColumns { get; set; } = string.Empty;
+    public string IncludedColumns { get; set; } = string.Empty;
     public long UniqueCompiles { get; set; }
     public DateTime? LastUserSeek { get; set; }
-    public string CreateStatement { get; set; }
+    public string CreateStatement { get; set; } = string.Empty;
 }
 
 public class UnusedIndex
 {
-    public string SchemaName { get; set; }
-    public string TableName { get; set; }
-    public string IndexName { get; set; }
-    public string IndexType { get; set; }
+    public string SchemaName { get; set; } = string.Empty;
+    public string TableName { get; set; } = string.Empty;
+    public string IndexName { get; set; } = string.Empty;
+    public string IndexType { get; set; } = string.Empty;
     public long UserSeeks { get; set; }
     public long UserScans { get; set; }
     public long UserLookups { get; set; }
@@ -557,25 +557,25 @@ public class UnusedIndex
 
 public class FragmentedIndex
 {
-    public string SchemaName { get; set; }
-    public string TableName { get; set; }
-    public string IndexName { get; set; }
+    public string SchemaName { get; set; } = string.Empty;
+    public string TableName { get; set; } = string.Empty;
+    public string IndexName { get; set; } = string.Empty;
     public double FragmentationPercent { get; set; }
     public long PageCount { get; set; }
     public long RecordCount { get; set; }
     public double AvgPageSpaceUsed { get; set; }
     public byte FillFactor { get; set; }
-    public string RecommendedAction { get; set; }
+    public string RecommendedAction { get; set; } = string.Empty;
 }
 
 public class DuplicateIndex
 {
-    public string SchemaName { get; set; }
-    public string TableName { get; set; }
-    public string Index1 { get; set; }
-    public string Index2 { get; set; }
-    public string KeyColumns { get; set; }
-    public string IncludedColumns { get; set; }
+    public string SchemaName { get; set; } = string.Empty;
+    public string TableName { get; set; } = string.Empty;
+    public string Index1 { get; set; } = string.Empty;
+    public string Index2 { get; set; } = string.Empty;
+    public string KeyColumns { get; set; } = string.Empty;
+    public string IncludedColumns { get; set; } = string.Empty;
 }
 
 #endregion

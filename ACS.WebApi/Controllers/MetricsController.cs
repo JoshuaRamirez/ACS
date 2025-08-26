@@ -118,9 +118,9 @@ public class MetricsController : ControllerBase
     [Produces("text/event-stream")]
     public async Task GetMetricsStream(CancellationToken cancellationToken)
     {
-        Response.Headers.Add("Content-Type", "text/event-stream");
-        Response.Headers.Add("Cache-Control", "no-cache");
-        Response.Headers.Add("Connection", "keep-alive");
+        Response.Headers["Content-Type"] = "text/event-stream";
+        Response.Headers["Cache-Control"] = "no-cache";
+        Response.Headers["Connection"] = "keep-alive";
 
         await foreach (var update in _dashboardService.GetRealTimeMetricsAsync(cancellationToken))
         {

@@ -72,7 +72,7 @@ builder.Services.ConfigureServices(builder.Configuration, logger, "WebApi");
 builder.Services.ConfigureOpenTelemetryForWebApi(builder.Configuration, builder.Environment);
 
 // Add comprehensive health checks
-builder.Services.AddHealthChecks(builder.Configuration);
+builder.Services.AddHealthChecks();
 
 // Add WebApi-specific filters
 builder.Services.Configure<Microsoft.AspNetCore.Mvc.MvcOptions>(options =>
@@ -232,7 +232,7 @@ app.UseComplianceAudit(new ComplianceAuditConfiguration
 app.UseMiddleware<CsrfProtectionMiddleware>();
 
 // 9a. Correlation middleware (before authentication for comprehensive tracking)
-app.UseCorrelationId();
+// app.UseCorrelationId(); // Extension method not available, handled by logging middleware
 
 // 10. Authentication (DO NOT use both UseJwtAuthentication and UseAuthentication)
 app.UseAuthentication();

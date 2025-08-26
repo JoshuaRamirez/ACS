@@ -1,4 +1,5 @@
 using Grpc.Core;
+using Grpc.Net.Client;
 using Grpc.Health.V1;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
@@ -40,7 +41,7 @@ public class GrpcHealthCheck : IHealthCheck
         
         try
         {
-            var channel = new Channel(_endpoint, ChannelCredentials.Insecure);
+            var channel = GrpcChannel.ForAddress(_endpoint);
             var client = new Health.HealthClient(channel);
 
             var deadline = DateTime.UtcNow.Add(_timeout);
@@ -147,13 +148,13 @@ public class GrpcHealthCheck : IHealthCheck
     {
         try
         {
-            var channel = new Channel(_endpoint, ChannelCredentials.Insecure);
-            await channel.ConnectAsync(DateTime.UtcNow.Add(_timeout));
+            var channel = GrpcChannel.ForAddress(_endpoint);
+            await channel.ConnectAsync(cancellationToken);
             
             var state = channel.State;
             await channel.ShutdownAsync();
 
-            if (state == ChannelState.Ready || state == ChannelState.Idle)
+            if (state == ConnectivityState.Ready || state == ConnectivityState.Idle)
             {
                 return HealthCheckResult.Healthy(
                     $"gRPC endpoint '{_endpoint}' is reachable (no health service)",
@@ -181,7 +182,7 @@ public class GrpcHealthCheck : IHealthCheck
         }
     }
 
-    private async Task<ChannelStatistics?> GetChannelStatisticsAsync(Channel channel)
+    private async Task<ChannelStatistics?> GetChannelStatisticsAsync(GrpcChannel channel)
     {
         // Implement actual channel statistics collection
         try
@@ -203,9 +204,9 @@ public class GrpcHealthCheck : IHealthCheck
             
             return new ChannelStatistics
             {
-                CallsStarted = state == ChannelState.Ready ? 10 : 0,
-                CallsSucceeded = state == ChannelState.Ready ? 9 : 0,  
-                CallsFailed = state == ChannelState.Ready ? 1 : 0,
+                CallsStarted = state == ConnectivityState.Ready ? 10 : 0,
+                CallsSucceeded = state == ConnectivityState.Ready ? 9 : 0,  
+                CallsFailed = state == ConnectivityState.Ready ? 1 : 0,
                 ChannelState = state.ToString(),
                 Target = target
             };

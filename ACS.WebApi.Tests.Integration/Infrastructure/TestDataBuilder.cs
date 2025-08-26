@@ -1,4 +1,5 @@
 using ACS.WebApi.DTOs;
+using ACS.Service.Requests;
 using ACS.Service.Data.Models;
 
 namespace ACS.WebApi.Tests.Integration.Infrastructure;
@@ -231,8 +232,9 @@ public class EntityBuilder
 public class CreateUserRequestBuilder
 {
     private string _name = "Test User";
-    private int? _groupId;
-    private int? _roleId;
+    private int? _initialGroupId;
+    private int? _initialRoleId;
+    private string _createdBy = "test-user";
 
     public CreateUserRequestBuilder WithName(string name)
     {
@@ -240,19 +242,31 @@ public class CreateUserRequestBuilder
         return this;
     }
 
-    public CreateUserRequestBuilder WithGroupId(int groupId)
+    public CreateUserRequestBuilder WithInitialGroupId(int groupId)
     {
-        _groupId = groupId;
+        _initialGroupId = groupId;
         return this;
     }
 
-    public CreateUserRequestBuilder WithRoleId(int roleId)
+    public CreateUserRequestBuilder WithInitialRoleId(int roleId)
     {
-        _roleId = roleId;
+        _initialRoleId = roleId;
         return this;
     }
 
-    public CreateUserRequest Build() => new(_name, _groupId, _roleId);
+    public CreateUserRequestBuilder WithCreatedBy(string createdBy)
+    {
+        _createdBy = createdBy;
+        return this;
+    }
+
+    public ACS.Service.Requests.CreateUserRequest Build() => new()
+    {
+        Name = _name,
+        InitialGroupId = _initialGroupId,
+        InitialRoleId = _initialRoleId,
+        CreatedBy = _createdBy
+    };
 }
 
 /// <summary>
@@ -260,9 +274,15 @@ public class CreateUserRequestBuilder
 /// </summary>
 public class UpdateUserRequestBuilder
 {
+    private int _userId = 1;
     private string _name = "Updated User";
-    private int? _groupId;
-    private int? _roleId;
+    private string _updatedBy = "test-user";
+
+    public UpdateUserRequestBuilder WithUserId(int userId)
+    {
+        _userId = userId;
+        return this;
+    }
 
     public UpdateUserRequestBuilder WithName(string name)
     {
@@ -270,19 +290,18 @@ public class UpdateUserRequestBuilder
         return this;
     }
 
-    public UpdateUserRequestBuilder WithGroupId(int groupId)
+    public UpdateUserRequestBuilder WithUpdatedBy(string updatedBy)
     {
-        _groupId = groupId;
+        _updatedBy = updatedBy;
         return this;
     }
 
-    public UpdateUserRequestBuilder WithRoleId(int roleId)
+    public ACS.Service.Requests.UpdateUserRequest Build() => new()
     {
-        _roleId = roleId;
-        return this;
-    }
-
-    public UpdateUserRequest Build() => new(_name, _groupId, _roleId);
+        UserId = _userId,
+        Name = _name,
+        UpdatedBy = _updatedBy
+    };
 }
 
 /// <summary>
@@ -291,11 +310,19 @@ public class UpdateUserRequestBuilder
 public class CreateGroupRequestBuilder
 {
     private string _name = "Test Group";
+    private string? _description;
     private int? _parentGroupId;
+    private string _createdBy = "test-user";
 
     public CreateGroupRequestBuilder WithName(string name)
     {
         _name = name;
+        return this;
+    }
+
+    public CreateGroupRequestBuilder WithDescription(string description)
+    {
+        _description = description;
         return this;
     }
 
@@ -305,7 +332,19 @@ public class CreateGroupRequestBuilder
         return this;
     }
 
-    public CreateGroupRequest Build() => new(_name, _parentGroupId);
+    public CreateGroupRequestBuilder WithCreatedBy(string createdBy)
+    {
+        _createdBy = createdBy;
+        return this;
+    }
+
+    public ACS.Service.Requests.CreateGroupRequest Build() => new()
+    {
+        Name = _name,
+        Description = _description,
+        ParentGroupId = _parentGroupId,
+        CreatedBy = _createdBy
+    };
 }
 
 /// <summary>
@@ -340,5 +379,12 @@ public class CheckPermissionRequestBuilder
     public CheckPermissionRequestBuilder ForPut() => WithVerb("PUT");
     public CheckPermissionRequestBuilder ForDelete() => WithVerb("DELETE");
 
-    public CheckPermissionRequest Build() => new(_entityId, _uri, _httpVerb);
+    public ACS.Service.Requests.CheckPermissionRequest Build() => new()
+    {
+        EntityId = _entityId,
+        EntityType = "User", // Default for tests
+        Resource = _uri,
+        Action = _httpVerb,
+        RequestedBy = "test-user"
+    };
 }

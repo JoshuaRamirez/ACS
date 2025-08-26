@@ -142,7 +142,7 @@ public class SqlInjectionSecurityTests : SecurityTestBase
             var content = await response.Content.ReadAsStringAsync();
             // Should return normal results, not all groups due to OR 1=1 condition
             var groups = System.Text.Json.JsonSerializer.Deserialize<dynamic>(content);
-            groups.Should().NotBeNull();
+            groups?.Should().NotBeNull();
         }
     }
 

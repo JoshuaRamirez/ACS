@@ -44,7 +44,7 @@ public class ResourceServiceTests
         _mockDbContext.Setup(x => x.Entities).Returns(_mockEntityDbSet.Object);
         _mockDbContext.Setup(x => x.UriAccesses).Returns(_mockUriAccessDbSet.Object);
         _mockDbContext.Setup(x => x.VerbTypes).Returns(_mockVerbTypeDbSet.Object);
-        _mockDbContext.Setup(x => x.PermissionSchemes).Returns(_mockPermissionSchemeDbSet.Object);
+        _mockDbContext.Setup(x => x.EntityPermissions).Returns(_mockPermissionSchemeDbSet.Object);
         _mockDbContext.Setup(x => x.AuditLogs).Returns(_mockAuditLogDbSet.Object);
         
         _resourceService = new ResourceService(
@@ -684,7 +684,7 @@ public class ResourceServiceTests
         // Assert
         Assert.AreEqual(2, result.Count());
         Assert.IsTrue(result.Any(r => r.Uri.Contains("users", StringComparison.OrdinalIgnoreCase)));
-        Assert.IsTrue(result.Any(r => r.Description.Contains("User", StringComparison.OrdinalIgnoreCase)));
+        Assert.IsTrue(result.Any(r => r.Description?.Contains("User", StringComparison.OrdinalIgnoreCase) == true));
     }
 
     #endregion

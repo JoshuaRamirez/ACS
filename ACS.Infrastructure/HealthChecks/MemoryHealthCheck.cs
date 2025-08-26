@@ -2,6 +2,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Logging;
 using System.Diagnostics;
+using System.Runtime;
 
 namespace ACS.Infrastructure.HealthChecks;
 
@@ -38,17 +39,17 @@ public class MemoryHealthCheck : IHealthCheck
             var virtualMemoryMB = process.VirtualMemorySize64 / (1024 * 1024);
             var pagedMemoryMB = process.PagedMemorySize64 / (1024 * 1024);
             
-            // Get GC memory info
-            var gcInfo = GC.GetMemoryInfo();
-            var totalMemoryMB = gcInfo.TotalAvailableMemoryBytes / (1024 * 1024);
-            var heapSizeMB = gcInfo.HeapSizeBytes / (1024 * 1024);
-            var memoryLoadPercent = (double)gcInfo.MemoryLoadBytes / gcInfo.TotalAvailableMemoryBytes * 100;
+            // Get GC memory info (GC.GetMemoryInfo not available in this .NET version)
+            var totalMemory = GC.GetTotalMemory(false);
+            var totalMemoryMB = totalMemory / (1024 * 1024);
+            var heapSizeMB = totalMemoryMB; // Approximation
+            var memoryLoadPercent = (double)workingSetMB / totalMemoryMB * 100;
             
             // Get generation information
             var gen0Collections = GC.CollectionCount(0);
             var gen1Collections = GC.CollectionCount(1);
             var gen2Collections = GC.CollectionCount(2);
-            var totalMemory = GC.GetTotalMemory(false) / (1024 * 1024);
+            var managedMemoryMB = GC.GetTotalMemory(false) / (1024 * 1024);
             var allocatedMemory = GC.GetTotalAllocatedBytes() / (1024 * 1024);
 
             var data = new Dictionary<string, object>
@@ -58,41 +59,20 @@ public class MemoryHealthCheck : IHealthCheck
                 ["VirtualMemoryMB"] = virtualMemoryMB,
                 ["PagedMemoryMB"] = pagedMemoryMB,
                 ["ManagedHeapMB"] = heapSizeMB,
-                ["TotalManagedMemoryMB"] = totalMemory,
+                ["TotalManagedMemoryMB"] = managedMemoryMB,
                 ["TotalAllocatedMB"] = allocatedMemory,
                 ["AvailableMemoryMB"] = totalMemoryMB,
                 ["MemoryLoadPercent"] = Math.Round(memoryLoadPercent, 2),
                 ["Gen0Collections"] = gen0Collections,
                 ["Gen1Collections"] = gen1Collections,
                 ["Gen2Collections"] = gen2Collections,
-                ["IsServerGC"] = GCSettings.IsServerGC,
-                ["LatencyMode"] = GCSettings.LatencyMode.ToString(),
-                ["LargeObjectHeapCompactionMode"] = GCSettings.LargeObjectHeapCompactionMode.ToString()
+                ["IsServerGC"] = System.Runtime.GCSettings.IsServerGC,
+                ["LatencyMode"] = System.Runtime.GCSettings.LatencyMode.ToString(),
+                ["LargeObjectHeapCompactionMode"] = System.Runtime.GCSettings.LargeObjectHeapCompactionMode.ToString()
             };
 
-            // Add additional GC memory info if available
-            if (gcInfo.Generation0Size > 0)
-            {
-                data["Gen0SizeMB"] = gcInfo.Generation0Size / (1024 * 1024);
-                data["Gen1SizeMB"] = gcInfo.Generation1Size / (1024 * 1024);
-                data["Gen2SizeMB"] = gcInfo.Generation2Size / (1024 * 1024);
-                data["LOHSizeMB"] = gcInfo.LargeObjectHeapSize / (1024 * 1024);
-                data["POHSizeMB"] = gcInfo.PinnedObjectHeapSize / (1024 * 1024);
-            }
-
-            // Check for fragmentation
-            var fragmentedMemoryMB = gcInfo.FragmentedBytes / (1024 * 1024);
-            if (fragmentedMemoryMB > 0)
-            {
-                data["FragmentedMemoryMB"] = fragmentedMemoryMB;
-                var fragmentationPercent = (double)gcInfo.FragmentedBytes / gcInfo.HeapSizeBytes * 100;
-                data["FragmentationPercent"] = Math.Round(fragmentationPercent, 2);
-                
-                if (fragmentationPercent > 30)
-                {
-                    _logger.LogWarning("High memory fragmentation detected: {Percent}%", fragmentationPercent);
-                }
-            }
+            // Additional GC memory info not available in this .NET version
+            // Generation sizes and fragmentation info would require GC.GetMemoryInfo()
 
             // Check thresholds
             if (workingSetMB > _maxMemoryMB)

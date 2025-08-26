@@ -283,7 +283,7 @@ public class DistributedEntityCache : IEntityCache
     }
     
     // Cache management
-    public async Task<CacheStatistics> GetStatisticsAsync()
+    public Task<CacheStatistics> GetStatisticsAsync()
     {
         var stats = new CacheStatistics
         {
@@ -298,10 +298,10 @@ public class DistributedEntityCache : IEntityCache
         stats.ItemCount = -1;
         stats.MemoryUsageBytes = -1;
         
-        return stats;
+        return Task.FromResult(stats);
     }
     
-    public async Task ClearAsync()
+    public Task ClearAsync()
     {
         using var activity = _activitySource.StartActivity("ClearCache");
         activity?.SetTag("tenant.id", _tenantId);
@@ -315,9 +315,10 @@ public class DistributedEntityCache : IEntityCache
         Interlocked.Exchange(ref _totalMisses, 0);
         _hitsByType.Clear();
         _missesByType.Clear();
+        return Task.CompletedTask;
     }
     
-    public async Task WarmupAsync()
+    public Task WarmupAsync()
     {
         using var activity = _activitySource.StartActivity("WarmupCache");
         activity?.SetTag("tenant.id", _tenantId);
@@ -325,6 +326,7 @@ public class DistributedEntityCache : IEntityCache
         // In production, this would preload frequently accessed entities
         // For distributed cache, this is less critical as multiple processes share the cache
         _logger.LogInformation("Cache warmup requested for tenant {TenantId}", _tenantId);
+        return Task.CompletedTask;
     }
     
     // Helper methods

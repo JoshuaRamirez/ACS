@@ -1,6 +1,8 @@
 using Microsoft.Extensions.Logging;
+using System.Collections;
 using System.Diagnostics;
 using System.Reflection;
+using System.Runtime;
 using System.Runtime.InteropServices;
 using System.Security.Principal;
 using System.Text;
@@ -112,24 +114,25 @@ public class DiagnosticService : IDiagnosticService
                 var threadDetails = new ThreadDetails
                 {
                     ManagedThreadId = thread.Id,
-                    ThreadState = thread.ThreadState,
-                    Priority = thread.PriorityLevel,
-                    StartTime = thread.StartTime,
+                    ThreadState = MapThreadState(thread.ThreadState),
+                    Priority = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? MapThreadPriority(thread.PriorityLevel) : System.Threading.ThreadPriority.Normal,
+                    StartTime = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) || RuntimeInformation.IsOSPlatform(OSPlatform.Linux) ? thread.StartTime : DateTime.MinValue,
                     TotalProcessorTime = thread.TotalProcessorTime,
                     UserProcessorTime = thread.UserProcessorTime,
-                    WaitReason = thread.ThreadState == ThreadState.Wait ? thread.WaitReason : null
+                    WaitReason = thread.ThreadState == System.Diagnostics.ThreadState.Wait ? thread.WaitReason : null
                 };
 
                 threadInfo.Threads.Add(threadDetails);
 
                 // Count threads by state
-                if (threadInfo.ThreadsByState.ContainsKey(thread.ThreadState))
+                var mappedState = MapThreadState(thread.ThreadState);
+                if (threadInfo.ThreadsByState.ContainsKey(mappedState))
                 {
-                    threadInfo.ThreadsByState[thread.ThreadState]++;
+                    threadInfo.ThreadsByState[mappedState]++;
                 }
                 else
                 {
-                    threadInfo.ThreadsByState[thread.ThreadState] = 1;
+                    threadInfo.ThreadsByState[mappedState] = 1;
                 }
             }
             catch (Exception ex)
@@ -206,9 +209,9 @@ public class DiagnosticService : IDiagnosticService
             Gen0Collections = GC.CollectionCount(0),
             Gen1Collections = GC.CollectionCount(1),
             Gen2Collections = GC.CollectionCount(2),
-            IsServerGC = GCSettings.IsServerGC,
+            IsServerGC = System.Runtime.GCSettings.IsServerGC,
             MaxGeneration = GC.MaxGeneration,
-            LatencyMode = GCSettings.LatencyMode
+            LatencyMode = System.Runtime.GCSettings.LatencyMode
         };
 
         // Get generation sizes
@@ -259,7 +262,7 @@ public class DiagnosticService : IDiagnosticService
                     Version = assembly.GetName().Version?.ToString() ?? string.Empty,
                     Location = assembly.Location,
                     FullName = assembly.FullName ?? string.Empty,
-                    IsGAC = assembly.GlobalAssemblyCache,
+                    IsGAC = false, // GAC is not supported in .NET Core/.NET 5+
                     IsDynamic = assembly.IsDynamic,
                     LoadTime = DateTime.Now // Approximation
                 };
@@ -399,7 +402,8 @@ public class DiagnosticService : IDiagnosticService
                 writer.WriteLine("Threads:");
                 foreach (ProcessThread thread in _currentProcess.Threads)
                 {
-                    writer.WriteLine($"  Thread {thread.Id}: State={thread.ThreadState}, Priority={thread.PriorityLevel}");
+                    var priority = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? thread.PriorityLevel.ToString() : "Unknown";
+                    writer.WriteLine($"  Thread {thread.Id}: State={thread.ThreadState}, Priority={priority}");
                 }
                 writer.WriteLine();
                 
@@ -595,5 +599,36 @@ public class DiagnosticService : IDiagnosticService
 
         return sensitiveNames.Any(sensitive => 
             name.Contains(sensitive, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static System.Threading.ThreadState MapThreadState(System.Diagnostics.ThreadState diagnosticsState)
+    {
+        return diagnosticsState switch
+        {
+            System.Diagnostics.ThreadState.Initialized => System.Threading.ThreadState.Unstarted,
+            System.Diagnostics.ThreadState.Ready => System.Threading.ThreadState.Running,
+            System.Diagnostics.ThreadState.Running => System.Threading.ThreadState.Running,
+            System.Diagnostics.ThreadState.Standby => System.Threading.ThreadState.WaitSleepJoin,
+            System.Diagnostics.ThreadState.Terminated => System.Threading.ThreadState.Stopped,
+            System.Diagnostics.ThreadState.Wait => System.Threading.ThreadState.WaitSleepJoin,
+            System.Diagnostics.ThreadState.Transition => System.Threading.ThreadState.Running,
+            System.Diagnostics.ThreadState.Unknown => System.Threading.ThreadState.Running,
+            _ => System.Threading.ThreadState.Running
+        };
+    }
+
+    private static System.Threading.ThreadPriority MapThreadPriority(System.Diagnostics.ThreadPriorityLevel priorityLevel)
+    {
+        return priorityLevel switch
+        {
+            System.Diagnostics.ThreadPriorityLevel.Idle => System.Threading.ThreadPriority.Lowest,
+            System.Diagnostics.ThreadPriorityLevel.Lowest => System.Threading.ThreadPriority.Lowest,
+            System.Diagnostics.ThreadPriorityLevel.BelowNormal => System.Threading.ThreadPriority.BelowNormal,
+            System.Diagnostics.ThreadPriorityLevel.Normal => System.Threading.ThreadPriority.Normal,
+            System.Diagnostics.ThreadPriorityLevel.AboveNormal => System.Threading.ThreadPriority.AboveNormal,
+            System.Diagnostics.ThreadPriorityLevel.Highest => System.Threading.ThreadPriority.Highest,
+            System.Diagnostics.ThreadPriorityLevel.TimeCritical => System.Threading.ThreadPriority.Highest,
+            _ => System.Threading.ThreadPriority.Normal
+        };
     }
 }

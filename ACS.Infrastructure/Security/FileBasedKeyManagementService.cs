@@ -267,7 +267,7 @@ public class FileBasedKeyManagementService : IKeyManagementService
         return Path.Combine(tenantDirectory, $"key_v{version}.json");
     }
 
-    private async Task<string> EncryptWithMasterKeyAsync(string plainText)
+    private Task<string> EncryptWithMasterKeyAsync(string plainText)
     {
         using var aes = Aes.Create();
         aes.Key = Convert.FromBase64String(_masterKey);
@@ -282,10 +282,10 @@ public class FileBasedKeyManagementService : IKeyManagementService
         Buffer.BlockCopy(aes.IV, 0, result, 0, aes.IV.Length);
         Buffer.BlockCopy(encryptedBytes, 0, result, aes.IV.Length, encryptedBytes.Length);
 
-        return Convert.ToBase64String(result);
+        return Task.FromResult(Convert.ToBase64String(result));
     }
 
-    private async Task<string> DecryptWithMasterKeyAsync(string encryptedText)
+    private Task<string> DecryptWithMasterKeyAsync(string encryptedText)
     {
         var encryptedBytes = Convert.FromBase64String(encryptedText);
 
@@ -303,7 +303,7 @@ public class FileBasedKeyManagementService : IKeyManagementService
 
         using var decryptor = aes.CreateDecryptor();
         var decryptedBytes = decryptor.TransformFinalBlock(cipherBytes, 0, cipherBytes.Length);
-        return Encoding.UTF8.GetString(decryptedBytes);
+        return Task.FromResult(Encoding.UTF8.GetString(decryptedBytes));
     }
 
     private async Task SecureDeleteFileAsync(string filePath)

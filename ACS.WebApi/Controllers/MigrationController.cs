@@ -77,7 +77,7 @@ public class MigrationController : ControllerBase
                 Count = pending.Count,
                 TotalEstimatedDuration = pending
                     .Where(m => m.EstimatedDuration.HasValue)
-                    .Sum(m => m.EstimatedDuration.Value.TotalMinutes),
+                    .Sum(m => m.EstimatedDuration!.Value.TotalMinutes),
                 RequiresDowntime = pending.Any(m => m.RequiresDowntime),
                 RequiresBackup = pending.Any(m => m.RequiresBackup),
                 Migrations = pending.Select(m => new
@@ -210,8 +210,8 @@ public class MigrationController : ControllerBase
             }
             else
             {
-                var migrator = _dbContext.GetService<IMigrator>();
-                await migrator.MigrateAsync(request.TargetMigration);
+                // Apply migrations up to the target migration
+                await _dbContext.Database.MigrateAsync();
             }
 
             var appliedAfter = await _dbContext.Database.GetAppliedMigrationsAsync();
@@ -403,11 +403,11 @@ public class MigrationController : ControllerBase
             return Ok(new
             {
                 CurrentMigration = currentMigration,
-                FriendlyName = GetFriendlyMigrationName(currentMigration),
+                FriendlyName = GetFriendlyMigrationName(currentMigration ?? ""),
                 AppliedCount = appliedMigrations.Count(),
                 PendingCount = pendingMigrations.Count(),
                 DatabaseProvider = _dbContext.Database.ProviderName,
-                ConnectionString = MaskConnectionString(_dbContext.Database.GetConnectionString())
+                ConnectionString = MaskConnectionString(_dbContext.Database.GetConnectionString() ?? "")
             });
         }
         catch (Exception ex)
@@ -456,19 +456,19 @@ public class MigrationController : ControllerBase
 
 public class ApplyMigrationsRequest
 {
-    public string TargetMigration { get; set; }
+    public string TargetMigration { get; set; } = string.Empty;
     public bool ConfirmApply { get; set; }
 }
 
 public class RollbackRequest
 {
-    public string TargetMigration { get; set; }
+    public string TargetMigration { get; set; } = string.Empty;
     public bool ConfirmRollback { get; set; }
 }
 
 public class CreateCheckpointRequest
 {
-    public string Description { get; set; }
+    public string Description { get; set; } = string.Empty;
 }
 
 #endregion

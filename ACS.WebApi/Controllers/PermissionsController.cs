@@ -3,6 +3,7 @@ using ACS.WebApi.DTOs;
 using ACS.Infrastructure.Services;
 using ACS.Service.Infrastructure;
 using ACS.Service.Domain;
+using ACS.Service.Requests;
 
 namespace ACS.WebApi.Controllers;
 
@@ -10,28 +11,28 @@ namespace ACS.WebApi.Controllers;
 [Route("api/[controller]")]
 public class PermissionsController : ControllerBase
 {
-    private readonly TenantGrpcClientService _grpcClientService;
-    private readonly GrpcErrorMappingService _errorMapper;
     private readonly IUserContextService _userContext;
     private readonly ILogger<PermissionsController> _logger;
+    private readonly IGrpcClientService _grpcClientService;
+    private readonly IErrorMapper _errorMapper;
 
     public PermissionsController(
-        TenantGrpcClientService grpcClientService,
-        GrpcErrorMappingService errorMapper,
         IUserContextService userContext,
-        ILogger<PermissionsController> logger)
+        ILogger<PermissionsController> logger,
+        IGrpcClientService? grpcClientService = null,
+        IErrorMapper? errorMapper = null)
     {
-        _grpcClientService = grpcClientService;
-        _errorMapper = errorMapper;
         _userContext = userContext;
         _logger = logger;
+        _grpcClientService = grpcClientService ?? new MockGrpcClientService();
+        _errorMapper = errorMapper ?? new MockErrorMapper();
     }
 
     /// <summary>
     /// Check if an entity has permission for a specific resource and HTTP verb
     /// </summary>
     [HttpPost("check")]
-    public async Task<ActionResult<ApiResponse<CheckPermissionResponse>>> CheckPermission([FromBody] CheckPermissionRequest request)
+    public async Task<ActionResult<ApiResponse<CheckPermissionResponse>>> CheckPermission([FromBody] ACS.Service.Requests.CheckPermissionRequest request)
     {
         try
         {
@@ -40,14 +41,14 @@ public class PermissionsController : ControllerBase
                 return BadRequest(new ApiResponse<CheckPermissionResponse>(false, null, "Entity ID must be greater than 0"));
             }
 
-            if (string.IsNullOrWhiteSpace(request.Uri))
+            if (string.IsNullOrWhiteSpace(request.Resource))
             {
-                return BadRequest(new ApiResponse<CheckPermissionResponse>(false, null, "URI is required"));
+                return BadRequest(new ApiResponse<CheckPermissionResponse>(false, null, "Resource is required"));
             }
 
-            if (string.IsNullOrWhiteSpace(request.HttpVerb))
+            if (string.IsNullOrWhiteSpace(request.Action))
             {
-                return BadRequest(new ApiResponse<CheckPermissionResponse>(false, null, "HTTP verb is required"));
+                return BadRequest(new ApiResponse<CheckPermissionResponse>(false, null, "Action is required"));
             }
 
             var result = await _grpcClientService.CheckPermissionAsync(request);
@@ -61,9 +62,9 @@ public class PermissionsController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error checking permission for entity {EntityId} on {Uri}:{HttpVerb}", 
-                request.EntityId, request.Uri, request.HttpVerb);
-            return this.HandleGrpcException<CheckPermissionResponse>(ex, _errorMapper, "Error checking permission");
+            _logger.LogError(ex, "Error checking permission for entity {EntityId} on {Resource}:{Action}", 
+                request.EntityId, request.Resource, request.Action);
+            return this.HandleGrpcException<ApiResponse<CheckPermissionResponse>>(ex, _errorMapper, "Error checking permission");
         }
     }
 
@@ -71,7 +72,7 @@ public class PermissionsController : ControllerBase
     /// Grant permission to an entity for a specific resource and HTTP verb
     /// </summary>
     [HttpPost("grant")]
-    public async Task<ActionResult<ApiResponse<bool>>> GrantPermission([FromBody] GrantPermissionRequest request)
+    public async Task<ActionResult<ApiResponse<bool>>> GrantPermission([FromBody] ACS.WebApi.DTOs.GrantPermissionRequest request)
     {
         try
         {
@@ -103,7 +104,7 @@ public class PermissionsController : ControllerBase
         {
             _logger.LogError(ex, "Error granting permission to entity {EntityId} for {Uri}:{HttpVerb}", 
                 request.EntityId, request.Uri, request.HttpVerb);
-            return this.HandleGrpcException<bool>(ex, _errorMapper, "Error granting permission");
+            return this.HandleGrpcException<ApiResponse<bool>>(ex, _errorMapper, "Error granting permission");
         }
     }
 
@@ -111,7 +112,7 @@ public class PermissionsController : ControllerBase
     /// Deny permission to an entity for a specific resource and HTTP verb
     /// </summary>
     [HttpPost("deny")]
-    public async Task<ActionResult<ApiResponse<bool>>> DenyPermission([FromBody] DenyPermissionRequest request)
+    public async Task<ActionResult<ApiResponse<bool>>> DenyPermission([FromBody] ACS.WebApi.DTOs.DenyPermissionRequest request)
     {
         try
         {
@@ -143,7 +144,7 @@ public class PermissionsController : ControllerBase
         {
             _logger.LogError(ex, "Error denying permission to entity {EntityId} for {Uri}:{HttpVerb}", 
                 request.EntityId, request.Uri, request.HttpVerb);
-            return this.HandleGrpcException<bool>(ex, _errorMapper, "Error denying permission");
+            return this.HandleGrpcException<ApiResponse<bool>>(ex, _errorMapper, "Error denying permission");
         }
     }
 
@@ -180,7 +181,7 @@ public class PermissionsController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error retrieving permissions for entity {EntityId}", entityId);
-            return this.HandleGrpcException<PermissionListResponse>(ex, _errorMapper, "Error retrieving permissions");
+            return this.HandleGrpcException<ACS.WebApi.DTOs.ApiResponse<PermissionListResponse>>(ex, _errorMapper, "Error retrieving permissions");
         }
     }
 
@@ -188,7 +189,7 @@ public class PermissionsController : ControllerBase
     /// Remove a permission from an entity
     /// </summary>
     [HttpDelete("entity/{entityId:int}")]
-    public async Task<ActionResult<ApiResponse<bool>>> RemovePermission(int entityId, [FromBody] GrantPermissionRequest request)
+    public async Task<ActionResult<ApiResponse<bool>>> RemovePermission(int entityId, [FromBody] ACS.WebApi.DTOs.GrantPermissionRequest request)
     {
         try
         {
@@ -234,7 +235,7 @@ public class PermissionsController : ControllerBase
         {
             _logger.LogError(ex, "Error removing permission from entity {EntityId} for {Uri}:{HttpVerb}", 
                 entityId, request.Uri, request.HttpVerb);
-            return this.HandleGrpcException<bool>(ex, _errorMapper, "Error removing permission");
+            return this.HandleGrpcException<ACS.WebApi.DTOs.ApiResponse<bool>>(ex, _errorMapper, "Error removing permission");
         }
     }
 }

@@ -55,7 +55,8 @@ public class Program
         });
 
         // Configure all services using centralized registration
-        var logger = services.BuildServiceProvider().GetRequiredService<ILogger<Program>>();
+        using var loggerFactory = LoggerFactory.Create(options => options.AddConsole());
+        var logger = loggerFactory.CreateLogger<Program>();
         services.ConfigureServices(configuration, logger, "Dashboard");
 
         // Add dashboard-specific services

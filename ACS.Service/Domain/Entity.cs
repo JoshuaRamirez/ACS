@@ -13,29 +13,46 @@ public abstract class Entity
     [Required]
     [StringLength(255, MinimumLength = 1)]
     public string Name { get; set; } = string.Empty;
-    [ValidEntityRelationship("child", MaxRelationships = 100)]
+    
+    [ValidEntityRelationship("child")]
     public List<Entity> Children { get; set; } = new List<Entity>();
     
-    [ValidEntityRelationship("parent", MaxRelationships = 10)]
+    [ValidEntityRelationship("parent")]
     public List<Entity> Parents { get; set; } = new List<Entity>();
     
     [ValidPermissionCombination]
     public List<Permission> Permissions { get; set; } = new List<Permission>();
+    
+    public Dictionary<string, object> Metadata { get; set; } = new Dictionary<string, object>();
 
     public void AddPermission(Permission permission)
     {
         Permissions.Add(permission);
-        // Note: Persistence should now be handled through proper service layer
-        // AddPermissionToEntity.Execute(permission, Id);
+        // EF Core change tracking will handle persistence automatically
+    }
+
+    public void AddPermission(Permission permission, string addedBy)
+    {
+        Permissions.Add(permission);
+        // Audit tracking could be implemented here
+        // EF Core change tracking will handle persistence automatically
     }
 
     public void RemovePermission(Permission permission)
     {
-        if (Permissions.Remove(permission))
+        Permissions.Remove(permission);
+        // EF Core change tracking will handle persistence automatically
+    }
+
+    public void RemovePermission(string resource, string action, string removedBy)
+    {
+        var permission = Permissions.FirstOrDefault(p => p.Resource == resource && p.Action == action);
+        if (permission != null)
         {
-            // Note: Persistence should now be handled through proper service layer
-            // RemovePermissionFromEntity.Execute(permission, Id);
+            Permissions.Remove(permission);
+            // Audit tracking could be implemented here
         }
+        // EF Core change tracking will handle persistence automatically
     }
 
     [MaintainsInvariants("INV004", "INV006")]
@@ -48,6 +65,7 @@ public abstract class Entity
             
         Children.Add(child);
         child.Parents.Add(this);
+        // EF Core change tracking will handle persistence automatically
     }
 
     [MaintainsInvariants("INV006")]
@@ -58,6 +76,7 @@ public abstract class Entity
             
         Children.Remove(child);
         child.Parents.Remove(this);
+        // EF Core change tracking will handle persistence automatically
     }
 
     // Note: Permission evaluation is now handled by IPermissionEvaluationService

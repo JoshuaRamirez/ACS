@@ -3,7 +3,6 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Web;
 using Microsoft.Extensions.Options;
-using Ganss.XSS;
 using System.Text.Json;
 
 namespace ACS.WebApi.Security.Validation;
@@ -15,40 +14,14 @@ public class InputValidator : IInputValidator
 {
     private readonly InputValidationOptions _options;
     private readonly ILogger<InputValidator> _logger;
-    private readonly HtmlSanitizer _htmlSanitizer;
 
     public InputValidator(IOptions<InputValidationOptions> options, ILogger<InputValidator> logger)
     {
         _options = options?.Value ?? new InputValidationOptions();
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         
-        // Initialize HTML sanitizer with allowed tags and attributes
-        _htmlSanitizer = new HtmlSanitizer();
-        ConfigureHtmlSanitizer();
     }
 
-    private void ConfigureHtmlSanitizer()
-    {
-        _htmlSanitizer.AllowedTags.Clear();
-        _htmlSanitizer.AllowedAttributes.Clear();
-        _htmlSanitizer.AllowedSchemes.Clear();
-
-        if (_options.AllowHtmlTags)
-        {
-            foreach (var tag in _options.AllowedHtmlTags)
-            {
-                _htmlSanitizer.AllowedTags.Add(tag);
-            }
-
-            foreach (var attr in _options.AllowedHtmlAttributes)
-            {
-                _htmlSanitizer.AllowedAttributes.Add(attr);
-            }
-
-            _htmlSanitizer.AllowedSchemes.Add("http");
-            _htmlSanitizer.AllowedSchemes.Add("https");
-        }
-    }
 
     public ValidationResult ValidateAndSanitize(string? input, ValidationContext context)
     {
@@ -174,7 +147,7 @@ public class InputValidator : IInputValidator
         }
 
         // Use HTML sanitizer to clean the HTML
-        return _htmlSanitizer.Sanitize(html);
+        return HttpUtility.HtmlEncode(html);
     }
 
     public string SanitizeSql(string? sql)
@@ -329,7 +302,7 @@ public class InputValidator : IInputValidator
         return true;
     }
 
-    public T ValidateAndSanitizeObject<T>(T obj) where T : class
+    public T? ValidateAndSanitizeObject<T>(T? obj) where T : class
     {
         if (obj == null)
             return obj;

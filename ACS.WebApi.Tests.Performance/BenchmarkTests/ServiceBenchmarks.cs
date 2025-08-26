@@ -5,7 +5,10 @@ using Microsoft.EntityFrameworkCore;
 using ACS.Service.Data;
 using ACS.Service.Services;
 using ACS.Service.Domain;
+using ACS.Service.Requests;
+using ACS.Service.Responses;
 using Microsoft.Extensions.Logging;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
 
 namespace ACS.WebApi.Tests.Performance.BenchmarkTests;
@@ -61,46 +64,45 @@ public class ServiceBenchmarks
     }
 
     [Benchmark]
-    public async Task<IEnumerable<User>> GetAllUsers()
+    public async Task<UsersResponse> GetAllUsers()
     {
-        return await _userService!.GetAllUsersAsync();
+        return await _userService!.GetAllAsync(new GetUsersRequest());
     }
 
     [Benchmark]
-    public async Task<User?> GetUserById()
+    public async Task<UserResponse> GetUserById()
     {
-        return await _userService!.GetUserByIdAsync(1);
+        return await _userService!.GetByIdAsync(new GetUserRequest { UserId = 1 });
     }
 
     [Benchmark]
     [Arguments(1, 10)]
     [Arguments(1, 50)]
     [Arguments(1, 100)]
-    public async Task<IEnumerable<User>> GetUsersPaginated(int page, int size)
+    public async Task<UsersResponse> GetUsersPaginated(int page, int size)
     {
-        return await _userService!.GetUsersAsync(page, size);
+        return await _userService!.GetAllAsync(new GetUsersRequest { Page = page, PageSize = size });
     }
 
     [Benchmark]
     [Arguments("User_1")]
     [Arguments("test")]
     [Arguments("admin")]
-    public async Task<IEnumerable<User>> SearchUsers(string searchTerm)
+    public async Task<UsersResponse> SearchUsers(string searchTerm)
     {
-        return await _userService!.SearchUsersAsync(searchTerm);
+        return await _userService!.GetAllAsync(new GetUsersRequest { Search = searchTerm });
     }
 
     [Benchmark]
-    public async Task<User> CreateUser()
+    public async Task<CreateUserResponse> CreateUser()
     {
-        var user = new User
+        var request = new CreateUserRequest
         {
             Name = $"BenchmarkUser_{Guid.NewGuid()}",
-            Email = $"benchmark{Guid.NewGuid()}@example.com",
-            PasswordHash = BCrypt.Net.BCrypt.HashPassword("Password123!")
+            CreatedBy = "benchmark-test"
         };
 
-        return await _userService!.CreateUserAsync(user);
+        return await _userService!.CreateAsync(request);
     }
 
     [Benchmark]
@@ -143,7 +145,7 @@ public class ServiceBenchmarks
     }
 
     [Benchmark]
-    public async Task<IEnumerable<string>> GetUserPermissions()
+    public async Task<List<ACS.Service.Domain.Permission>> GetUserPermissions()
     {
         return await _permissionService!.GetUserPermissionsAsync(1);
     }
@@ -152,21 +154,19 @@ public class ServiceBenchmarks
     [Arguments(10)]
     [Arguments(50)]
     [Arguments(100)]
-    public async Task<List<User>> CreateMultipleUsers(int count)
+    public async Task<List<ACS.Service.Responses.CreateUserResponse>> CreateMultipleUsers(int count)
     {
-        var users = new List<User>();
-        var tasks = new List<Task<User>>();
+        var tasks = new List<Task<ACS.Service.Responses.CreateUserResponse>>();
 
         for (int i = 0; i < count; i++)
         {
-            var user = new User
+            var request = new ACS.Service.Requests.CreateUserRequest
             {
                 Name = $"BulkUser_{Guid.NewGuid()}",
-                Email = $"bulk{Guid.NewGuid()}@example.com",
-                PasswordHash = BCrypt.Net.BCrypt.HashPassword("Password123!")
+                CreatedBy = "benchmark-test"
             };
 
-            tasks.Add(_userService!.CreateUserAsync(user));
+            tasks.Add(_userService!.CreateAsync(request));
         }
 
         var results = await Task.WhenAll(tasks);
@@ -179,15 +179,16 @@ public class ServiceBenchmarks
     [Arguments(100)]
     public async Task<List<User>> GetMultipleUsers(int count)
     {
-        var tasks = new List<Task<User?>>();
+        var tasks = new List<Task<ACS.Service.Responses.UserResponse>>();
 
         for (int i = 1; i <= count; i++)
         {
-            tasks.Add(_userService!.GetUserByIdAsync(i));
+            var request = new ACS.Service.Requests.GetUserRequest { UserId = i };
+            tasks.Add(_userService!.GetByIdAsync(request));
         }
 
         var results = await Task.WhenAll(tasks);
-        return results.Where(u => u != null).Cast<User>().ToList();
+        return results.Select(r => r.User).Where(u => u != null).Cast<ACS.Service.Domain.User>().ToList();
     }
 
     [Benchmark]
@@ -228,9 +229,8 @@ public class ServiceBenchmarks
             .ToListAsync();
 
         var groups = await _context.Groups
-            .Include(g => g.ParentGroup)
-            .Include(g => g.ChildGroups)
-            .Where(g => g.ParentGroupId == null)
+            .Include(g => g.ParentGroupRelations)
+            .Include(g => g.ChildGroupRelations)
             .ToListAsync();
 
         // Return combined count to prevent compiler optimization
@@ -266,11 +266,9 @@ public class ServiceBenchmarks
             {
                 Id = i,
                 Name = $"BenchmarkRole_{i}",
-                Description = $"Benchmark role {i}",
-                CreatedDate = DateTime.UtcNow,
-                CreatedBy = "benchmark",
-                LastModifiedDate = DateTime.UtcNow,
-                LastModifiedBy = "benchmark"
+                EntityId = i,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
             });
         }
         _context.Roles.AddRange(roles);
@@ -283,12 +281,9 @@ public class ServiceBenchmarks
             {
                 Id = i,
                 Name = $"BenchmarkGroup_{i}",
-                Description = $"Benchmark group {i}",
-                ParentGroupId = i > 10 ? Random.Shared.Next(1, 10) : null,
-                CreatedDate = DateTime.UtcNow,
-                CreatedBy = "benchmark",
-                LastModifiedDate = DateTime.UtcNow,
-                LastModifiedBy = "benchmark"
+                EntityId = i,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
             });
         }
         _context.Groups.AddRange(groups);
@@ -303,11 +298,9 @@ public class ServiceBenchmarks
                 Name = $"BenchmarkUser_{i}",
                 Email = $"benchmark{i}@example.com",
                 PasswordHash = BCrypt.Net.BCrypt.HashPassword("Password123!"),
-                IsActive = true,
-                CreatedDate = DateTime.UtcNow,
-                CreatedBy = "benchmark",
-                LastModifiedDate = DateTime.UtcNow,
-                LastModifiedBy = "benchmark"
+                EntityId = i,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
             });
         }
         _context.Users.AddRange(users);
@@ -331,7 +324,7 @@ public class BenchmarkRunner
         if (Environment.GetEnvironmentVariable("RUN_BENCHMARKS") == "true" || 
             string.Equals(Environment.GetEnvironmentVariable("Configuration"), "Release", StringComparison.OrdinalIgnoreCase))
         {
-            var summary = BenchmarkRunner.Run<ServiceBenchmarks>();
+            var summary = BenchmarkDotNet.Running.BenchmarkRunner.Run(typeof(ServiceBenchmarks));
             Console.WriteLine(summary);
         }
         else

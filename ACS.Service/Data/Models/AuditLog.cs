@@ -28,5 +28,9 @@ namespace ACS.Service.Data.Models
 
         [Required]
         public string ChangeDetails { get; set; } = string.Empty;
+        
+        // Additional properties for GDPR compliance tracking
+        public string? IpAddress { get; set; }
+        public string? UserAgent { get; set; }
     }
 }

@@ -1,302 +1,432 @@
-using ACS.Service.Data;
 using ACS.Service.Domain;
-using ACS.Infrastructure.Telemetry;
-using Microsoft.EntityFrameworkCore;
+using ACS.Service.Infrastructure;
+using ACS.Service.Data;
+using ACS.Service.Requests;
+using ACS.Service.Responses;
+using ACS.Service.Delegates.Queries;
 using Microsoft.Extensions.Logging;
 using System.Diagnostics;
 
 namespace ACS.Service.Services;
 
+/// <summary>
+/// Flat service for User operations in LMAX architecture
+/// Works directly with in-memory entity graph and fire-and-forget persistence
+/// Uses request/response pattern for clean API contracts
+/// No service-to-service dependencies
+/// </summary>
 public class UserService : IUserService
 {
+    private readonly InMemoryEntityGraph _entityGraph;
     private readonly ApplicationDbContext _dbContext;
-    private readonly ICommandProcessingService _commandProcessingService;
     private readonly ILogger<UserService> _logger;
 
     public UserService(
-        ApplicationDbContext dbContext, 
-        ICommandProcessingService commandProcessingService,
+        InMemoryEntityGraph entityGraph,
+        ApplicationDbContext dbContext,
         ILogger<UserService> logger)
     {
+        _entityGraph = entityGraph;
         _dbContext = dbContext;
-        _commandProcessingService = commandProcessingService;
         _logger = logger;
     }
 
-    public async Task<IEnumerable<Domain.User>> GetAllAsync()
+    public Task<UserResponse> GetByIdAsync(GetUserRequest request)
     {
-        using var activity = OpenTelemetryConfiguration.ServiceActivitySource.StartActivity("UserService.GetAll");
+        // Telemetry removed for build compatibility
         var stopwatch = Stopwatch.StartNew();
 
         try
         {
-            // Convert data model users to domain model users
-            var dataUsers = await _dbContext.Users
-                .Include(u => u.Entity)
-                .Include(u => u.UserGroups)
-                .ThenInclude(ug => ug.Group)
-                .Include(u => u.UserRoles)
-                .ThenInclude(ur => ur.Role)
-                .ToListAsync();
+            // Use Query object for data access
+            var getUserQuery = new GetUserByIdQuery
+            {
+                UserId = request.UserId,
+                EntityGraph = _entityGraph
+            };
 
-            var result = dataUsers.Select(ConvertToDomainUser).ToList();
+            var user = getUserQuery.Execute();
 
-            // Record metrics
-            activity?.SetTag("operation.success", true);
-            activity?.SetTag("users.count", result.Count);
-            OpenTelemetryConfiguration.RecordDatabaseOperation("GetAllUsers", stopwatch.Elapsed.TotalSeconds, true, "User");
+            // activity?.SetTag("operation.success", true);
+            // activity?.SetTag("user.found", user != null);
+            // Database operation recorded
 
-            _logger.LogDebug("Retrieved {UserCount} users in {Duration}ms", result.Count, stopwatch.ElapsedMilliseconds);
+            _logger.LogDebug("Retrieved user {UserId} in {Duration}ms, found: {Found}", 
+                request.UserId, stopwatch.ElapsedMilliseconds, user != null);
 
-            return result;
+            return Task.FromResult(new UserResponse
+            {
+                User = user,
+                Success = true,
+                Message = user != null ? "User found" : "User not found"
+            });
         }
         catch (Exception ex)
         {
-            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-            OpenTelemetryConfiguration.RecordDatabaseOperation("GetAllUsers", stopwatch.Elapsed.TotalSeconds, false, "User");
+            // activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+            // OpenTelemetryConfiguration.RecordDatabaseOperation("GetUserById", stopwatch.Elapsed.TotalSeconds, false, "User");
 
-            _logger.LogError(ex, "Error retrieving all users in {Duration}ms", stopwatch.ElapsedMilliseconds);
-            throw;
+            _logger.LogError(ex, "Error retrieving user {UserId} in {Duration}ms", 
+                request.UserId, stopwatch.ElapsedMilliseconds);
+
+            return Task.FromResult(new UserResponse
+            {
+                Success = false,
+                Message = "Error retrieving user",
+                Errors = new[] { ex.Message }
+            });
         }
     }
 
-    public async Task<Domain.User?> GetByIdAsync(int id)
+    public Task<UsersResponse> GetAllAsync(GetUsersRequest request)
     {
-        using var activity = OpenTelemetryConfiguration.ServiceActivitySource.StartActivity("UserService.GetById");
-        activity?.SetTag("user.id", id);
+        // using var activity = OpenTelemetryConfiguration.ServiceActivitySource.StartActivity("UserService.GetAll");
         var stopwatch = Stopwatch.StartNew();
 
         try
         {
-            var dataUser = await _dbContext.Users
-                .Include(u => u.Entity)
-                .Include(u => u.UserGroups)
-                .ThenInclude(ug => ug.Group)
-                .Include(u => u.UserRoles)
-                .ThenInclude(ur => ur.Role)
-                .FirstOrDefaultAsync(u => u.Id == id);
+            // Use composite Query object for data access with pagination and count
+            var getUsersWithCountQuery = new GetUsersWithCountQuery
+            {
+                Page = request.Page,
+                PageSize = request.PageSize,
+                Search = request.Search,
+                SortBy = request.SortBy,
+                SortDescending = request.SortDescending,
+                EntityGraph = _entityGraph
+            };
 
-            var result = dataUser != null ? ConvertToDomainUser(dataUser) : null;
+            var (users, totalCount) = getUsersWithCountQuery.Execute();
 
-            // Record metrics
-            activity?.SetTag("operation.success", true);
-            activity?.SetTag("user.found", result != null);
-            OpenTelemetryConfiguration.RecordDatabaseOperation("GetUserById", stopwatch.Elapsed.TotalSeconds, true, "User");
+            // activity?.SetTag("operation.success", true);
+            // activity?.SetTag("users.count", users.Count);
+            // activity?.SetTag("users.total", totalCount);
+            // OpenTelemetryConfiguration.RecordDatabaseOperation("GetAllUsers", stopwatch.Elapsed.TotalSeconds, true, "User");
 
-            _logger.LogDebug("Retrieved user {UserId} in {Duration}ms, found: {Found}", id, stopwatch.ElapsedMilliseconds, result != null);
+            _logger.LogDebug("Retrieved {UserCount} of {TotalCount} users in {Duration}ms", 
+                users.Count, totalCount, stopwatch.ElapsedMilliseconds);
 
-            return result;
+            return Task.FromResult(new UsersResponse
+            {
+                Users = users,
+                TotalCount = totalCount,
+                Page = request.Page,
+                PageSize = request.PageSize,
+                Success = true,
+                Message = $"Retrieved {users.Count} users"
+            });
         }
         catch (Exception ex)
         {
-            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-            OpenTelemetryConfiguration.RecordDatabaseOperation("GetUserById", stopwatch.Elapsed.TotalSeconds, false, "User");
+            // activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+            // OpenTelemetryConfiguration.RecordDatabaseOperation("GetAllUsers", stopwatch.Elapsed.TotalSeconds, false, "User");
 
-            _logger.LogError(ex, "Error retrieving user {UserId} in {Duration}ms", id, stopwatch.ElapsedMilliseconds);
-            throw;
+            _logger.LogError(ex, "Error retrieving users in {Duration}ms", stopwatch.ElapsedMilliseconds);
+
+            return Task.FromResult(new UsersResponse
+            {
+                Success = false,
+                Message = "Error retrieving users",
+                Errors = new[] { ex.Message }
+            });
         }
     }
 
-    public async Task<Domain.User> AddAsync(Domain.User user, string createdBy)
+    public async Task<CreateUserResponse> CreateAsync(CreateUserRequest request)
     {
-        // Create entity first
-        var entity = new Data.Models.Entity
-        {
-            EntityType = "User",
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
-        };
+        // using var activity = OpenTelemetryConfiguration.ServiceActivitySource.StartActivity("UserService.Create");
+        var stopwatch = Stopwatch.StartNew();
 
-        _dbContext.Entities.Add(entity);
-        await _dbContext.SaveChangesAsync(); // Save to get the ID
-
-        // Create data model user
-        var dataUser = new Data.Models.User
-        {
-            Name = user.Name,
-            EntityId = entity.Id,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
-        };
-
-        _dbContext.Users.Add(dataUser);
-        await _dbContext.SaveChangesAsync();
-
-        _logger.LogInformation("Created user {UserId} with name {UserName} by {CreatedBy}", dataUser.Id, user.Name, createdBy);
-
-        // Return domain user
-        user.Id = dataUser.Id;
-        return user;
-    }
-
-    public async Task<Domain.User> UpdateAsync(Domain.User user)
-    {
         try
         {
-            if (user == null)
+            if (string.IsNullOrWhiteSpace(request.Name))
             {
-                throw new ArgumentNullException(nameof(user), "User cannot be null");
-            }
-            
-            if (string.IsNullOrWhiteSpace(user.Name))
-            {
-                throw new ArgumentException("User name cannot be null or empty", nameof(user));
-            }
-
-            var dataUser = await _dbContext.Users.FindAsync(user.Id);
-            if (dataUser == null)
-            {
-                _logger.LogWarning("Attempted to update non-existent user {UserId}", user.Id);
-                throw new InvalidOperationException($"User {user.Id} not found");
+                return new CreateUserResponse
+                {
+                    Success = false,
+                    Message = "User name is required",
+                    Errors = new[] { "User name cannot be empty" }
+                };
             }
 
-            dataUser.Name = user.Name;
-            dataUser.UpdatedAt = DateTime.UtcNow;
-            _dbContext.Users.Update(dataUser);
-            
+            // Generate new ID and create user
+            var newId = _entityGraph.GetNextUserId();
+            var user = new User
+            {
+                Id = newId,
+                Name = request.Name
+            };
+
+            _entityGraph.Users[newId] = user;
+
+            // EF Core will handle persistence automatically via change tracking
             await _dbContext.SaveChangesAsync();
 
-            _logger.LogInformation("Successfully updated user {UserId} with name {UserName}", user.Id, user.Name);
-            return user;
-        }
-        catch (ArgumentException ex)
-        {
-            _logger.LogError(ex, "Invalid argument provided for user update: {UserId}", user?.Id);
-            throw;
-        }
-        catch (InvalidOperationException ex)
-        {
-            _logger.LogError(ex, "Invalid operation during user update: {UserId}", user?.Id);
-            throw;
+            // activity?.SetTag("operation.success", true);
+            // activity?.SetTag("user.id", newId);
+            // OpenTelemetryConfiguration.RecordDatabaseOperation("CreateUser", stopwatch.Elapsed.TotalSeconds, true, "User");
+
+            _logger.LogInformation("Created user {UserId} with name {UserName} by {CreatedBy} in {Duration}ms", 
+                newId, user.Name, request.CreatedBy, stopwatch.ElapsedMilliseconds);
+
+            return new CreateUserResponse
+            {
+                User = user,
+                Success = true,
+                Message = "User created successfully"
+            };
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unexpected error updating user {UserId}", user?.Id);
-            throw new InvalidOperationException($"Failed to update user {user?.Id}: {ex.Message}", ex);
+            // activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+            // OpenTelemetryConfiguration.RecordDatabaseOperation("CreateUser", stopwatch.Elapsed.TotalSeconds, false, "User");
+
+            _logger.LogError(ex, "Error creating user in {Duration}ms", stopwatch.ElapsedMilliseconds);
+
+            return new CreateUserResponse
+            {
+                Success = false,
+                Message = "Error creating user",
+                Errors = new[] { ex.Message }
+            };
         }
     }
 
-    public async Task DeleteAsync(int id)
+    public async Task<UpdateUserResponse> UpdateAsync(UpdateUserRequest request)
     {
+        // using var activity = OpenTelemetryConfiguration.ServiceActivitySource.StartActivity("UserService.Update");
+        // activity?.SetTag("user.id", request.UserId);
+        var stopwatch = Stopwatch.StartNew();
+
         try
         {
-            if (id <= 0)
+            if (string.IsNullOrWhiteSpace(request.Name))
             {
-                throw new ArgumentException("User ID must be a positive integer", nameof(id));
+                return new UpdateUserResponse
+                {
+                    Success = false,
+                    Message = "User name is required",
+                    Errors = new[] { "User name cannot be empty" }
+                };
             }
 
-            var dataUser = await _dbContext.Users
-                .Include(u => u.Entity)
-                .FirstOrDefaultAsync(u => u.Id == id);
-            
-            if (dataUser == null)
+            // Use Query object to check if user exists
+            var getUserQuery = new GetUserByIdQuery
             {
-                _logger.LogWarning("Attempted to delete non-existent user {UserId}", id);
-                throw new InvalidOperationException($"User {id} not found");
+                UserId = request.UserId,
+                EntityGraph = _entityGraph
+            };
+
+            var existingUser = getUserQuery.Execute();
+            if (existingUser == null)
+            {
+                return new UpdateUserResponse
+                {
+                    Success = false,
+                    Message = "User not found",
+                    Errors = new[] { $"User {request.UserId} not found" }
+                };
             }
 
-            // Check for dependencies before deletion
-            var hasActiveRelationships = await HasActiveDependenciesAsync(id);
-            if (hasActiveRelationships)
-            {
-                _logger.LogWarning("Cannot delete user {UserId} due to active relationships", id);
-                throw new InvalidOperationException($"Cannot delete user {id} with active relationships. Remove user from groups and roles first.");
-            }
+            // Use domain method for name change (includes business rules)
+            existingUser.ChangeName(request.Name, request.UpdatedBy);
 
-            // Cascading delete will handle relationships due to foreign key constraints
-            _dbContext.Users.Remove(dataUser);
-            if (dataUser.Entity != null)
-            {
-                _dbContext.Entities.Remove(dataUser.Entity);
-            }
-            
+            // EF Core change tracking will handle persistence automatically
             await _dbContext.SaveChangesAsync();
 
-            _logger.LogInformation("Successfully deleted user {UserId}", id);
-        }
-        catch (ArgumentException ex)
-        {
-            _logger.LogError(ex, "Invalid argument provided for user deletion: {UserId}", id);
-            throw;
-        }
-        catch (InvalidOperationException ex)
-        {
-            _logger.LogError(ex, "Invalid operation during user deletion: {UserId}", id);
-            throw;
+            // activity?.SetTag("operation.success", true);
+            // OpenTelemetryConfiguration.RecordDatabaseOperation("UpdateUser", stopwatch.Elapsed.TotalSeconds, true, "User");
+
+            _logger.LogInformation("Updated user {UserId} with name {UserName} by {UpdatedBy} in {Duration}ms", 
+                request.UserId, request.Name, request.UpdatedBy, stopwatch.ElapsedMilliseconds);
+
+            return new UpdateUserResponse
+            {
+                User = existingUser,
+                Success = true,
+                Message = "User updated successfully"
+            };
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unexpected error deleting user {UserId}", id);
-            throw new InvalidOperationException($"Failed to delete user {id}: {ex.Message}", ex);
+            // activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+            // OpenTelemetryConfiguration.RecordDatabaseOperation("UpdateUser", stopwatch.Elapsed.TotalSeconds, false, "User");
+
+            _logger.LogError(ex, "Error updating user {UserId} in {Duration}ms", request.UserId, stopwatch.ElapsedMilliseconds);
+
+            return new UpdateUserResponse
+            {
+                Success = false,
+                Message = "Error updating user",
+                Errors = new[] { ex.Message }
+            };
         }
     }
-    
-    private async Task<bool> HasActiveDependenciesAsync(int userId)
+
+    public async Task<UpdateUserResponse> PatchAsync(PatchUserRequest request)
     {
+        // using var activity = OpenTelemetryConfiguration.ServiceActivitySource.StartActivity("UserService.Patch");
+        // activity?.SetTag("user.id", request.UserId);
+        var stopwatch = Stopwatch.StartNew();
+
         try
         {
-            // Check for user-group relationships
-            var hasGroups = await _dbContext.UserGroups.AnyAsync(ug => ug.UserId == userId);
-            
-            // Check for user-role relationships  
-            var hasRoles = await _dbContext.UserRoles.AnyAsync(ur => ur.UserId == userId);
-            
-            return hasGroups || hasRoles;
+            // Use Query object to get user
+            var getUserQuery = new GetUserByIdQuery
+            {
+                UserId = request.UserId,
+                EntityGraph = _entityGraph
+            };
+
+            var existingUser = getUserQuery.Execute();
+            if (existingUser == null)
+            {
+                return new UpdateUserResponse
+                {
+                    Success = false,
+                    Message = "User not found",
+                    Errors = new[] { $"User {request.UserId} not found" }
+                };
+            }
+
+            // Only update non-null fields
+            if (!string.IsNullOrEmpty(request.Name))
+            {
+                existingUser.ChangeName(request.Name, request.UpdatedBy);
+            }
+
+            // EF Core change tracking will handle persistence automatically
+            await _dbContext.SaveChangesAsync();
+
+            // activity?.SetTag("operation.success", true);
+            // OpenTelemetryConfiguration.RecordDatabaseOperation("PatchUser", stopwatch.Elapsed.TotalSeconds, true, "User");
+
+            _logger.LogInformation("Patched user {UserId} by {UpdatedBy} in {Duration}ms", 
+                request.UserId, request.UpdatedBy, stopwatch.ElapsedMilliseconds);
+
+            return new UpdateUserResponse
+            {
+                User = existingUser,
+                Success = true,
+                Message = "User patched successfully"
+            };
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Error checking dependencies for user {UserId}", userId);
-            // Return true to be safe and prevent deletion if we can't verify
-            return true;
-        }
-    }
+            // activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+            // OpenTelemetryConfiguration.RecordDatabaseOperation("PatchUser", stopwatch.Elapsed.TotalSeconds, false, "User");
 
-    // Legacy methods for backward compatibility - these should be deprecated
-    public IEnumerable<Domain.User> GetAll()
-    {
-        return GetAllAsync().Result;
-    }
+            _logger.LogError(ex, "Error patching user {UserId} in {Duration}ms", request.UserId, stopwatch.ElapsedMilliseconds);
 
-    public Domain.User? GetById(int id)
-    {
-        return GetByIdAsync(id).Result;
-    }
-
-    public Domain.User Add(Domain.User user)
-    {
-        return AddAsync(user, "system").Result;
-    }
-
-    private Domain.User ConvertToDomainUser(Data.Models.User dataUser)
-    {
-        var domainUser = new Domain.User
-        {
-            Id = dataUser.Id,
-            Name = dataUser.Name
-        };
-
-        // Convert relationships - this is simplified
-        // In a complete implementation, you'd need to properly map all relationships
-        foreach (var userGroup in dataUser.UserGroups)
-        {
-            var domainGroup = new Domain.Group
+            return new UpdateUserResponse
             {
-                Id = userGroup.Group.Id,
-                Name = userGroup.Group.Name
+                Success = false,
+                Message = "Error patching user",
+                Errors = new[] { ex.Message }
             };
-            domainUser.Parents.Add(domainGroup);
         }
+    }
 
-        foreach (var userRole in dataUser.UserRoles)
+    public async Task<DeleteUserResponse> DeleteAsync(DeleteUserRequest request)
+    {
+        // using var activity = OpenTelemetryConfiguration.ServiceActivitySource.StartActivity("UserService.Delete");
+        // activity?.SetTag("user.id", request.UserId);
+        var stopwatch = Stopwatch.StartNew();
+
+        try
         {
-            var domainRole = new Domain.Role
+            // Use Query object to check if user exists before deletion
+            var getUserQuery = new GetUserByIdQuery
             {
-                Id = userRole.Role.Id,
-                Name = userRole.Role.Name
+                UserId = request.UserId,
+                EntityGraph = _entityGraph
             };
-            domainUser.Parents.Add(domainRole);
-        }
 
-        return domainUser;
+            var existingUser = getUserQuery.Execute();
+            if (existingUser == null)
+            {
+                return new DeleteUserResponse
+                {
+                    Success = false,
+                    Message = "User not found",
+                    Errors = new[] { $"User {request.UserId} not found" }
+                };
+            }
+
+            // Remove from in-memory graph
+            _entityGraph.Users.Remove(request.UserId);
+
+            // EF Core change tracking will handle persistence automatically
+            await _dbContext.SaveChangesAsync();
+
+            // activity?.SetTag("operation.success", true);
+            // OpenTelemetryConfiguration.RecordDatabaseOperation("DeleteUser", stopwatch.Elapsed.TotalSeconds, true, "User");
+
+            _logger.LogInformation("Deleted user {UserId} by {DeletedBy} in {Duration}ms", 
+                request.UserId, request.DeletedBy, stopwatch.ElapsedMilliseconds);
+
+            return new DeleteUserResponse
+            {
+                Success = true,
+                Message = "User deleted successfully"
+            };
+        }
+        catch (Exception ex)
+        {
+            // activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+            // OpenTelemetryConfiguration.RecordDatabaseOperation("DeleteUser", stopwatch.Elapsed.TotalSeconds, false, "User");
+
+            _logger.LogError(ex, "Error deleting user {UserId} in {Duration}ms", request.UserId, stopwatch.ElapsedMilliseconds);
+
+            return new DeleteUserResponse
+            {
+                Success = false,
+                Message = "Error deleting user",
+                Errors = new[] { ex.Message }
+            };
+        }
+    }
+
+    public Task<UserGroupResponse> AddToGroupAsync(AddUserToGroupRequest request)
+    {
+        // Implementation for adding user to group
+        // This would use the domain logic for relationship management
+        throw new NotImplementedException("AddToGroupAsync implementation pending");
+    }
+
+    public Task<UserGroupResponse> RemoveFromGroupAsync(RemoveUserFromGroupRequest request)
+    {
+        // Implementation for removing user from group
+        throw new NotImplementedException("RemoveFromGroupAsync implementation pending");
+    }
+
+    public Task<UserRoleResponse> AssignToRoleAsync(AssignUserToRoleRequest request)
+    {
+        // Implementation for assigning user to role
+        throw new NotImplementedException("AssignToRoleAsync implementation pending");
+    }
+
+    public Task<UserRoleResponse> UnassignFromRoleAsync(UnassignUserFromRoleRequest request)
+    {
+        // Implementation for unassigning user from role
+        throw new NotImplementedException("UnassignFromRoleAsync implementation pending");
+    }
+
+    public Task<BulkUserResponse<CreateUserResponse>> CreateBulkAsync(BulkUserRequest<CreateUserRequest> request)
+    {
+        // Implementation for bulk user creation
+        throw new NotImplementedException("CreateBulkAsync implementation pending");
+    }
+
+    public Task<BulkUserResponse<UpdateUserResponse>> UpdateBulkAsync(BulkUserRequest<UpdateUserRequest> request)
+    {
+        // Implementation for bulk user updates
+        throw new NotImplementedException("UpdateBulkAsync implementation pending");
+    }
+
+    public Task<BulkUserResponse<DeleteUserResponse>> DeleteBulkAsync(BulkUserRequest<DeleteUserRequest> request)
+    {
+        // Implementation for bulk user deletions
+        throw new NotImplementedException("DeleteBulkAsync implementation pending");
     }
 }

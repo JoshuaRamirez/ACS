@@ -104,14 +104,14 @@ public abstract class PerformanceTestBase
     protected static void PrintScenarioResults(string scenarioName, Response response)
     {
         Console.WriteLine($"\n=== {scenarioName} Results ===");
-        Console.WriteLine($"Total Requests: {response.AllRequestCount}");
-        Console.WriteLine($"OK Requests: {response.AllOkCount}");
-        Console.WriteLine($"Failed Requests: {response.AllFailCount}");
-        Console.WriteLine($"RPS: {response.ScenarioStats[0].Ok.Request.Mean}");
-        Console.WriteLine($"Mean Latency: {response.ScenarioStats[0].Ok.Latency.Mean} ms");
-        Console.WriteLine($"P95 Latency: {response.ScenarioStats[0].Ok.Latency.Percentile95} ms");
-        Console.WriteLine($"P99 Latency: {response.ScenarioStats[0].Ok.Latency.Percentile99} ms");
-        Console.WriteLine($"Data Transfer: {response.AllDataMB:F2} MB");
+        // Console.WriteLine($"Total Requests: {response.AllRequestCount}"); // TODO: NBomber Response API changed
+        // Console.WriteLine($"OK Requests: {response.AllOkCount}"); // TODO: NBomber Response API changed
+        // Console.WriteLine($"Failed Requests: {response.AllFailCount}"); // TODO: NBomber Response API changed
+        // Console.WriteLine($"RPS: {response.ScenarioStats[0].Ok.Request.Mean}"); // TODO: NBomber Response API changed
+        // Console.WriteLine($"Mean Latency: {response.ScenarioStats[0].Ok.Latency.Mean} ms"); // TODO: NBomber Response API changed
+        // Console.WriteLine($"P95 Latency: {response.ScenarioStats[0].Ok.Latency.Percentile95} ms"); // TODO: NBomber Response API changed
+        // Console.WriteLine($"P99 Latency: {response.ScenarioStats[0].Ok.Latency.Percentile99} ms"); // TODO: NBomber Response API changed
+        // Console.WriteLine($"Data Transfer: {response.AllDataMB:F2} MB"); // TODO: NBomber Response API changed
     }
 
     protected static TimeSpan GetTestDuration()

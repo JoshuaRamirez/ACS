@@ -292,7 +292,6 @@ public class DiagnosticsController : ControllerBase
             var timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
             var fileName = $"diagnostics_export_{timestamp}";
             string filePath;
-            string contentType;
 
             switch (format)
             {
@@ -305,7 +304,6 @@ public class DiagnosticsController : ControllerBase
                             WriteIndented = true,
                             PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase
                         }));
-                    contentType = "application/json";
                     break;
 
                 case DiagnosticExportFormat.Xml:
@@ -316,14 +314,12 @@ public class DiagnosticsController : ControllerBase
                     {
                         xmlSerializer.Serialize(fileStream, summary);
                     }
-                    contentType = "application/xml";
                     break;
 
                 case DiagnosticExportFormat.Csv:
                     fileName += ".csv";
                     filePath = Path.Combine(Path.GetTempPath(), fileName);
                     await WriteCsvExport(filePath, summary);
-                    contentType = "text/csv";
                     break;
 
                 default:

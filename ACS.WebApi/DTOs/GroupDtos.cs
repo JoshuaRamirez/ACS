@@ -1,29 +1,45 @@
 namespace ACS.WebApi.DTOs;
 
-public record CreateGroupRequest(string Name, int? ParentGroupId = null);
+/// <summary>
+/// DTO for group list response from gRPC service
+/// </summary>
+public record GroupListResponse(
+    IList<GroupResponse> Groups,
+    int TotalCount,
+    int Page,
+    int PageSize
+);
 
-public record UpdateGroupRequest(string Name, int? ParentGroupId = null);
-
+/// <summary>
+/// DTO for individual group response from gRPC service
+/// </summary>
 public record GroupResponse(
     int Id,
     string Name,
     int? ParentGroupId,
     string? ParentGroupName,
-    List<GroupResponse> ChildGroups,
-    List<UserResponse> Users,
-    List<RoleResponse> Roles,
-    List<PermissionResponse> Permissions,
+    IList<GroupResponse> ChildGroups,
+    IList<UserResponse> Users,
+    IList<RoleResponse> Roles,
+    IList<PermissionResponse> Permissions,
     DateTime CreatedAt,
     DateTime? UpdatedAt
 );
 
-public record AddGroupToGroupRequest(int ChildGroupId, int ParentGroupId);
+/// <summary>
+/// DTO for adding group to group
+/// </summary>
+public record AddGroupToGroupRequest
+{
+    public int ParentGroupId { get; init; }
+    public int ChildGroupId { get; init; }
+}
 
-public record AddRoleToGroupRequest(int GroupId, int RoleId);
-
-public record GroupListResponse(
-    List<GroupResponse> Groups,
-    int TotalCount,
-    int Page,
-    int PageSize
-);
+/// <summary>
+/// DTO for adding role to group
+/// </summary>
+public record AddRoleToGroupRequest
+{
+    public int GroupId { get; init; }
+    public int RoleId { get; init; }
+}

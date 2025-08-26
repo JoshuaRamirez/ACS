@@ -521,38 +521,38 @@ public class ResourceService : IResourceService
 
     #region Pattern Management
 
-    public async Task<bool> ValidateUriPatternAsync(string pattern)
+    public Task<bool> ValidateUriPatternAsync(string pattern)
     {
         try
         {
             // Check for valid wildcard and parameter patterns
             if (string.IsNullOrWhiteSpace(pattern))
-                return false;
+                return Task.FromResult(false);
 
             // Check for valid characters
             var validPattern = @"^[a-zA-Z0-9\-_.~/{}*]+$";
             if (!Regex.IsMatch(pattern, validPattern))
-                return false;
+                return Task.FromResult(false);
 
             // Check for balanced braces
             var openBraces = pattern.Count(c => c == '{');
             var closeBraces = pattern.Count(c => c == '}');
             if (openBraces != closeBraces)
-                return false;
+                return Task.FromResult(false);
 
             // Try to convert to regex to validate
             ConvertWildcardToRegex(pattern);
-            return true;
+            return Task.FromResult(true);
         }
         catch
         {
-            return false;
+            return Task.FromResult(false);
         }
     }
 
-    public async Task<string> ConvertWildcardToRegexAsync(string wildcardPattern)
+    public Task<string> ConvertWildcardToRegexAsync(string wildcardPattern)
     {
-        return await Task.FromResult(ConvertWildcardToRegex(wildcardPattern));
+        return Task.FromResult(ConvertWildcardToRegex(wildcardPattern));
     }
 
     public async Task<IEnumerable<string>> ExtractVariablesFromPatternAsync(string uriPattern)
@@ -641,7 +641,7 @@ public class ResourceService : IResourceService
             permissions.Add(new Domain.Permission
             {
                 Id = access.Id,
-                EntityId = access.PermissionScheme.EntityId,
+                EntityId = access.PermissionScheme.EntityId ?? 0,
                 Uri = access.Resource.Uri,
                 HttpVerb = Enum.Parse<Domain.HttpVerb>(access.VerbType.VerbName),
                 Grant = access.Grant,
@@ -1324,4 +1324,50 @@ public class ResourceService : IResourceService
     }
 
     #endregion
+
+    public Task<object> TestUriPatternMatchAsync(string pattern, List<string> testUris)
+    {
+        var results = new List<object>();
+        int matchCount = 0;
+        
+        foreach (var testUri in testUris)
+        {
+            try
+            {
+                // Simple pattern matching - can be enhanced with regex or advanced patterns
+                bool matches = testUri.Contains(pattern.Replace("*", "")) || 
+                              Regex.IsMatch(testUri, pattern.Replace("*", ".*"));
+                
+                results.Add(new
+                {
+                    Uri = testUri,
+                    Matches = matches,
+                    Pattern = pattern
+                });
+                
+                if (matches) matchCount++;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Error testing pattern {Pattern} against URI {Uri}", pattern, testUri);
+                results.Add(new
+                {
+                    Uri = testUri,
+                    Matches = false,
+                    Pattern = pattern,
+                    Error = ex.Message
+                });
+            }
+        }
+        
+        var result = new
+        {
+            Pattern = pattern,
+            TestResults = results,
+            MatchCount = matchCount,
+            TotalTests = testUris.Count
+        };
+        
+        return Task.FromResult<object>(result);
+    }
 }

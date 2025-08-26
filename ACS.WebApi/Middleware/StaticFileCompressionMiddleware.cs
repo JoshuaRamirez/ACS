@@ -142,7 +142,7 @@ public class StaticFileCompressionMiddleware
         // Read file content
         using var stream = fileInfo.CreateReadStream();
         var buffer = new byte[fileInfo.Length];
-        await stream.ReadAsync(buffer);
+        await stream.ReadExactlyAsync(buffer, CancellationToken.None);
 
         // Check if compression is beneficial
         var acceptEncoding = context.Request.Headers["Accept-Encoding"].ToString();
@@ -200,7 +200,7 @@ public class StaticFileCompressionMiddleware
         {
             using var stream = compressedFile.CreateReadStream();
             var buffer = new byte[compressedFile.Length];
-            await stream.ReadAsync(buffer);
+            await stream.ReadExactlyAsync(buffer, CancellationToken.None);
             return buffer;
         }
 
@@ -213,8 +213,8 @@ public class StaticFileCompressionMiddleware
         
         Stream compressionStream = algorithm switch
         {
-            CompressionAlgorithm.Brotli => new BrotliStream(output, CompressionLevel.Optimal),
-            CompressionAlgorithm.Gzip => new GZipStream(output, CompressionLevel.Optimal),
+            CompressionAlgorithm.Brotli => new BrotliStream(output, System.IO.Compression.CompressionLevel.Optimal),
+            CompressionAlgorithm.Gzip => new GZipStream(output, System.IO.Compression.CompressionLevel.Optimal),
             _ => throw new NotSupportedException()
         };
 
@@ -251,7 +251,7 @@ public class StaticFileCompressionMiddleware
         if (encoding != null)
         {
             context.Response.Headers["Content-Encoding"] = encoding;
-            context.Response.Headers.Add("Vary", "Accept-Encoding");
+            context.Response.Headers.Append("Vary", "Accept-Encoding");
         }
     }
 

@@ -71,7 +71,7 @@ public class ResourceRepository : Repository<Resource>, IResourceRepository
 
         var resources = await resourcesQuery.ToListAsync(cancellationToken);
 
-        var permissionCounts = await (from r in resources
+        var permissionCounts = (from r in resources
                                     join ua in _context.UriAccesses on r.Id equals ua.ResourceId into accesses
                                     from access in accesses.DefaultIfEmpty()
                                     join vt in _context.VerbTypes on access.VerbTypeId equals vt.Id into verbs
@@ -87,7 +87,7 @@ public class ResourceRepository : Repository<Resource>, IResourceRepository
                                         DenyPermissions = g.Count(x => x.access != null && x.access.Deny),
                                         UniqueEntities = g.Where(x => x.scheme != null).Select(x => x.scheme.EntityId).Distinct().Count(),
                                         VerbTypes = g.Where(x => x.verb != null).Select(x => x.verb.VerbName).Distinct()
-                                    }).ToListAsync(cancellationToken);
+                                    }).ToList();
 
         return resources.Select(resource =>
         {
@@ -243,7 +243,7 @@ public class ResourceRepository : Repository<Resource>, IResourceRepository
                              select new AccessPermission
                              {
                                  ResourceId = ua.ResourceId,
-                                 EntityId = ps.EntityId,
+                                 EntityId = ps.EntityId ?? 0,
                                  VerbTypeId = ua.VerbTypeId,
                                  IsGrant = ua.Grant,
                                  IsDeny = ua.Deny,

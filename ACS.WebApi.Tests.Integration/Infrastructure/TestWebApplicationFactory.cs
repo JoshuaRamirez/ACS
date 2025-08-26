@@ -57,9 +57,9 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
             });
 
             // Replace complex services with test implementations
-            services.AddScoped<ITenantContextService, TestTenantContextService>();
+            services.AddScoped<ACS.Infrastructure.Services.ITenantContextService, TestTenantContextService>();
             services.AddScoped<TenantGrpcClientService, TestTenantGrpcClientService>();
-            services.AddScoped<IUserContextService, TestUserContextService>();
+            services.AddScoped<ACS.Infrastructure.Services.IUserContextService, TestUserContextService>();
 
             // Configure test JWT authentication
             services.Configure<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme, options =>

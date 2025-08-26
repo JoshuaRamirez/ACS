@@ -1,45 +1,45 @@
-using ACS.Service.Data;
-using Microsoft.EntityFrameworkCore;
+using ACS.Service.Domain;
 
 namespace ACS.Service.Delegates.Normalizers
 {
+    /// <summary>
+    /// Pure normalizer for unassigning a user from a role
+    /// Handles only the behavioral transformation - no validation, no side effects
+    /// Assumes business rules have already been validated by the domain object
+    /// </summary>
     public static class UnAssignUserFromRoleNormalizer
     {
-        public static async Task ExecuteAsync(ApplicationDbContext dbContext, int userId, int roleId)
+        /// <summary>
+        /// Executes the pure behavioral transformation of unassigning a user from a role
+        /// Updates the in-memory object graph to maintain bidirectional relationships
+        /// </summary>
+        /// <param name="user">The user domain object to unassign</param>
+        /// <param name="role">The role domain object to unassign the user from</param>
+        public static void Execute(User user, Role role)
         {
-            // Find the existing relationship
-            var existingRelation = await dbContext.UserRoles
-                .FirstOrDefaultAsync(ur => ur.UserId == userId && ur.RoleId == roleId);
+            // BEHAVIORAL NORMALIZATION: Pure graph manipulation
+            // No validation - assumes domain object already validated
+            // No database operations - pure in-memory transformation
+            // No side effects - just ensures bidirectional consistency
             
-            if (existingRelation == null)
-            {
-                throw new InvalidOperationException($"User {userId} is not assigned to role {roleId}.");
-            }
-
-            // Remove the relationship
-            dbContext.UserRoles.Remove(existingRelation);
+            // Remove role from user's parents
+            user.Parents.Remove(role);
             
-            // Update the UpdatedAt timestamp for both entities
-            var user = await dbContext.Users.FindAsync(userId);
-            var role = await dbContext.Roles.FindAsync(roleId);
+            // Remove user from role's children
+            role.Children.Remove(user);
             
-            if (user != null)
-            {
-                user.UpdatedAt = DateTime.UtcNow;
-                dbContext.Users.Update(user);
-            }
-            
-            if (role != null)
-            {
-                role.UpdatedAt = DateTime.UtcNow;
-                dbContext.Roles.Update(role);
-            }
+            // That's it - pure mechanical transformation
+            // Persistence will be handled later by the command processor
         }
         
-        // Legacy method for compatibility - remove after domain layer is updated
-        public static void Execute(int userId, int roleId)
+        // Legacy async method - kept for compatibility during transition
+        [Obsolete("Use pure Execute(User, Role) method instead. Database operations moved to persistence layer.")]
+        public static Task ExecuteAsync(object dbContext, int userId, int roleId)
         {
-            throw new NotSupportedException("Legacy normalizer method is no longer supported. Use ExecuteAsync instead.");
+            throw new NotSupportedException(
+                "Database operations have been moved to persistence layer. " +
+                "Use Execute(User, Role) for pure in-memory normalization, " +
+                "or call through domain object which handles persistence.");
         }
     }
 }

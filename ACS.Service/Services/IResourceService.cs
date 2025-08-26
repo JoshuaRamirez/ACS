@@ -74,6 +74,9 @@ public interface IResourceService
     Task<IEnumerable<(Resource Resource, int AccessCount)>> GetMostAccessedResourcesAsync(int topN);
     Task<IEnumerable<(Resource Resource, int PermissionCount)>> GetMostProtectedResourcesAsync(int topN);
     
+    // URI Pattern Testing
+    Task<object> TestUriPatternMatchAsync(string pattern, List<string> testUris);
+    
     // Maintenance and Validation
     Task<IEnumerable<Resource>> ValidateAllResourcePatternsAsync();
     Task<IEnumerable<Resource>> FindDuplicateResourcesAsync();

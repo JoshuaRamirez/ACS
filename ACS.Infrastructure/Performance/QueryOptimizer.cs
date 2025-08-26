@@ -23,7 +23,7 @@ public class QueryOptimizer : IQueryOptimizer
         _logger = logger;
     }
 
-    public async Task<IQueryable<T>> OptimizeQueryAsync<T>(IQueryable<T> query, QueryOptimizationOptions options) where T : class
+    public Task<IQueryable<T>> OptimizeQueryAsync<T>(IQueryable<T> query, QueryOptimizationOptions options) where T : class
     {
         using var activity = _activitySource.StartActivity("OptimizeQuery");
         activity?.SetTag("entity.type", typeof(T).Name);
@@ -54,7 +54,7 @@ public class QueryOptimizer : IQueryOptimizer
         
         _logger.LogDebug("Applied query optimizations for {EntityType}", typeof(T).Name);
         
-        return optimizedQuery;
+        return Task.FromResult(optimizedQuery);
     }
 
     public async Task<OptimizedPagedResult<T>> PaginateOptimizedAsync<T>(
@@ -469,7 +469,7 @@ public class QueryOptimizer : IQueryOptimizer
         }
     }
 
-    private async Task AnalyzeForN1Pattern<T>(string queryKey, List<T> result, TimeSpan executionTime)
+    private Task AnalyzeForN1Pattern<T>(string queryKey, List<T> result, TimeSpan executionTime)
     {
         // Analyze if this looks like a N+1 pattern
         if (result.Count > 0 && executionTime > TimeSpan.FromMilliseconds(50))
@@ -477,6 +477,7 @@ public class QueryOptimizer : IQueryOptimizer
             _logger.LogDebug("Slow query detected: {QueryKey} took {ExecutionTime}ms for {RecordCount} records",
                 queryKey, executionTime.TotalMilliseconds, result.Count);
         }
+        return Task.CompletedTask;
     }
 
     private string GenerateQueryKey<T>(IQueryable<T> query) where T : class

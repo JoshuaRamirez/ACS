@@ -1,253 +1,460 @@
 using Microsoft.AspNetCore.Mvc;
-using ACS.WebApi.DTOs;
-using ACS.Infrastructure.Services;
-using ACS.Service.Infrastructure;
 using Microsoft.AspNetCore.Authorization;
+using ACS.WebApi.Resources;
+using ACS.WebApi.Services;
+using ACS.Service.Infrastructure;
+using ACS.WebApi.Mapping;
+using ACS.WebApi.DTOs;
 
 namespace ACS.WebApi.Controllers;
 
+/// <summary>
+/// Pure REST API controller for User resources
+/// Supports full HTTP verb spectrum (GET, POST, PUT, PATCH, DELETE)
+/// Routes all requests through gRPC to VerticalHost processes
+/// </summary>
 [ApiController]
-[Route("api/[controller]")]
+[Route("api/users")]
 [Authorize]
 public class UsersController : ControllerBase
 {
-    private readonly TenantGrpcClientService _grpcClientService;
-    private readonly GrpcErrorMappingService _errorMapper;
-    private readonly IUserContextService _userContext;
+    private readonly TenantGrpcClientService _grpcClient;
     private readonly ILogger<UsersController> _logger;
 
     public UsersController(
-        TenantGrpcClientService grpcClientService,
-        GrpcErrorMappingService errorMapper,
-        IUserContextService userContext,
+        TenantGrpcClientService grpcClient,
         ILogger<UsersController> logger)
     {
-        _grpcClientService = grpcClientService;
-        _errorMapper = errorMapper;
-        _userContext = userContext;
+        _grpcClient = grpcClient;
         _logger = logger;
     }
 
     /// <summary>
-    /// Get all users for the current tenant
+    /// GET /api/users - Retrieve all users with pagination, filtering, and sorting
     /// </summary>
     [HttpGet]
-    public async Task<ActionResult<ApiResponse<UserListResponse>>> GetUsers([FromQuery] PagedRequest request)
+    public async Task<ActionResult<ACS.WebApi.Resources.ApiResponse<UserCollectionResource>>> GetUsers(
+        [FromQuery] int? page,
+        [FromQuery] int? pageSize,
+        [FromQuery] string? search,
+        [FromQuery] string? sortBy,
+        [FromQuery] string? sortDirection)
     {
         try
         {
-            var currentUserId = _userContext.GetCurrentUserId();
-            var getUsersCommand = new Service.Infrastructure.GetUsersCommand(
+            var currentUser = GetCurrentUserId();
+            var query = GrpcToDtoExtensions.FromQueryParameters(page, pageSize, search, sortBy, sortDirection);
+            var (queryPage, queryPageSize, querySearch, querySortBy, sortDescending) = query.ToQueryParameters();
+            
+            var grpcCommand = new GetUsersCommand(
                 Guid.NewGuid().ToString(),
                 DateTime.UtcNow,
-                currentUserId,
-                request.Page,
-                request.PageSize);
+                currentUser,
+                queryPage,
+                queryPageSize
+            );
+            
+            var grpcResponse = await _grpcClient.GetUsersAsync(grpcCommand);
 
-            var result = await _grpcClientService.GetUsersAsync(getUsersCommand);
-            
-            if (result.Success && result.Data != null)
+            if (!grpcResponse.Success)
             {
-                return Ok(result);
+                return BadRequest(grpcResponse.Errors.ToErrorApiResponse<UserCollectionResource>(grpcResponse.Message));
             }
-            
-            return StatusCode(500, new ApiResponse<UserListResponse>(false, null, result.Message ?? "Error retrieving users"));
+
+            var resource = grpcResponse.Data?.ToCollectionResource() ?? new UserCollectionResource
+            {
+                Users = new List<UserResource>(),
+                TotalCount = 0,
+                Page = 1,
+                PageSize = 10
+            };
+            return Ok(resource.ToApiResponse(message: grpcResponse.Message));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error retrieving users");
-            return this.HandleGrpcException<UserListResponse>(ex, _errorMapper, "Error retrieving users");
+            return StatusCode(500, new[] { ex.Message }.ToErrorApiResponse<UserCollectionResource>("Internal server error"));
         }
     }
 
     /// <summary>
-    /// Get a specific user by ID
+    /// GET /api/users/{id} - Retrieve a specific user by ID
     /// </summary>
     [HttpGet("{id:int}")]
-    public async Task<ActionResult<ApiResponse<UserResponse>>> GetUser(int id)
+    public async Task<ActionResult<ACS.WebApi.Resources.ApiResponse<UserResource>>> GetUser(int id)
     {
         try
         {
-            var currentUserId = _userContext.GetCurrentUserId();
-            var getUserCommand = new Service.Infrastructure.GetUserCommand(
+            var currentUser = GetCurrentUserId();
+            var grpcCommand = new GetUserCommand(
                 Guid.NewGuid().ToString(),
                 DateTime.UtcNow,
-                currentUserId,
-                id);
+                currentUser,
+                id
+            );
+            
+            var grpcResponse = await _grpcClient.GetUserAsync(grpcCommand);
 
-            var result = await _grpcClientService.GetUserAsync(getUserCommand);
-            
-            if (result.Success && result.Data != null)
+            if (!grpcResponse.Success)
             {
-                return Ok(result);
+                if (grpcResponse.Data == null)
+                {
+                    return NotFound(grpcResponse.Errors.ToErrorApiResponse<UserResource>(grpcResponse.Message));
+                }
+                return BadRequest(grpcResponse.Errors.ToErrorApiResponse<UserResource>(grpcResponse.Message));
             }
-            
-            return StatusCode(500, new ApiResponse<UserResponse>(false, null, result.Message ?? "Error retrieving user"));
+
+            var resource = grpcResponse.Data?.ToResource();
+            if (resource == null)
+            {
+                return NotFound(new[] { "User not found" }.ToErrorApiResponse<UserResource>());
+            }
+
+            return Ok(resource.ToApiResponse(message: grpcResponse.Message));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error retrieving user {UserId}", id);
-            return this.HandleGrpcException<UserResponse>(ex, _errorMapper, "Error retrieving user");
+            return StatusCode(500, new[] { ex.Message }.ToErrorApiResponse<UserResource>("Internal server error"));
         }
     }
 
     /// <summary>
-    /// Create a new user
+    /// POST /api/users - Create a new user
     /// </summary>
     [HttpPost]
-    public async Task<ActionResult<ApiResponse<UserResponse>>> CreateUser([FromBody] CreateUserRequest request)
+    public async Task<ActionResult<ACS.WebApi.Resources.ApiResponse<UserResource>>> CreateUser([FromBody] CreateUserResource resource)
     {
         try
         {
-            if (string.IsNullOrWhiteSpace(request.Name))
+            if (!ModelState.IsValid)
             {
-                return BadRequest(new ApiResponse<UserResponse>(false, null, "User name is required"));
+                return BadRequest(ModelState.Values
+                    .SelectMany(v => v.Errors)
+                    .Select(e => e.ErrorMessage)
+                    .ToErrorApiResponse<UserResource>("Validation failed"));
             }
 
-            var currentUserId = _userContext.GetCurrentUserId();
-            var createUserCommand = new Service.Infrastructure.CreateUserCommand(
+            var currentUser = GetCurrentUserId();
+            var grpcCommand = new CreateUserCommand(
                 Guid.NewGuid().ToString(),
                 DateTime.UtcNow,
-                currentUserId,
-                request.Name);
+                currentUser,
+                resource.Name
+            );
+            
+            var grpcResponse = await _grpcClient.CreateUserAsync(grpcCommand);
 
-            var result = await _grpcClientService.CreateUserAsync(createUserCommand);
-            
-            if (result.Success && result.Data != null)
+            if (!grpcResponse.Success)
             {
-                return CreatedAtAction(nameof(GetUser), new { id = result.Data.Id }, result);
+                return BadRequest(grpcResponse.Errors.ToErrorApiResponse<UserResource>(grpcResponse.Message));
             }
-            
-            return StatusCode(500, new ApiResponse<UserResponse>(false, null, result.Message ?? "Error creating user"));
+
+            var userResource = grpcResponse.Data?.ToResource();
+            if (userResource == null)
+            {
+                return StatusCode(500, new[] { "Failed to create user resource" }.ToErrorApiResponse<UserResource>());
+            }
+
+            return CreatedAtAction(
+                nameof(GetUser), 
+                new { id = userResource.Id }, 
+                userResource.ToApiResponse(message: grpcResponse.Message));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error creating user");
-            return this.HandleGrpcException<UserResponse>(ex, _errorMapper, "Error creating user");
+            return StatusCode(500, new[] { ex.Message }.ToErrorApiResponse<UserResource>("Internal server error"));
         }
     }
 
     /// <summary>
-    /// Update an existing user
+    /// PUT /api/users/{id} - Update a user (full replacement)
     /// </summary>
     [HttpPut("{id:int}")]
-    public async Task<ActionResult<ApiResponse<UserResponse>>> UpdateUser(int id, [FromBody] UpdateUserRequest request)
+    public async Task<ActionResult<ACS.WebApi.Resources.ApiResponse<UserResource>>> UpdateUser(int id, [FromBody] UpdateUserResource resource)
     {
         try
         {
-            if (string.IsNullOrWhiteSpace(request.Name))
+            if (!ModelState.IsValid)
             {
-                return BadRequest(new ApiResponse<UserResponse>(false, null, "User name is required"));
+                return BadRequest(ModelState.Values
+                    .SelectMany(v => v.Errors)
+                    .Select(e => e.ErrorMessage)
+                    .ToErrorApiResponse<UserResource>("Validation failed"));
             }
 
-            var updateUserCommand = new Service.Infrastructure.UpdateUserCommand(
+            var currentUser = GetCurrentUserId();
+            var grpcCommand = new UpdateUserCommand(
                 Guid.NewGuid().ToString(),
                 DateTime.UtcNow,
-                _userContext.GetCurrentUserId(),
+                currentUser,
                 id,
-                request.Name);
+                resource.Name
+            );
+            
+            var grpcResponse = await _grpcClient.UpdateUserAsync(grpcCommand);
 
-            var result = await _grpcClientService.UpdateUserAsync(updateUserCommand);
-            
-            if (result.Success && result.Data != null)
+            if (!grpcResponse.Success)
             {
-                return Ok(result);
+                if (grpcResponse.Data == null && grpcResponse.Message?.Contains("not found") == true)
+                {
+                    return NotFound(grpcResponse.Errors.ToErrorApiResponse<UserResource>(grpcResponse.Message));
+                }
+                return BadRequest(grpcResponse.Errors.ToErrorApiResponse<UserResource>(grpcResponse.Message));
             }
-            
-            return StatusCode(500, new ApiResponse<UserResponse>(false, null, result.Message ?? "Error updating user"));
+
+            var userResource = grpcResponse.Data?.ToResource();
+            if (userResource == null)
+            {
+                return StatusCode(500, new[] { "Failed to update user resource" }.ToErrorApiResponse<UserResource>());
+            }
+
+            return Ok(userResource.ToApiResponse(message: grpcResponse.Message));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error updating user {UserId}", id);
-            return this.HandleGrpcException<UserResponse>(ex, _errorMapper, "Error updating user");
+            return StatusCode(500, new[] { ex.Message }.ToErrorApiResponse<UserResource>("Internal server error"));
         }
     }
 
     /// <summary>
-    /// Delete a user
+    /// PATCH /api/users/{id} - Partially update a user
     /// </summary>
-    [HttpDelete("{id:int}")]
-    public async Task<ActionResult<ApiResponse<bool>>> DeleteUser(int id)
+    [HttpPatch("{id:int}")]
+    public async Task<ActionResult<ACS.WebApi.Resources.ApiResponse<UserResource>>> PatchUser(int id, [FromBody] PatchUserResource resource)
     {
         try
         {
-            var deleteUserCommand = new Service.Infrastructure.DeleteUserCommand(
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ModelState.Values
+                    .SelectMany(v => v.Errors)
+                    .Select(e => e.ErrorMessage)
+                    .ToErrorApiResponse<UserResource>("Validation failed"));
+            }
+
+            var currentUser = GetCurrentUserId();
+            // For PATCH operations, we need to get the current user first, then update only changed fields
+            var getUserCommand = new GetUserCommand(
                 Guid.NewGuid().ToString(),
                 DateTime.UtcNow,
-                _userContext.GetCurrentUserId(),
-                id);
-
-            var result = await _grpcClientService.DeleteUserAsync(deleteUserCommand);
+                currentUser,
+                id
+            );
             
-            if (result.Success)
+            var existingUserResponse = await _grpcClient.GetUserAsync(getUserCommand);
+            if (!existingUserResponse.Success)
             {
-                return Ok(result);
+                return NotFound(existingUserResponse.Errors.ToErrorApiResponse<UserResource>(existingUserResponse.Message));
             }
+
+            var updateCommand = new UpdateUserCommand(
+                Guid.NewGuid().ToString(),
+                DateTime.UtcNow,
+                currentUser,
+                id,
+                resource.Name ?? existingUserResponse.Data?.Name ?? string.Empty
+            );
             
-            return StatusCode(500, new ApiResponse<bool>(false, false, result.Message ?? "Error deleting user"));
+            var grpcResponse = await _grpcClient.UpdateUserAsync(updateCommand);
+
+            if (!grpcResponse.Success)
+            {
+                if (grpcResponse.Data == null && grpcResponse.Message?.Contains("not found") == true)
+                {
+                    return NotFound(grpcResponse.Errors.ToErrorApiResponse<UserResource>(grpcResponse.Message));
+                }
+                return BadRequest(grpcResponse.Errors.ToErrorApiResponse<UserResource>(grpcResponse.Message));
+            }
+
+            var userResource = grpcResponse.Data?.ToResource();
+            if (userResource == null)
+            {
+                return StatusCode(500, new[] { "Failed to patch user resource" }.ToErrorApiResponse<UserResource>());
+            }
+
+            return Ok(userResource.ToApiResponse(message: grpcResponse.Message));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error patching user {UserId}", id);
+            return StatusCode(500, new[] { ex.Message }.ToErrorApiResponse<UserResource>("Internal server error"));
+        }
+    }
+
+    /// <summary>
+    /// DELETE /api/users/{id} - Delete a user
+    /// </summary>
+    [HttpDelete("{id:int}")]
+    public async Task<ActionResult<ACS.WebApi.Resources.ApiResponse<bool>>> DeleteUser(int id)
+    {
+        try
+        {
+            var currentUser = GetCurrentUserId();
+            var grpcCommand = new DeleteUserCommand(
+                Guid.NewGuid().ToString(),
+                DateTime.UtcNow,
+                currentUser,
+                id
+            );
+            
+            var grpcResponse = await _grpcClient.DeleteUserAsync(grpcCommand);
+
+            if (!grpcResponse.Success)
+            {
+                if (grpcResponse.Message?.Contains("not found") == true)
+                {
+                    return NotFound(grpcResponse.Errors.ToErrorApiResponse<bool>(grpcResponse.Message));
+                }
+                return BadRequest(grpcResponse.Errors.ToErrorApiResponse<bool>(grpcResponse.Message));
+            }
+
+            return Ok(true.ToApiResponse(message: grpcResponse.Message));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error deleting user {UserId}", id);
-            return this.HandleGrpcException<bool>(ex, _errorMapper, "Error deleting user");
+            return StatusCode(500, new[] { ex.Message }.ToErrorApiResponse<bool>("Internal server error"));
         }
     }
 
     /// <summary>
-    /// Add user to a group
+    /// POST /api/users/{userId}/groups - Add user to a group
     /// </summary>
     [HttpPost("{userId:int}/groups")]
-    public async Task<ActionResult<ApiResponse<bool>>> AddUserToGroup(int userId, [FromBody] AddUserToGroupRequest request)
+    public async Task<ActionResult<ACS.WebApi.Resources.ApiResponse<bool>>> AddUserToGroup(int userId, [FromBody] AddUserToGroupResource resource)
     {
         try
         {
-            if (request.UserId != userId)
+            if (resource.UserId != userId)
             {
-                return BadRequest(new ApiResponse<bool>(false, false, "User ID in URL and body must match"));
+                return BadRequest(new[] { "User ID in URL and body must match" }.ToErrorApiResponse<bool>());
             }
 
-            var result = await _grpcClientService.AddUserToGroupAsync(request);
-            
-            if (result.Success)
+            var addUserToGroupRequest = new ACS.WebApi.DTOs.AddUserToGroupRequest
             {
-                return Ok(result);
-            }
+                UserId = userId,
+                GroupId = resource.GroupId
+            };
             
-            return BadRequest(result);
+            var grpcResponse = await _grpcClient.AddUserToGroupAsync(addUserToGroupRequest);
+
+            if (!grpcResponse.Success)
+            {
+                return BadRequest(grpcResponse.Errors.ToErrorApiResponse<bool>(grpcResponse.Message));
+            }
+
+            return Ok(true.ToApiResponse(message: grpcResponse.Message));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error adding user {UserId} to group {GroupId}", userId, request.GroupId);
-            return this.HandleGrpcException<bool>(ex, _errorMapper, "Error adding user to group");
+            _logger.LogError(ex, "Error adding user {UserId} to group {GroupId}", userId, resource.GroupId);
+            return StatusCode(500, new[] { ex.Message }.ToErrorApiResponse<bool>("Internal server error"));
         }
     }
 
     /// <summary>
-    /// Assign user to a role
+    /// DELETE /api/users/{userId}/groups/{groupId} - Remove user from group
     /// </summary>
-    [HttpPost("{userId:int}/roles")]
-    public async Task<ActionResult<ApiResponse<bool>>> AssignUserToRole(int userId, [FromBody] AssignUserToRoleRequest request)
+    [HttpDelete("{userId:int}/groups/{groupId:int}")]
+    public Task<ActionResult<ACS.WebApi.Resources.ApiResponse<bool>>> RemoveUserFromGroup(int userId, int groupId)
     {
         try
         {
-            if (request.UserId != userId)
-            {
-                return BadRequest(new ApiResponse<bool>(false, false, "User ID in URL and body must match"));
-            }
-
-            var result = await _grpcClientService.AssignUserToRoleAsync(request);
-            
-            if (result.Success)
-            {
-                return Ok(result);
-            }
-            
-            return BadRequest(result);
+            // Create remove user from group request - need to implement this method in TenantGrpcClientService
+            // For now, log an error and return not implemented
+            _logger.LogError("RemoveUserFromGroup not yet implemented in gRPC client");
+            return Task.FromResult<ActionResult<ACS.WebApi.Resources.ApiResponse<bool>>>(StatusCode(501, new[] { "Remove user from group not yet implemented" }.ToErrorApiResponse<bool>("Not implemented")));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error assigning user {UserId} to role {RoleId}", userId, request.RoleId);
-            return this.HandleGrpcException<bool>(ex, _errorMapper, "Error assigning user to role");
+            _logger.LogError(ex, "Error removing user {UserId} from group {GroupId}", userId, groupId);
+            return Task.FromResult<ActionResult<ACS.WebApi.Resources.ApiResponse<bool>>>(StatusCode(500, new[] { ex.Message }.ToErrorApiResponse<bool>("Internal server error")));
         }
+    }
+
+    /// <summary>
+    /// POST /api/users/{userId}/roles - Assign user to a role
+    /// </summary>
+    [HttpPost("{userId:int}/roles")]
+    public async Task<ActionResult<ACS.WebApi.Resources.ApiResponse<bool>>> AssignUserToRole(int userId, [FromBody] AssignUserToRoleResource resource)
+    {
+        try
+        {
+            if (resource.UserId != userId)
+            {
+                return BadRequest(new[] { "User ID in URL and body must match" }.ToErrorApiResponse<bool>());
+            }
+
+            var assignUserToRoleRequest = new ACS.WebApi.DTOs.AssignUserToRoleRequest
+            {
+                UserId = userId,
+                RoleId = resource.RoleId
+            };
+            
+            var grpcResponse = await _grpcClient.AssignUserToRoleAsync(assignUserToRoleRequest);
+
+            if (!grpcResponse.Success)
+            {
+                return BadRequest(grpcResponse.Errors.ToErrorApiResponse<bool>(grpcResponse.Message));
+            }
+
+            return Ok(true.ToApiResponse(message: grpcResponse.Message));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error assigning user {UserId} to role {RoleId}", userId, resource.RoleId);
+            return StatusCode(500, new[] { ex.Message }.ToErrorApiResponse<bool>("Internal server error"));
+        }
+    }
+
+    /// <summary>
+    /// DELETE /api/users/{userId}/roles/{roleId} - Unassign user from role
+    /// </summary>
+    [HttpDelete("{userId:int}/roles/{roleId:int}")]
+    public Task<ActionResult<ACS.WebApi.Resources.ApiResponse<bool>>> UnassignUserFromRole(int userId, int roleId)
+    {
+        try
+        {
+            // Create unassign user from role request - need to implement this method in TenantGrpcClientService
+            // For now, log an error and return not implemented
+            _logger.LogError("UnassignUserFromRole not yet implemented in gRPC client");
+            return Task.FromResult<ActionResult<ACS.WebApi.Resources.ApiResponse<bool>>>(StatusCode(501, new[] { "Unassign user from role not yet implemented" }.ToErrorApiResponse<bool>("Not implemented")));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error unassigning user {UserId} from role {RoleId}", userId, roleId);
+            return Task.FromResult<ActionResult<ACS.WebApi.Resources.ApiResponse<bool>>>(StatusCode(500, new[] { ex.Message }.ToErrorApiResponse<bool>("Internal server error")));
+        }
+    }
+
+    /// <summary>
+    /// POST /api/users/bulk - Create multiple users in bulk
+    /// </summary>
+    [HttpPost("bulk")]
+    public Task<ActionResult<ACS.WebApi.Resources.ApiResponse<ACS.WebApi.Resources.BulkOperationResultResource<UserResource>>>> CreateUsersBulk([FromBody] ACS.WebApi.Resources.BulkOperationResource<CreateUserResource> resource)
+    {
+        try
+        {
+            // Bulk operations not yet implemented in gRPC client
+            _logger.LogError("Bulk user creation not yet implemented in gRPC client");
+            return Task.FromResult<ActionResult<ACS.WebApi.Resources.ApiResponse<ACS.WebApi.Resources.BulkOperationResultResource<UserResource>>>>(StatusCode(501, new[] { "Bulk user creation not yet implemented" }.ToErrorApiResponse<ACS.WebApi.Resources.BulkOperationResultResource<UserResource>>("Not implemented")));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating users in bulk");
+            return Task.FromResult<ActionResult<ACS.WebApi.Resources.ApiResponse<ACS.WebApi.Resources.BulkOperationResultResource<UserResource>>>>(StatusCode(500, new[] { ex.Message }.ToErrorApiResponse<ACS.WebApi.Resources.BulkOperationResultResource<UserResource>>("Internal server error")));
+        }
+    }
+
+    /// <summary>
+    /// Helper method to get current user ID from context
+    /// </summary>
+    private string GetCurrentUserId()
+    {
+        // TODO: Implement proper user context extraction
+        return User.Identity?.Name ?? "system";
     }
 }

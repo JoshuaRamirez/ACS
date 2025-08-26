@@ -1,27 +1,20 @@
 namespace ACS.WebApi.DTOs;
 
-public record GrantPermissionRequest(
-    int EntityId,
-    string Uri,
-    string HttpVerb,
-    string Scheme = "ApiUriAuthorization"
+/// <summary>
+/// DTO for permission list response from gRPC service
+/// </summary>
+public record PermissionListResponse(
+    IList<PermissionResponse> Permissions,
+    int TotalCount,
+    int Page,
+    int PageSize
 );
 
-public record DenyPermissionRequest(
-    int EntityId,
-    string Uri,
-    string HttpVerb,
-    string Scheme = "ApiUriAuthorization"
-);
-
-public record CheckPermissionRequest(
-    int EntityId,
-    string Uri,
-    string HttpVerb
-);
-
+/// <summary>
+/// DTO for individual permission response from gRPC service
+/// </summary>
 public record PermissionResponse(
-    int Id,
+    int EntityId,
     string Uri,
     string HttpVerb,
     bool Grant,
@@ -29,18 +22,24 @@ public record PermissionResponse(
     string Scheme
 );
 
-public record CheckPermissionResponse(
-    bool HasPermission,
-    string Uri,
-    string HttpVerb,
-    int EntityId,
-    string EntityType,
-    string Reason
-);
+/// <summary>
+/// DTO for granting permission request
+/// </summary>
+public record GrantPermissionRequest
+{
+    public int EntityId { get; init; }
+    public string Uri { get; init; } = string.Empty;
+    public string HttpVerb { get; init; } = string.Empty;
+    public string Scheme { get; init; } = string.Empty;
+}
 
-public record PermissionListResponse(
-    List<PermissionResponse> Permissions,
-    int TotalCount,
-    int Page,
-    int PageSize
-);
+/// <summary>
+/// DTO for denying permission request
+/// </summary>
+public record DenyPermissionRequest
+{
+    public int EntityId { get; init; }
+    public string Uri { get; init; } = string.Empty;
+    public string HttpVerb { get; init; } = string.Empty;
+    public string Scheme { get; init; } = string.Empty;
+}

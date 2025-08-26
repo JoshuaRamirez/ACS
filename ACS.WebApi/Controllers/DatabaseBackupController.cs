@@ -116,7 +116,7 @@ public class DatabaseBackupController : ControllerBase
             var options = new RestoreOptions
             {
                 BackupPath = request.BackupPath,
-                TargetDatabaseName = request.TargetDatabaseName,
+                TargetDatabaseName = request.TargetDatabaseName ?? string.Empty,
                 DataFilePath = request.DataFilePath,
                 LogFilePath = request.LogFilePath,
                 ForceRestore = request.ForceRestore,
@@ -325,7 +325,7 @@ public class DatabaseBackupController : ControllerBase
 public class CreateBackupRequest
 {
     public BackupType BackupType { get; set; } = BackupType.Full;
-    public string BackupPath { get; set; }
+    public string BackupPath { get; set; } = string.Empty;
     public bool Compress { get; set; } = true;
     public bool UseNativeCompression { get; set; } = true;
     public bool DeleteUncompressedAfterCompress { get; set; } = true;
@@ -336,10 +336,10 @@ public class CreateBackupRequest
 
 public class RestoreBackupRequest
 {
-    public string BackupPath { get; set; }
-    public string TargetDatabaseName { get; set; }
-    public string DataFilePath { get; set; }
-    public string LogFilePath { get; set; }
+    public string BackupPath { get; set; } = string.Empty;
+    public string TargetDatabaseName { get; set; } = string.Empty;
+    public string DataFilePath { get; set; } = string.Empty;
+    public string LogFilePath { get; set; } = string.Empty;
     public bool ForceRestore { get; set; } = false;
     public bool NoRecovery { get; set; } = false;
     public bool VerifyBeforeRestore { get; set; } = true;
@@ -349,7 +349,7 @@ public class RestoreBackupRequest
 
 public class VerifyBackupRequest
 {
-    public string BackupPath { get; set; }
+    public string BackupPath { get; set; } = string.Empty;
 }
 
 #endregion

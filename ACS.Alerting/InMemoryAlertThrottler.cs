@@ -22,7 +22,7 @@ public class InMemoryAlertThrottler : IAlertThrottler
         _statistics = new ThrottleStatistics();
     }
 
-    public async Task<bool> ShouldThrottleAsync(string alertKey, AlertSeverity severity, CancellationToken cancellationToken = default)
+    public Task<bool> ShouldThrottleAsync(string alertKey, AlertSeverity severity, CancellationToken cancellationToken = default)
     {
         var throttleWindow = GetThrottleWindow(severity);
         var maxOccurrences = GetMaxOccurrences(severity);
@@ -63,7 +63,7 @@ public class InMemoryAlertThrottler : IAlertThrottler
                     _statistics.TopThrottledAlertKeys[alertKey] = 0;
                 _statistics.TopThrottledAlertKeys[alertKey]++;
 
-                return true;
+                return Task.FromResult(true);
             }
 
             // Record this occurrence
@@ -71,27 +71,27 @@ public class InMemoryAlertThrottler : IAlertThrottler
             entry.LastOccurrence = now;
             entry.Count++;
 
-            return false;
+            return Task.FromResult(false);
         }
     }
 
-    public async Task RecordAlertOccurrenceAsync(string alertKey, AlertSeverity severity, CancellationToken cancellationToken = default)
+    public Task RecordAlertOccurrenceAsync(string alertKey, AlertSeverity severity, CancellationToken cancellationToken = default)
     {
         // This is already handled in ShouldThrottleAsync for this implementation
-        await Task.CompletedTask;
+        return Task.CompletedTask;
     }
 
-    public async Task ResetThrottleAsync(string alertKey, CancellationToken cancellationToken = default)
+    public Task ResetThrottleAsync(string alertKey, CancellationToken cancellationToken = default)
     {
         if (_throttleEntries.TryRemove(alertKey, out var entry))
         {
             _logger.LogInformation("Throttle reset for alert key: {AlertKey}", alertKey);
         }
 
-        await Task.CompletedTask;
+        return Task.CompletedTask;
     }
 
-    public async Task<ThrottleStatistics> GetThrottleStatisticsAsync(CancellationToken cancellationToken = default)
+    public Task<ThrottleStatistics> GetThrottleStatisticsAsync(CancellationToken cancellationToken = default)
     {
         // Clean up statistics to only include top throttled keys
         var topThrottledKeys = _statistics.TopThrottledAlertKeys
@@ -99,7 +99,7 @@ public class InMemoryAlertThrottler : IAlertThrottler
             .Take(10)
             .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
 
-        return await Task.FromResult(new ThrottleStatistics
+        return Task.FromResult(new ThrottleStatistics
         {
             TotalAlertsReceived = _statistics.TotalAlertsReceived,
             TotalAlertsThrottled = _statistics.TotalAlertsThrottled,

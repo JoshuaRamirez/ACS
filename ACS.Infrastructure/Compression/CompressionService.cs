@@ -26,7 +26,7 @@ public class CompressionService : ICompressionService
     public async Task<byte[]> CompressAsync(byte[] data, CompressionLevel level = CompressionLevel.Optimal)
     {
         if (data == null || data.Length == 0)
-            return data;
+            return data ?? Array.Empty<byte>();
 
         var compressionLevel = MapCompressionLevel(level);
         
@@ -80,7 +80,7 @@ public class CompressionService : ICompressionService
     public async Task<byte[]> DecompressAsync(byte[] compressedData)
     {
         if (compressedData == null || compressedData.Length == 0)
-            return compressedData;
+            return compressedData ?? Array.Empty<byte>();
 
         // Try to detect compression type
         if (IsBrotliCompressed(compressedData))

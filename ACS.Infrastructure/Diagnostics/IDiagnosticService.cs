@@ -126,7 +126,7 @@ public class ThreadInfo
     public int MaxCompletionPortThreads { get; set; }
     public int AvailableCompletionPortThreads { get; set; }
     public List<ThreadDetails> Threads { get; set; } = new();
-    public Dictionary<ThreadState, int> ThreadsByState { get; set; } = new();
+    public Dictionary<System.Threading.ThreadState, int> ThreadsByState { get; set; } = new();
     public int ManagedThreadId { get; set; }
     public bool IsThreadPoolThread { get; set; }
     public bool IsBackground { get; set; }
@@ -140,7 +140,7 @@ public class ThreadDetails
 {
     public int ManagedThreadId { get; set; }
     public string Name { get; set; } = string.Empty;
-    public ThreadState ThreadState { get; set; }
+    public System.Threading.ThreadState ThreadState { get; set; }
     public ThreadPriority Priority { get; set; }
     public bool IsAlive { get; set; }
     public bool IsBackground { get; set; }
@@ -185,7 +185,7 @@ public class GCInfo
     public long Gen2Collections { get; set; }
     public bool IsServerGC { get; set; }
     public int MaxGeneration { get; set; }
-    public GCLatencyMode LatencyMode { get; set; }
+    public System.Runtime.GCLatencyMode LatencyMode { get; set; }
     public Dictionary<int, long> GenerationSizes { get; set; } = new();
     public long TotalPauseDuration { get; set; }
     public double CollectionEfficiency { get; set; }

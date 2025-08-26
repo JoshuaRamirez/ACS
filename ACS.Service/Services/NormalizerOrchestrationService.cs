@@ -73,11 +73,18 @@ public class NormalizerOrchestrationService : INormalizerOrchestrationService
             
             _logger.LogInformation("Adding user {UserId} to group {GroupId}", userId, groupId);
             
-            await AddUserToGroupNormalizer.ExecuteAsync(
-                _dbContext, 
-                userId, 
-                groupId, 
-                createdBy ?? "system");
+            // Get the actual entities from the database
+            var userData = await _dbContext.Users.FindAsync(userId);
+            var groupData = await _dbContext.Groups.FindAsync(groupId);
+            
+            if (userData != null && groupData != null)
+            {
+                // Convert data models to domain objects for normalizer
+                var user = new Domain.User { Id = userData.Id, Name = userData.Name };
+                var group = new Domain.Group { Id = groupData.Id, Name = groupData.Name };
+                
+                AddUserToGroupNormalizer.Execute(user, group);
+            }
             
             await _dbContext.SaveChangesAsync(cancellationToken);
             
@@ -111,7 +118,18 @@ public class NormalizerOrchestrationService : INormalizerOrchestrationService
             
             _logger.LogInformation("Removing user {UserId} from group {GroupId}", userId, groupId);
             
-            await RemoveUserFromGroupNormalizer.ExecuteAsync(_dbContext, userId, groupId);
+            // Get the actual entities from the database
+            var userData = await _dbContext.Users.FindAsync(userId);
+            var groupData = await _dbContext.Groups.FindAsync(groupId);
+            
+            if (userData != null && groupData != null)
+            {
+                // Convert data models to domain objects for normalizer
+                var user = new Domain.User { Id = userData.Id, Name = userData.Name };
+                var group = new Domain.Group { Id = groupData.Id, Name = groupData.Name };
+                
+                RemoveUserFromGroupNormalizer.Execute(user, group);
+            }
             await _dbContext.SaveChangesAsync(cancellationToken);
             
             CacheOperation(operationKey);
@@ -144,11 +162,18 @@ public class NormalizerOrchestrationService : INormalizerOrchestrationService
             
             _logger.LogInformation("Assigning user {UserId} to role {RoleId}", userId, roleId);
             
-            await AssignUserToRoleNormalizer.ExecuteAsync(
-                _dbContext, 
-                userId, 
-                roleId, 
-                createdBy ?? "system");
+            // Get the actual entities from the database
+            var userData = await _dbContext.Users.FindAsync(userId);
+            var roleData = await _dbContext.Roles.FindAsync(roleId);
+            
+            if (userData != null && roleData != null)
+            {
+                // Convert data models to domain objects for normalizer
+                var user = new Domain.User { Id = userData.Id, Name = userData.Name };
+                var role = new Domain.Role { Id = roleData.Id, Name = roleData.Name };
+                
+                AssignUserToRoleNormalizer.Execute(user, role);
+            }
             
             await _dbContext.SaveChangesAsync(cancellationToken);
             
@@ -182,7 +207,18 @@ public class NormalizerOrchestrationService : INormalizerOrchestrationService
             
             _logger.LogInformation("Unassigning user {UserId} from role {RoleId}", userId, roleId);
             
-            await UnAssignUserFromRoleNormalizer.ExecuteAsync(_dbContext, userId, roleId);
+            // Get the actual entities from the database
+            var userData = await _dbContext.Users.FindAsync(userId);
+            var roleData = await _dbContext.Roles.FindAsync(roleId);
+            
+            if (userData != null && roleData != null)
+            {
+                // Convert data models to domain objects for normalizer
+                var user = new Domain.User { Id = userData.Id, Name = userData.Name };
+                var role = new Domain.Role { Id = roleData.Id, Name = roleData.Name };
+                
+                UnAssignUserFromRoleNormalizer.Execute(user, role);
+            }
             await _dbContext.SaveChangesAsync(cancellationToken);
             
             CacheOperation(operationKey);
@@ -221,11 +257,18 @@ public class NormalizerOrchestrationService : INormalizerOrchestrationService
                 throw new InvalidOperationException($"Adding group {childGroupId} to group {parentGroupId} would create a circular reference");
             }
             
-            await AddGroupToGroupNormalizer.ExecuteAsync(
-                _dbContext, 
-                childGroupId, 
-                parentGroupId, 
-                createdBy ?? "system");
+            // Get the actual entities from the database
+            var childGroupData = await _dbContext.Groups.FindAsync(childGroupId);
+            var parentGroupData = await _dbContext.Groups.FindAsync(parentGroupId);
+            
+            if (childGroupData != null && parentGroupData != null)
+            {
+                // Convert data models to domain objects for normalizer
+                var childGroup = new Domain.Group { Id = childGroupData.Id, Name = childGroupData.Name };
+                var parentGroup = new Domain.Group { Id = parentGroupData.Id, Name = parentGroupData.Name };
+                
+                AddGroupToGroupNormalizer.Execute(childGroup, parentGroup);
+            }
             
             await _dbContext.SaveChangesAsync(cancellationToken);
             
@@ -259,7 +302,18 @@ public class NormalizerOrchestrationService : INormalizerOrchestrationService
             
             _logger.LogInformation("Removing group {ChildGroupId} from group {ParentGroupId}", childGroupId, parentGroupId);
             
-            await RemoveGroupFromGroupNormalizer.ExecuteAsync(_dbContext, childGroupId, parentGroupId);
+            // Get the actual group entities
+            var childGroupData = await _dbContext.Groups.FindAsync(childGroupId);
+            var parentGroupData = await _dbContext.Groups.FindAsync(parentGroupId);
+            
+            if (childGroupData != null && parentGroupData != null)
+            {
+                // Convert data models to domain objects for normalizer
+                var childGroup = new Domain.Group { Id = childGroupData.Id, Name = childGroupData.Name };
+                var parentGroup = new Domain.Group { Id = parentGroupData.Id, Name = parentGroupData.Name };
+                
+                RemoveGroupFromGroupNormalizer.Execute(childGroup, parentGroup);
+            }
             await _dbContext.SaveChangesAsync(cancellationToken);
             
             CacheOperation(operationKey);
@@ -292,11 +346,18 @@ public class NormalizerOrchestrationService : INormalizerOrchestrationService
             
             _logger.LogInformation("Adding role {RoleId} to group {GroupId}", roleId, groupId);
             
-            await AddRoleToGroupNormalizer.ExecuteAsync(
-                _dbContext, 
-                roleId, 
-                groupId, 
-                createdBy ?? "system");
+            // Get the actual entities
+            var roleData = await _dbContext.Roles.FindAsync(roleId);
+            var groupData = await _dbContext.Groups.FindAsync(groupId);
+            
+            if (roleData != null && groupData != null)
+            {
+                // Convert data models to domain objects for normalizer
+                var role = new Domain.Role { Id = roleData.Id, Name = roleData.Name };
+                var group = new Domain.Group { Id = groupData.Id, Name = groupData.Name };
+                
+                AddRoleToGroupNormalizer.Execute(role, group);
+            }
             
             await _dbContext.SaveChangesAsync(cancellationToken);
             
@@ -330,7 +391,18 @@ public class NormalizerOrchestrationService : INormalizerOrchestrationService
             
             _logger.LogInformation("Removing role {RoleId} from group {GroupId}", roleId, groupId);
             
-            await RemoveRoleFromGroupNormalizer.ExecuteAsync(_dbContext, roleId, groupId);
+            // Get the actual entities
+            var roleData = await _dbContext.Roles.FindAsync(roleId);
+            var groupData = await _dbContext.Groups.FindAsync(groupId);
+            
+            if (roleData != null && groupData != null)
+            {
+                // Convert data models to domain objects for normalizer
+                var role = new Domain.Role { Id = roleData.Id, Name = roleData.Name };
+                var group = new Domain.Group { Id = groupData.Id, Name = groupData.Name };
+                
+                RemoveRoleFromGroupNormalizer.Execute(role, group);
+            }
             await _dbContext.SaveChangesAsync(cancellationToken);
             
             CacheOperation(operationKey);
@@ -356,15 +428,16 @@ public class NormalizerOrchestrationService : INormalizerOrchestrationService
             
             _logger.LogInformation("Creating permission scheme for entity {EntityId}", data.EntityId);
             
-            await CreatePermissionSchemeNormalizer.ExecuteAsync(
-                _dbContext,
-                data.EntityId,
-                data.SchemeType,
-                data.VerbId,
-                data.ResourceName,
-                data.Allow,
-                data.Deny,
-                data.CreatedBy ?? "system");
+            // Create permission object for normalizer
+            var permission = new Domain.Permission
+            {
+                EntityId = data.EntityId,
+                Uri = data.ResourceName,
+                Grant = data.Allow,
+                Deny = data.Deny
+            };
+            
+            CreatePermissionSchemeNormalizer.Execute(permission);
             
             await _dbContext.SaveChangesAsync(cancellationToken);
             
@@ -389,11 +462,13 @@ public class NormalizerOrchestrationService : INormalizerOrchestrationService
             
             _logger.LogInformation("Creating resource {ResourceName}", data.Name);
             
-            await CreateResourceNormalizer.ExecuteAsync(
-                _dbContext,
-                data.Name,
-                data.Description,
-                data.CreatedBy ?? "system");
+            // Create permission object for normalizer
+            var permission = new Domain.Permission
+            {
+                Uri = data.Name
+            };
+            
+            CreateResourceNormalizer.Execute(permission);
             
             await _dbContext.SaveChangesAsync(cancellationToken);
             
@@ -418,12 +493,18 @@ public class NormalizerOrchestrationService : INormalizerOrchestrationService
             
             _logger.LogInformation("Creating URI access for resource {ResourceId}", data.ResourceId);
             
-            await CreateUriAccessNormalizer.ExecuteAsync(
-                _dbContext,
-                data.ResourceId,
-                data.UriPattern,
-                data.VerbId,
-                data.CreatedBy ?? "system");
+            // Create permission object for normalization
+            var permission = new Permission
+            {
+                EntityId = data.ResourceId,
+                Resource = data.UriPattern,
+                Action = data.VerbId.ToString(),
+                Scope = "URI",
+                Grant = true,
+                Deny = false
+            };
+            
+            CreateUriAccessNormalizer.Execute(permission);
             
             await _dbContext.SaveChangesAsync(cancellationToken);
             

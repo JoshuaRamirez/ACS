@@ -1,67 +1,33 @@
-using ACS.Service.Data;
-using ACS.Service.Data.Models;
-using Microsoft.EntityFrameworkCore;
+using ACS.Service.Domain;
 
 namespace ACS.Service.Delegates.Normalizers
 {
+    /// <summary>
+    /// Pure behavioral transformation for adding a role to a group
+    /// LMAX ARCHITECTURE: This is a pure static method that only manipulates in-memory object graph
+    /// NO DATABASE OPERATIONS - NO VALIDATION - NO SIDE EFFECTS
+    /// Domain objects handle business rules, this normalizer only handles behavioral consistency
+    /// </summary>
     public static class AddRoleToGroupNormalizer
     {
-        public static async Task ExecuteAsync(ApplicationDbContext dbContext, int groupId, int roleId, string createdBy)
+        /// <summary>
+        /// Creates bidirectional parent-child relationship between role and group in memory only
+        /// </summary>
+        /// <param name="role">The role being added to the group</param>
+        /// <param name="group">The group receiving the role</param>
+        public static void Execute(Role role, Group group)
         {
-            // Verify the group and role exist
-            var groupExists = await dbContext.Groups.AnyAsync(g => g.Id == groupId);
-            if (!groupExists)
+            // Add role to group's children collection (role becomes child of group)
+            if (!group.Children.Contains(role))
             {
-                throw new InvalidOperationException($"Group {groupId} not found.");
+                group.Children.Add(role);
             }
 
-            var roleExists = await dbContext.Roles.AnyAsync(r => r.Id == roleId);
-            if (!roleExists)
+            // Add group to role's parents collection (group becomes parent of role)
+            if (!role.Parents.Contains(group))
             {
-                throw new InvalidOperationException($"Role {roleId} not found.");
+                role.Parents.Add(group);
             }
-
-            // Check if relationship already exists
-            var existingRelation = await dbContext.GroupRoles
-                .FirstOrDefaultAsync(gr => gr.GroupId == groupId && gr.RoleId == roleId);
-            
-            if (existingRelation != null)
-            {
-                return; // Relationship already exists, nothing to do
-            }
-
-            // Create the new relationship
-            var groupRole = new GroupRole
-            {
-                GroupId = groupId,
-                RoleId = roleId,
-                CreatedBy = createdBy,
-                CreatedAt = DateTime.UtcNow
-            };
-
-            dbContext.GroupRoles.Add(groupRole);
-            
-            // Update the UpdatedAt timestamp for both entities
-            var group = await dbContext.Groups.FindAsync(groupId);
-            var role = await dbContext.Roles.FindAsync(roleId);
-            
-            if (group != null)
-            {
-                group.UpdatedAt = DateTime.UtcNow;
-                dbContext.Groups.Update(group);
-            }
-            
-            if (role != null)
-            {
-                role.UpdatedAt = DateTime.UtcNow;
-                dbContext.Roles.Update(role);
-            }
-        }
-        
-        // Legacy method for compatibility - remove after domain layer is updated
-        public static void Execute(int roleId, int groupId)
-        {
-            throw new NotSupportedException("Legacy normalizer method is no longer supported. Use ExecuteAsync instead.");
         }
     }
 }

@@ -9,9 +9,10 @@ namespace ACS.WebApi.Tests.Integration.Infrastructure;
 /// <summary>
 /// Test implementation of ITenantContextService for integration tests
 /// </summary>
-public class TestTenantContextService : ITenantContextService
+public class TestTenantContextService : ACS.Infrastructure.Services.ITenantContextService
 {
-    public string GetTenantId() => "test-tenant";
+    public string? GetTenantId() => "test-tenant";
+    public string GetRequiredTenantId() => GetTenantId() ?? throw new InvalidOperationException("Tenant ID not available");
     public TenantProcessInfo? GetTenantProcessInfo() => new TenantProcessInfo
     {
         TenantId = "test-tenant",
@@ -22,17 +23,31 @@ public class TestTenantContextService : ITenantContextService
         LastHealthCheck = DateTime.UtcNow
     };
     public GrpcChannel? GetGrpcChannel() => null;
+    public void SetTenantContext(string tenantId, TenantProcessInfo? processInfo = null, GrpcChannel? grpcChannel = null) { }
+    public void ClearTenantContext() { }
+    public Task<bool> ValidateTenantAccessAsync(CancellationToken cancellationToken = default) => Task.FromResult(true);
 }
 
 /// <summary>
 /// Test implementation of IUserContextService for integration tests
 /// </summary>
-public class TestUserContextService : IUserContextService
+public class TestUserContextService : ACS.Infrastructure.Services.IUserContextService
 {
     public string GetCurrentUserId() => "test-user-123";
-    public string? GetCurrentUserName() => "Test User";
-    public List<string> GetCurrentUserRoles() => new() { "Admin", "User" };
-    public bool IsInRole(string role) => GetCurrentUserRoles().Contains(role);
+    public string GetCurrentUserName() => "Test User";
+    public string GetTenantId() => "test-tenant";
+    public bool IsAuthenticated() => true;
+    public IEnumerable<string> GetUserRoles() => new[] { "Admin", "User" };
+    public bool HasRole(string role) => GetUserRoles().Contains(role);
+    public string? GetUserEmail() => "testuser@example.com";
+    public string? GetClaim(string claimType) => claimType == "email" ? GetUserEmail() : null;
+    public IEnumerable<(string Type, string Value)> GetAllClaims() => new[] 
+    { 
+        ("sub", GetCurrentUserId()), 
+        ("name", GetCurrentUserName()), 
+        ("email", GetUserEmail() ?? ""),
+        ("tenant_id", GetTenantId())
+    };
 }
 
 /// <summary>
@@ -40,13 +55,13 @@ public class TestUserContextService : IUserContextService
 /// </summary>
 public class TestTenantGrpcClientService : TenantGrpcClientService
 {
-    public TestTenantGrpcClientService() : base(null!, null!, null!, null!, null!)
+    public TestTenantGrpcClientService() : base(null!, null!, null!, null!, null!, null!)
     {
     }
 
     // Override methods to return test data instead of making gRPC calls
     
-    public override async Task<ApiResponse<UserListResponse>> GetUsersAsync(GetUsersCommand command)
+    public new async Task<ApiResponse<UserListResponse>> GetUsersAsync(GetUsersCommand command)
     {
         await Task.Delay(1); // Simulate async operation
         
@@ -62,22 +77,22 @@ public class TestTenantGrpcClientService : TenantGrpcClientService
         return new ApiResponse<UserListResponse>(true, response, "Success");
     }
 
-    public override async Task<ApiResponse<UserResponse>> GetUserAsync(GetUserCommand command)
+    public new async Task<ApiResponse<UserResponse>> GetUserAsync(GetUserCommand command)
     {
         await Task.Delay(1);
         
-        if (command.UserId == 999) // Test case for not found
+        if (command.UserId == "999") // Test case for not found
         {
             return new ApiResponse<UserResponse>(false, null, "User not found");
         }
 
-        var user = new UserResponse(command.UserId, "Test User", 1, "Administrators", 1, "Admin",
+        var user = new UserResponse(int.TryParse(command.UserId, out int userId) ? userId : 1, "Test User", 1, "Administrators", 1, "Admin",
             new List<PermissionResponse>(), DateTime.UtcNow.AddDays(-30), DateTime.UtcNow);
         
         return new ApiResponse<UserResponse>(true, user, "Success");
     }
 
-    public override async Task<ApiResponse<UserResponse>> CreateUserAsync(CreateUserCommand command)
+    public new async Task<ApiResponse<UserResponse>> CreateUserAsync(CreateUserCommand command)
     {
         await Task.Delay(1);
         
@@ -87,26 +102,26 @@ public class TestTenantGrpcClientService : TenantGrpcClientService
         return new ApiResponse<UserResponse>(true, user, "User created successfully");
     }
 
-    public override async Task<ApiResponse<UserResponse>> UpdateUserAsync(UpdateUserCommand command)
+    public new async Task<ApiResponse<UserResponse>> UpdateUserAsync(UpdateUserCommand command)
     {
         await Task.Delay(1);
         
-        if (command.UserId == 999)
+        if (command.UserId == "999")
         {
             return new ApiResponse<UserResponse>(false, null, "User not found");
         }
 
-        var user = new UserResponse(command.UserId, command.Name, null, null, null, null,
+        var user = new UserResponse(int.TryParse(command.UserId, out int updateUserId) ? updateUserId : 1, command.Name, null, null, null, null,
             new List<PermissionResponse>(), DateTime.UtcNow.AddDays(-30), DateTime.UtcNow);
         
         return new ApiResponse<UserResponse>(true, user, "User updated successfully");
     }
 
-    public override async Task<ApiResponse<bool>> DeleteUserAsync(DeleteUserCommand command)
+    public new async Task<ApiResponse<bool>> DeleteUserAsync(DeleteUserCommand command)
     {
         await Task.Delay(1);
         
-        if (command.UserId == 999)
+        if (command.UserId == "999")
         {
             return new ApiResponse<bool>(false, false, "User not found");
         }
@@ -114,7 +129,7 @@ public class TestTenantGrpcClientService : TenantGrpcClientService
         return new ApiResponse<bool>(true, true, "User deleted successfully");
     }
 
-    public override async Task<ApiResponse<bool>> AddUserToGroupAsync(AddUserToGroupRequest request)
+    public new async Task<ApiResponse<bool>> AddUserToGroupAsync(AddUserToGroupRequest request)
     {
         await Task.Delay(1);
         
@@ -126,7 +141,7 @@ public class TestTenantGrpcClientService : TenantGrpcClientService
         return new ApiResponse<bool>(true, true, "User added to group successfully");
     }
 
-    public override async Task<ApiResponse<bool>> AssignUserToRoleAsync(AssignUserToRoleRequest request)
+    public new async Task<ApiResponse<bool>> AssignUserToRoleAsync(AssignUserToRoleRequest request)
     {
         await Task.Delay(1);
         
@@ -138,7 +153,7 @@ public class TestTenantGrpcClientService : TenantGrpcClientService
         return new ApiResponse<bool>(true, true, "User assigned to role successfully");
     }
 
-    public override async Task<ApiResponse<GroupListResponse>> GetGroupsAsync(GetGroupsCommand command)
+    public new async Task<ApiResponse<GroupListResponse>> GetGroupsAsync(GetGroupsCommand command)
     {
         await Task.Delay(1);
         
@@ -156,7 +171,7 @@ public class TestTenantGrpcClientService : TenantGrpcClientService
         return new ApiResponse<GroupListResponse>(true, response, "Success");
     }
 
-    public override async Task<ApiResponse<GroupResponse>> GetGroupAsync(GetGroupCommand command)
+    public new async Task<ApiResponse<GroupResponse>> GetGroupAsync(GetGroupCommand command)
     {
         await Task.Delay(1);
         
@@ -172,7 +187,7 @@ public class TestTenantGrpcClientService : TenantGrpcClientService
         return new ApiResponse<GroupResponse>(true, group, "Success");
     }
 
-    public override async Task<ApiResponse<CheckPermissionResponse>> CheckPermissionAsync(CheckPermissionRequest request)
+    public new async Task<ApiResponse<CheckPermissionResponse>> CheckPermissionAsync(CheckPermissionRequest request)
     {
         await Task.Delay(1);
         
@@ -189,7 +204,7 @@ public class TestTenantGrpcClientService : TenantGrpcClientService
         return new ApiResponse<CheckPermissionResponse>(true, response, "Permission check completed");
     }
 
-    public override async Task<ApiResponse<GroupResponse>> CreateGroupAsync(CreateGroupCommand command)
+    public new async Task<ApiResponse<GroupResponse>> CreateGroupAsync(CreateGroupCommand command)
     {
         await Task.Delay(1);
         
@@ -210,7 +225,7 @@ public class TestTenantGrpcClientService : TenantGrpcClientService
         return new ApiResponse<GroupResponse>(true, group, "Group created successfully");
     }
 
-    public override async Task<ApiResponse<GroupResponse>> UpdateGroupAsync(UpdateGroupCommand command)
+    public new async Task<ApiResponse<GroupResponse>> UpdateGroupAsync(UpdateGroupCommand command)
     {
         await Task.Delay(1);
         
@@ -231,7 +246,7 @@ public class TestTenantGrpcClientService : TenantGrpcClientService
         return new ApiResponse<GroupResponse>(true, group, "Group updated successfully");
     }
 
-    public override async Task<ApiResponse<bool>> DeleteGroupAsync(DeleteGroupCommand command)
+    public new async Task<ApiResponse<bool>> DeleteGroupAsync(DeleteGroupCommand command)
     {
         await Task.Delay(1);
         
@@ -243,19 +258,7 @@ public class TestTenantGrpcClientService : TenantGrpcClientService
         return new ApiResponse<bool>(true, true, "Group deleted successfully");
     }
 
-    public override async Task<ApiResponse<bool>> AddUserToGroupAsync(AddUserToGroupRequest request)
-    {
-        await Task.Delay(1);
-        
-        if (request.UserId == 999 || request.GroupId == 999)
-        {
-            return new ApiResponse<bool>(false, false, "User or Group not found");
-        }
-
-        return new ApiResponse<bool>(true, true, "User added to group successfully");
-    }
-
-    public override async Task<ApiResponse<bool>> AddRoleToGroupAsync(AddRoleToGroupRequest request)
+    public new async Task<ApiResponse<bool>> AddRoleToGroupAsync(AddRoleToGroupRequest request)
     {
         await Task.Delay(1);
         
@@ -267,7 +270,7 @@ public class TestTenantGrpcClientService : TenantGrpcClientService
         return new ApiResponse<bool>(true, true, "Role added to group successfully");
     }
 
-    public override async Task<ApiResponse<bool>> GrantPermissionAsync(GrantPermissionRequest request)
+    public new async Task<ApiResponse<bool>> GrantPermissionAsync(GrantPermissionRequest request)
     {
         await Task.Delay(1);
         
@@ -294,7 +297,7 @@ public class TestTenantGrpcClientService : TenantGrpcClientService
         return new ApiResponse<bool>(true, true, "Permission granted successfully");
     }
 
-    public override async Task<ApiResponse<bool>> DenyPermissionAsync(DenyPermissionRequest request)
+    public new async Task<ApiResponse<bool>> DenyPermissionAsync(DenyPermissionRequest request)
     {
         await Task.Delay(1);
         
@@ -321,7 +324,7 @@ public class TestTenantGrpcClientService : TenantGrpcClientService
         return new ApiResponse<bool>(true, true, "Permission denied successfully");
     }
 
-    public override async Task<ApiResponse<PermissionListResponse>> GetEntityPermissionsAsync(int entityId)
+    public async Task<ApiResponse<PermissionListResponse>> GetEntityPermissionsAsync(int entityId)
     {
         await Task.Delay(1);
         

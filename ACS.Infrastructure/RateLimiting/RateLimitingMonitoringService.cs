@@ -115,7 +115,7 @@ public class RateLimitingMonitoringService : BackgroundService
         }
     }
 
-    private async Task CheckAlertsAsync(RateLimitingMetricsService metricsService, CancellationToken cancellationToken)
+    private Task CheckAlertsAsync(RateLimitingMetricsService metricsService, CancellationToken cancellationToken)
     {
         try
         {
@@ -149,6 +149,8 @@ public class RateLimitingMonitoringService : BackgroundService
         {
             _logger.LogError(ex, "Error checking rate limiting alerts");
         }
+        
+        return Task.CompletedTask;
     }
 
     private async Task PerformCleanupAsync(IRateLimitStorage storage, CancellationToken cancellationToken)

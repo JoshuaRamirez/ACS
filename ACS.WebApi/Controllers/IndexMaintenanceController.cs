@@ -215,8 +215,7 @@ public class IndexMaintenanceController : ControllerBase
     /// <summary>
     /// Rebuild a specific index
     /// </summary>
-    /// <param name="tableName">Table name</param>
-    /// <param name="indexName">Index name</param>
+    /// <param name="request">Index maintenance request containing table and index names</param>
     /// <returns>Success status</returns>
     [HttpPost("rebuild")]
     public async Task<IActionResult> RebuildIndex([FromBody] IndexMaintenanceRequest request)
@@ -260,8 +259,7 @@ public class IndexMaintenanceController : ControllerBase
     /// <summary>
     /// Reorganize a specific index
     /// </summary>
-    /// <param name="tableName">Table name</param>
-    /// <param name="indexName">Index name</param>
+    /// <param name="request">Index maintenance request containing table and index names</param>
     /// <returns>Success status</returns>
     [HttpPost("reorganize")]
     public async Task<IActionResult> ReorganizeIndex([FromBody] IndexMaintenanceRequest request)

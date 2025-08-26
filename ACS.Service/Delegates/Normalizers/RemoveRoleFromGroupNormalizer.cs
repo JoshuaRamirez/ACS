@@ -1,41 +1,42 @@
-using System;
-using System.Linq;
 using ACS.Service.Domain;
 
 namespace ACS.Service.Delegates.Normalizers
 {
-    internal static class RemoveRoleFromGroupNormalizer
+    /// <summary>
+    /// Pure behavioral transformation for removing a role from a group
+    /// LMAX ARCHITECTURE: This is a pure static method that only manipulates in-memory object graph
+    /// NO DATABASE OPERATIONS - NO VALIDATION - NO SIDE EFFECTS
+    /// Domain objects handle business rules, this normalizer only handles behavioral consistency
+    /// </summary>
+    public static class RemoveRoleFromGroupNormalizer
     {
-        // These now reference the same Domain objects as the entity graph
-        public static List<Group> Groups { get; set; } = null!;
-        public static List<Role> Roles { get; set; } = null!;
-        
-        public static void Execute(int roleId, int groupId)
+        /// <summary>
+        /// Removes bidirectional parent-child relationship between role and group in memory only
+        /// </summary>
+        /// <param name="role">The role being removed from the group</param>
+        /// <param name="group">The group to remove the role from</param>
+        public static void Execute(Role role, Group group)
         {
-            if (Groups is null)
+            // Remove role from group's children collection
+            if (group.Children.Contains(role))
             {
-                throw new InvalidOperationException("Groups collection has not been initialized.");
+                group.Children.Remove(role);
             }
 
-            if (Roles is null)
+            // Remove group from role's parents collection
+            if (role.Parents.Contains(group))
             {
-                throw new InvalidOperationException("Roles collection has not been initialized.");
+                role.Parents.Remove(group);
             }
+        }
 
-            var role = Roles.SingleOrDefault(x => x.Id == roleId)
-                ?? throw new InvalidOperationException($"Role {roleId} not found.");
-
-            var group = Groups.SingleOrDefault(x => x.Id == groupId)
-                ?? throw new InvalidOperationException($"Group {groupId} not found.");
-
-            if (!group.Children.Contains(role))
-            {
-                throw new InvalidOperationException($"Role {roleId} is not a member of group {groupId}.");
-            }
-
-            // Update the domain object collections directly
-            group.Children.Remove(role);
-            role.Parents.Remove(group);
+        /// <summary>
+        /// Async version for orchestration service compatibility
+        /// </summary>
+        public static Task ExecuteAsync(Role role, Group group)
+        {
+            Execute(role, group);
+            return Task.CompletedTask;
         }
     }
 }

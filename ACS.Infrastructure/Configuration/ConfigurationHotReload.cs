@@ -329,7 +329,7 @@ public static class ConfigurationHotReloadExtensions
 {
     public static IServiceCollection AddConfigurationHotReload(
         this IServiceCollection services,
-        Action<ConfigurationHotReloadOptions> configureOptions = null)
+        Action<ConfigurationHotReloadOptions>? configureOptions = null)
     {
         var options = new ConfigurationHotReloadOptions();
         configureOptions?.Invoke(options);
@@ -356,7 +356,7 @@ public static class ConfigurationHotReloadExtensions
     public static IServiceCollection ConfigureWithHotReload<TOptions>(
         this IServiceCollection services,
         IConfiguration configuration,
-        Action<TOptions> onChange = null) where TOptions : class
+        Action<TOptions>? onChange = null) where TOptions : class
     {
         services.Configure<TOptions>(configuration);
         

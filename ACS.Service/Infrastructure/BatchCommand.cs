@@ -53,7 +53,7 @@ public class BatchResult
 /// </summary>
 public abstract class BatchCommand<TResult> : BatchCommand
 {
-    public new TaskCompletionSource<BatchOperationResult<TResult>>? CompletionSource 
+    public TaskCompletionSource<BatchOperationResult<TResult>>? CompletionSource 
     { 
         get => base.CompletionSourceObject as TaskCompletionSource<BatchOperationResult<TResult>>;
         set => base.CompletionSourceObject = value; 

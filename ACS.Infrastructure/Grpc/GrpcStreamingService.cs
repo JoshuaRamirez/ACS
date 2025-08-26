@@ -66,34 +66,45 @@ public class GrpcStreamingService : IGrpcStreamingService
         _logger.LogDebug("Starting server streaming for type {Type}", typeof(T).Name);
         var itemCount = 0;
 
+        IAsyncEnumerable<T> stream;
         try
         {
-            await foreach (var item in producer(cancellationToken).WithCancellation(cancellationToken))
-            {
-                itemCount++;
-                _logger.LogTrace("Streaming item {Count} of type {Type}", itemCount, typeof(T).Name);
-                
-                yield return item;
-
-                // Apply rate limiting if configured
-                if (_options.RateLimitDelayMs > 0)
-                {
-                    await Task.Delay(_options.RateLimitDelayMs, cancellationToken);
-                }
-            }
-
-            _logger.LogDebug("Server streaming completed. Streamed {Count} items", itemCount);
-        }
-        catch (OperationCanceledException)
-        {
-            _logger.LogInformation("Server streaming cancelled after {Count} items", itemCount);
-            throw;
+            stream = producer(cancellationToken);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error during server streaming after {Count} items", itemCount);
+            _logger.LogError(ex, "Error creating producer stream for type {Type}", typeof(T).Name);
             throw;
         }
+
+        await foreach (var item in stream.WithCancellation(cancellationToken))
+        {
+            itemCount++;
+            _logger.LogTrace("Streaming item {Count} of type {Type}", itemCount, typeof(T).Name);
+            
+            yield return item;
+
+            // Apply rate limiting if configured
+            if (_options.RateLimitDelayMs > 0)
+            {
+                try
+                {
+                    await Task.Delay(_options.RateLimitDelayMs, cancellationToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    _logger.LogInformation("Server streaming cancelled after {Count} items", itemCount);
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error during rate limiting delay after {Count} items", itemCount);
+                    throw;
+                }
+            }
+        }
+
+        _logger.LogDebug("Server streaming completed. Streamed {Count} items", itemCount);
     }
 
     public async Task<TResponse> ClientStreamAsync<TRequest, TResponse>(
