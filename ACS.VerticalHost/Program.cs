@@ -9,6 +9,18 @@ using ACS.Service.Data;
 using ACS.Service.Infrastructure;
 using ACS.Service.Services;
 using ACS.VerticalHost.Services;
+using ACS.VerticalHost.Handlers;
+using ACS.VerticalHost.Commands;
+using CommandIndexAnalysisReport = ACS.VerticalHost.Commands.IndexAnalysisReport;
+using CommandMissingIndexRecommendation = ACS.VerticalHost.Commands.MissingIndexRecommendation;
+using CommandMetricsSnapshot = ACS.VerticalHost.Commands.MetricsSnapshot;
+using CommandMetricDataPoint = ACS.VerticalHost.Commands.MetricDataPoint;
+using CommandDashboardData = ACS.VerticalHost.Commands.DashboardData;
+using CommandDashboardInfo = ACS.VerticalHost.Commands.DashboardInfo;
+using CommandDashboardConfiguration = ACS.VerticalHost.Commands.DashboardConfiguration;
+using CommandRateLimitStatus = ACS.VerticalHost.Commands.RateLimitStatus;
+using CommandAggregatedRateLimitMetrics = ACS.VerticalHost.Commands.AggregatedRateLimitMetrics;
+using ACS.Service.Domain;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 
@@ -64,16 +76,34 @@ public class Program
         // Set tenant ID in configuration for service registration
         builder.Configuration["TenantId"] = tenantId;
         
-        // Configure all services using centralized registration
+        // ================================
+        // VERTICAL HOST: BUSINESS LOGIC LAYER
+        // Contains ALL business services and domain logic
+        // Includes command buffer for sequential processing
+        // ================================
+        
         using var loggerFactory = LoggerFactory.Create(options => options.AddConsole());
         var logger = loggerFactory.CreateLogger<Program>();
+        
+        // Configure ALL business services (this is where they belong)
         builder.Services.ConfigureServices(builder.Configuration, logger, "VerticalHost");
         
-        // Configure comprehensive OpenTelemetry for distributed tracing, metrics, and logging
-        builder.Services.ConfigureOpenTelemetryForVerticalHost(builder.Configuration, builder.Environment);
+        // ================================
+        // COMMAND BUFFER SYSTEM
+        // ================================
+        
+        // Register the command buffer as singleton (per tenant process)
+        builder.Services.AddSingleton<ICommandBuffer, CommandBuffer>();
+        
+        // Register command/query handlers
+        builder.Services.AddCommandQueryHandlers();
         
         // Add VerticalHost-specific services
         builder.Services.AddHostedService<TenantAccessControlHostedService>();
+        builder.Services.AddHostedService<CommandBufferHostedService>();
+        
+        // Configure comprehensive OpenTelemetry for distributed tracing, metrics, and logging
+        builder.Services.ConfigureOpenTelemetryForVerticalHost(builder.Configuration, builder.Environment);
         
         // Add gRPC service with interceptors
         builder.Services.AddGrpc().AddServiceOptions<VerticalGrpcService>(options =>
@@ -102,7 +132,9 @@ public class Program
             .AddConnectionPoolHealthCheck(
                 connectionString, 
                 name: $"database_pool_{tenantId}",
-                maxPoolSizeThreshold: 80);
+                maxPoolSizeThreshold: 80)
+            .AddCheck<CommandBufferHealthCheck>("command_buffer")
+            .AddCheck<InMemoryEntityGraphHealthCheck>("entity_graph");
 
         // Build and configure the application
         var app = builder.Build();
@@ -112,6 +144,10 @@ public class Program
         {
             var serviceLogger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
             ServiceRegistrationValidator.ValidateServices(scope.ServiceProvider, serviceLogger);
+            
+            // Validate that command buffer is properly configured
+            var commandBuffer = scope.ServiceProvider.GetRequiredService<ICommandBuffer>();
+            serviceLogger.LogInformation("✅ Command buffer initialized successfully");
         }
 
         // Enable response compression middleware
@@ -123,18 +159,24 @@ public class Program
         // Map health check endpoint
         app.MapHealthChecks("/health");
 
-        // Initialize entity graph
+        // Initialize entity graph and command buffer
         using (var scope = app.Services.CreateScope())
         {
             var entityGraph = scope.ServiceProvider.GetRequiredService<InMemoryEntityGraph>();
+            var commandBuffer = scope.ServiceProvider.GetRequiredService<ICommandBuffer>();
+            
+            // Start command buffer processing
+            await commandBuffer.StartAsync();
             
             // Entity graph will be loaded lazily by the services as needed
-            // No need for explicit preloading since services handle their own initialization
-            
-            Console.WriteLine($"Entity graph initialized for tenant: {tenantId}");
+            Console.WriteLine($"✅ VerticalHost initialized for tenant: {tenantId}");
+            Console.WriteLine($"📊 Command buffer active - sequential processing enabled");
+            Console.WriteLine($"💾 In-memory entity graph ready");
         }
 
-        Console.WriteLine($"Starting VerticalHost for tenant: {tenantId} on gRPC port: {grpcPort}");
+        Console.WriteLine($"🚀 Starting VerticalHost for tenant: {tenantId} on gRPC port: {grpcPort}");
+        Console.WriteLine($"🏗️  Architecture: HTTP API → gRPC → Command Buffer → Business Logic → Database");
+        
         await app.RunAsync();
     }
 
@@ -144,5 +186,199 @@ public class Program
             ?? "Server=(localdb)\\mssqllocaldb;Database=ACS_{TenantId};Trusted_Connection=true;MultipleActiveResultSets=true";
         
         return baseConnectionString.Replace("{TenantId}", tenantId);
+    }
+}
+
+/// <summary>
+/// Extension methods for registering command/query handlers
+/// </summary>
+public static class CommandQueryHandlerRegistration
+{
+    public static IServiceCollection AddCommandQueryHandlers(this IServiceCollection services)
+    {
+        // Register user command handlers (non-generic ICommand)
+        services.AddTransient<ACS.VerticalHost.Services.ICommandHandler<ACS.VerticalHost.Commands.CreateUserCommand>, CreateUserCommandHandler>();
+        services.AddTransient<ACS.VerticalHost.Services.ICommandHandler<ACS.VerticalHost.Commands.UpdateUserCommand>, UpdateUserCommandHandler>();
+        services.AddTransient<ACS.VerticalHost.Services.ICommandHandler<ACS.VerticalHost.Commands.DeleteUserCommand>, DeleteUserCommandHandler>();
+        services.AddTransient<ACS.VerticalHost.Services.ICommandHandler<ACS.VerticalHost.Commands.AddUserToGroupCommand>, AddUserToGroupCommandHandler>();
+        services.AddTransient<ACS.VerticalHost.Services.ICommandHandler<ACS.VerticalHost.Commands.RemoveUserFromGroupCommand>, RemoveUserFromGroupCommandHandler>();
+        
+        // Register authentication command handlers (generic ICommand<T>)
+        services.AddTransient<ACS.VerticalHost.Services.ICommandHandler<LoginCommand, AuthResult>, LoginCommandHandler>();
+        services.AddTransient<ACS.VerticalHost.Services.ICommandHandler<RefreshTokenCommand, AuthResult>, RefreshTokenCommandHandler>();
+        services.AddTransient<ACS.VerticalHost.Services.ICommandHandler<ChangePasswordCommand, bool>, ChangePasswordCommandHandler>();
+        
+        // Register system command handlers (generic ICommand<T>)
+        services.AddTransient<ACS.VerticalHost.Services.ICommandHandler<ValidateMigrationsCommand, Commands.MigrationValidationResult>, ValidateMigrationsCommandHandler>();
+        
+        // Register query handlers
+        services.AddTransient<ACS.VerticalHost.Services.IQueryHandler<GetUserQuery, User>, GetUserQueryHandler>();
+        services.AddTransient<ACS.VerticalHost.Services.IQueryHandler<GetUsersQuery, List<User>>, GetUsersQueryHandler>();
+        services.AddTransient<ACS.VerticalHost.Services.IQueryHandler<GetUserGroupsQuery, List<Group>>, GetUserGroupsQueryHandler>();
+        
+        // Register system query handlers
+        services.AddTransient<ACS.VerticalHost.Services.IQueryHandler<GetSystemOverviewQuery, SystemOverview>, GetSystemOverviewQueryHandler>();
+        services.AddTransient<ACS.VerticalHost.Services.IQueryHandler<GetHealthStatusQuery, Commands.HealthStatus>, GetHealthStatusQueryHandler>();
+        services.AddTransient<ACS.VerticalHost.Services.IQueryHandler<GetMigrationHistoryQuery, List<Commands.MigrationInfo>>, GetMigrationHistoryQueryHandler>();
+        services.AddTransient<ACS.VerticalHost.Services.IQueryHandler<GetSystemInfoQuery, SystemDiagnosticInfo>, GetSystemInfoQueryHandler>();
+        
+        // Register database backup command handlers
+        services.AddTransient<ACS.VerticalHost.Services.ICommandHandler<CreateBackupCommand, ACS.VerticalHost.Commands.BackupResult>, CreateBackupCommandHandler>();
+        services.AddTransient<ACS.VerticalHost.Services.ICommandHandler<RestoreBackupCommand, ACS.VerticalHost.Commands.RestoreResult>, RestoreBackupCommandHandler>();
+        services.AddTransient<ACS.VerticalHost.Services.ICommandHandler<VerifyBackupCommand, bool>, VerifyBackupCommandHandler>();
+        services.AddTransient<ACS.VerticalHost.Services.ICommandHandler<CleanupOldBackupsCommand, ACS.VerticalHost.Commands.CleanupResult>, CleanupOldBackupsCommandHandler>();
+        
+        // Register database backup query handlers
+        services.AddTransient<ACS.VerticalHost.Services.IQueryHandler<GetBackupHistoryQuery, List<ACS.VerticalHost.Commands.BackupHistoryInfo>>, GetBackupHistoryQueryHandler>();
+        services.AddTransient<ACS.VerticalHost.Services.IQueryHandler<GetBackupConfigurationQuery, ACS.VerticalHost.Commands.BackupConfiguration>, GetBackupConfigurationQueryHandler>();
+        
+        // Register index maintenance command handlers
+        services.AddTransient<ACS.VerticalHost.Services.ICommandHandler<RebuildIndexCommand, bool>, RebuildIndexCommandHandler>();
+        services.AddTransient<ACS.VerticalHost.Services.ICommandHandler<ReorganizeIndexCommand, bool>, ReorganizeIndexCommandHandler>();
+        
+        // Register index maintenance query handlers
+        services.AddTransient<ACS.VerticalHost.Services.IQueryHandler<AnalyzeIndexesQuery, CommandIndexAnalysisReport>, AnalyzeIndexesQueryHandler>();
+        services.AddTransient<ACS.VerticalHost.Services.IQueryHandler<GetMissingIndexRecommendationsQuery, List<CommandMissingIndexRecommendation>>, GetMissingIndexRecommendationsQueryHandler>();
+        services.AddTransient<ACS.VerticalHost.Services.IQueryHandler<GetUnusedIndexesQuery, List<UnusedIndexInfo>>, GetUnusedIndexesQueryHandler>();
+        services.AddTransient<ACS.VerticalHost.Services.IQueryHandler<GetFragmentedIndexesQuery, List<FragmentedIndexInfo>>, GetFragmentedIndexesQueryHandler>();
+        
+        // Register metrics command handlers
+        services.AddTransient<ACS.VerticalHost.Services.ICommandHandler<RecordBusinessMetricCommand>, RecordBusinessMetricCommandHandler>();
+        services.AddTransient<ACS.VerticalHost.Services.ICommandHandler<SaveDashboardConfigurationCommand>, SaveDashboardConfigurationCommandHandler>();
+        
+        // Register metrics query handlers
+        services.AddTransient<ACS.VerticalHost.Services.IQueryHandler<GetMetricsSnapshotQuery, CommandMetricsSnapshot>, GetMetricsSnapshotQueryHandler>();
+        services.AddTransient<ACS.VerticalHost.Services.IQueryHandler<GetMetricDataQuery, List<CommandMetricDataPoint>>, GetMetricDataQueryHandler>();
+        services.AddTransient<ACS.VerticalHost.Services.IQueryHandler<GetDashboardQuery, CommandDashboardData>, GetDashboardQueryHandler>();
+        services.AddTransient<ACS.VerticalHost.Services.IQueryHandler<GetAvailableDashboardsQuery, List<CommandDashboardInfo>>, GetAvailableDashboardsQueryHandler>();
+        services.AddTransient<ACS.VerticalHost.Services.IQueryHandler<GetDashboardConfigurationQuery, CommandDashboardConfiguration>, GetDashboardConfigurationQueryHandler>();
+        services.AddTransient<ACS.VerticalHost.Services.IQueryHandler<GetTopMetricsQuery, List<TopMetric>>, GetTopMetricsQueryHandler>();
+        
+        // Register rate limiting command handlers
+        services.AddTransient<ACS.VerticalHost.Services.ICommandHandler<ResetRateLimitCommand>, ResetRateLimitCommandHandler>();
+        services.AddTransient<ACS.VerticalHost.Services.ICommandHandler<TestRateLimitCommand, RateLimitTestResult>, TestRateLimitCommandHandler>();
+        
+        // Register rate limiting query handlers
+        services.AddTransient<ACS.VerticalHost.Services.IQueryHandler<GetRateLimitStatusQuery, CommandRateLimitStatus>, GetRateLimitStatusQueryHandler>();
+        services.AddTransient<ACS.VerticalHost.Services.IQueryHandler<GetActiveLimitsQuery, List<ActiveRateLimit>>, GetActiveLimitsQueryHandler>();
+        services.AddTransient<ACS.VerticalHost.Services.IQueryHandler<GetRateLimitMetricsQuery, RateLimitMetrics>, GetRateLimitMetricsQueryHandler>();
+        services.AddTransient<ACS.VerticalHost.Services.IQueryHandler<GetAggregatedRateLimitMetricsQuery, CommandAggregatedRateLimitMetrics>, GetAggregatedRateLimitMetricsQueryHandler>();
+        services.AddTransient<ACS.VerticalHost.Services.IQueryHandler<GetRateLimitHealthStatusQuery, RateLimitHealthStatus>, GetRateLimitHealthStatusQueryHandler>();
+        
+        return services;
+    }
+}
+
+/// <summary>
+/// Hosted service to manage command buffer lifecycle
+/// </summary>
+public class CommandBufferHostedService : IHostedService
+{
+    private readonly ICommandBuffer _commandBuffer;
+    private readonly ILogger<CommandBufferHostedService> _logger;
+
+    public CommandBufferHostedService(
+        ICommandBuffer commandBuffer,
+        ILogger<CommandBufferHostedService> logger)
+    {
+        _commandBuffer = commandBuffer;
+        _logger = logger;
+    }
+
+    public async Task StartAsync(CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("Starting Command Buffer processing");
+        await _commandBuffer.StartAsync(cancellationToken);
+    }
+
+    public async Task StopAsync(CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("Stopping Command Buffer processing");
+        await _commandBuffer.StopAsync(cancellationToken);
+    }
+}
+
+/// <summary>
+/// Health check for command buffer
+/// </summary>
+public class CommandBufferHealthCheck : IHealthCheck
+{
+    private readonly ICommandBuffer _commandBuffer;
+
+    public CommandBufferHealthCheck(ICommandBuffer commandBuffer)
+    {
+        _commandBuffer = commandBuffer;
+    }
+
+    public Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var stats = _commandBuffer.GetStats();
+            
+            var data = new Dictionary<string, object>
+            {
+                ["uptime_seconds"] = stats.UptimeSeconds,
+                ["commands_processed"] = stats.CommandsProcessed,
+                ["queries_processed"] = stats.QueriesProcessed,
+                ["commands_in_flight"] = stats.CommandsInFlight,
+                ["commands_per_second"] = stats.CommandsPerSecond,
+                ["queries_per_second"] = stats.QueriesPerSecond,
+                ["channel_usage"] = stats.ChannelUsage,
+                ["channel_capacity"] = stats.ChannelCapacity,
+                ["recent_errors"] = stats.RecentErrors.Count
+            };
+            
+            var isHealthy = stats.CommandsInFlight < stats.ChannelCapacity * 0.9; // Under 90% capacity
+            
+            return Task.FromResult(isHealthy 
+                ? HealthCheckResult.Healthy("Command buffer is operating normally", data)
+                : HealthCheckResult.Degraded("Command buffer is under high load", null, data));
+        }
+        catch (Exception ex)
+        {
+            return Task.FromResult(HealthCheckResult.Unhealthy("Command buffer health check failed", ex));
+        }
+    }
+}
+
+/// <summary>
+/// Health check for in-memory entity graph
+/// </summary>
+public class InMemoryEntityGraphHealthCheck : IHealthCheck
+{
+    private readonly InMemoryEntityGraph _entityGraph;
+
+    public InMemoryEntityGraphHealthCheck(InMemoryEntityGraph entityGraph)
+    {
+        _entityGraph = entityGraph;
+    }
+
+    public Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var data = new Dictionary<string, object>
+            {
+                ["total_entities"] = _entityGraph.TotalEntityCount,
+                ["users"] = _entityGraph.Users.Count,
+                ["groups"] = _entityGraph.Groups.Count,
+                ["roles"] = _entityGraph.Roles.Count,
+                ["permissions"] = _entityGraph.Permissions.Count,
+                ["last_load_time"] = _entityGraph.LastLoadTime,
+                ["load_duration_ms"] = _entityGraph.LoadDuration.TotalMilliseconds,
+                ["memory_usage_mb"] = _entityGraph.MemoryUsageBytes / 1024.0 / 1024.0
+            };
+            
+            var isHealthy = _entityGraph.TotalEntityCount > 0;
+            
+            return Task.FromResult(isHealthy 
+                ? HealthCheckResult.Healthy("Entity graph is loaded and operational", data)
+                : HealthCheckResult.Unhealthy("Entity graph is not loaded", null, data));
+        }
+        catch (Exception ex)
+        {
+            return Task.FromResult(HealthCheckResult.Unhealthy("Entity graph health check failed", ex));
+        }
     }
 }

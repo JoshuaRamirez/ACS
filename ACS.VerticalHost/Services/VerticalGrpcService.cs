@@ -8,26 +8,35 @@ using System.Reflection;
 using System.Diagnostics;
 using ACS.Infrastructure;
 using Infrastructure = ACS.Service.Infrastructure;
+using ACS.VerticalHost.Commands;
 
 namespace ACS.VerticalHost.Services;
 
+/// <summary>
+/// Enhanced VerticalGrpcService that uses CommandBuffer for sequential processing
+/// Acts as the gRPC endpoint that receives commands from HTTP API
+/// and routes them through the command buffer system
+/// </summary>
 public class VerticalGrpcService : VerticalService.VerticalServiceBase
 {
-    private readonly IUserService _userService;
-    private readonly IGroupService _groupService;
-    private readonly IRoleService _roleService;
+    private readonly ICommandBuffer _commandBuffer;
+    private readonly IUserService _userService; // For backward compatibility
+    private readonly IGroupService _groupService; // For backward compatibility
+    private readonly IRoleService _roleService; // For backward compatibility
     private readonly ILogger<VerticalGrpcService> _logger;
     private readonly string _tenantId;
     private long _commandsProcessed = 0;
     private readonly DateTime _startTime = DateTime.UtcNow;
 
     public VerticalGrpcService(
+        ICommandBuffer commandBuffer,
         IUserService userService,
         IGroupService groupService,
         IRoleService roleService,
         ACS.Service.Infrastructure.TenantConfiguration config,
         ILogger<VerticalGrpcService> logger)
     {
+        _commandBuffer = commandBuffer;
         _userService = userService;
         _groupService = groupService;
         _roleService = roleService;
@@ -157,12 +166,12 @@ public class VerticalGrpcService : VerticalService.VerticalServiceBase
         return Task.FromResult(response);
     }
 
-    private async Task ExecuteVoidCommandAsync(DomainCommand command)
+    private async Task ExecuteVoidCommandAsync(object command)
     {
         await (command switch
         {
-            AddUserToGroupCommand cmd => ExecuteAddUserToGroup(cmd),
-            RemoveUserFromGroupCommand cmd => ExecuteRemoveUserFromGroup(cmd),
+            ACS.VerticalHost.Commands.AddUserToGroupCommand cmd => ExecuteAddUserToGroup(cmd),
+            ACS.VerticalHost.Commands.RemoveUserFromGroupCommand cmd => ExecuteRemoveUserFromGroup(cmd),
             AssignUserToRoleCommand cmd => ExecuteAssignUserToRole(cmd),
             UnAssignUserFromRoleCommand cmd => ExecuteUnAssignUserFromRole(cmd),
             AddRoleToGroupCommand cmd => ExecuteAddRoleToGroup(cmd),
@@ -177,19 +186,19 @@ public class VerticalGrpcService : VerticalService.VerticalServiceBase
     {
         return command switch
         {
-            CreateUserCommand cmd => await ExecuteCreateUser(cmd),
+            ACS.VerticalHost.Commands.CreateUserCommand cmd => await ExecuteCreateUser(cmd),
             CreateGroupCommand cmd => await ExecuteCreateGroup(cmd),
             CreateRoleCommand cmd => await ExecuteCreateRole(cmd),
-            UpdateUserCommand cmd => await ExecuteUpdateUser(cmd),
+            ACS.VerticalHost.Commands.UpdateUserCommand cmd => await ExecuteUpdateUser(cmd),
             UpdateGroupCommand cmd => await ExecuteUpdateGroup(cmd),
             UpdateRoleCommand cmd => await ExecuteUpdateRole(cmd),
-            DeleteUserCommand cmd => await ExecuteDeleteUser(cmd),
+            ACS.VerticalHost.Commands.DeleteUserCommand cmd => await ExecuteDeleteUser(cmd),
             DeleteGroupCommand cmd => await ExecuteDeleteGroup(cmd),
             DeleteRoleCommand cmd => await ExecuteDeleteRole(cmd),
-            GetUserCommand cmd => ExecuteGetUser(cmd),
+            ACS.VerticalHost.Commands.GetUserCommand cmd => ExecuteGetUser(cmd),
             GetGroupCommand cmd => ExecuteGetGroup(cmd),
             GetRoleCommand cmd => ExecuteGetRole(cmd),
-            GetUsersCommand cmd => ExecuteGetUsers(cmd),
+            ACS.VerticalHost.Commands.GetUsersCommand cmd => ExecuteGetUsers(cmd),
             GetGroupsCommand cmd => ExecuteGetGroups(cmd),
             GetRolesCommand cmd => ExecuteGetRoles(cmd),
             _ => throw new NotSupportedException($"Result command type {command.GetType().Name} is not supported")
@@ -197,7 +206,7 @@ public class VerticalGrpcService : VerticalService.VerticalServiceBase
     }
 
     // User Commands
-    private async Task<object> ExecuteCreateUser(CreateUserCommand cmd)
+    private async Task<object> ExecuteCreateUser(ACS.VerticalHost.Commands.CreateUserCommand cmd)
     {
         var request = new CreateUserRequest
         {
@@ -209,7 +218,7 @@ public class VerticalGrpcService : VerticalService.VerticalServiceBase
         return response.User ?? throw new InvalidOperationException("User creation failed");
     }
 
-    private async Task<object> ExecuteUpdateUser(UpdateUserCommand cmd)
+    private async Task<object> ExecuteUpdateUser(ACS.VerticalHost.Commands.UpdateUserCommand cmd)
     {
         var request = new UpdateUserRequest
         {
@@ -222,7 +231,7 @@ public class VerticalGrpcService : VerticalService.VerticalServiceBase
         return response.User ?? throw new InvalidOperationException("User update failed");
     }
 
-    private async Task<object> ExecuteDeleteUser(DeleteUserCommand cmd)
+    private async Task<object> ExecuteDeleteUser(ACS.VerticalHost.Commands.DeleteUserCommand cmd)
     {
         var request = new DeleteUserRequest
         {
@@ -234,7 +243,7 @@ public class VerticalGrpcService : VerticalService.VerticalServiceBase
         return response.Success;
     }
 
-    private object ExecuteGetUser(GetUserCommand cmd)
+    private object ExecuteGetUser(ACS.VerticalHost.Commands.GetUserCommand cmd)
     {
         var request = new GetUserRequest
         {
@@ -246,7 +255,7 @@ public class VerticalGrpcService : VerticalService.VerticalServiceBase
         return response.User ?? throw new InvalidOperationException($"User {cmd.UserId} not found");
     }
 
-    private object ExecuteGetUsers(GetUsersCommand cmd)
+    private object ExecuteGetUsers(ACS.VerticalHost.Commands.GetUsersCommand cmd)
     {
         var request = new GetUsersRequest
         {
@@ -334,12 +343,12 @@ public class VerticalGrpcService : VerticalService.VerticalServiceBase
     }
 
     // Relationship Commands (Void)
-    private async Task ExecuteAddUserToGroup(AddUserToGroupCommand cmd)
+    private async Task ExecuteAddUserToGroup(ACS.VerticalHost.Commands.AddUserToGroupCommand cmd)
     {
         await _groupService.AddUserToGroupAsync(cmd.UserId, cmd.GroupId, cmd.AddedBy ?? "system");
     }
 
-    private async Task ExecuteRemoveUserFromGroup(RemoveUserFromGroupCommand cmd)
+    private async Task ExecuteRemoveUserFromGroup(ACS.VerticalHost.Commands.RemoveUserFromGroupCommand cmd)
     {
         await _groupService.RemoveUserFromGroupAsync(cmd.UserId, cmd.GroupId, cmd.RemovedBy ?? "system");
     }

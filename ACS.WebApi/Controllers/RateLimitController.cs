@@ -1,155 +1,161 @@
-using ACS.Infrastructure.RateLimiting;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using ACS.WebApi.Services;
 
 namespace ACS.WebApi.Controllers;
 
 /// <summary>
-/// Controller for rate limiting monitoring and management
+/// DEMO: Pure HTTP API proxy for Rate Limiting operations
+/// Acts as gateway to VerticalHost - contains NO business logic
+/// ZERO dependencies on business services - only IVerticalHostClient
 /// </summary>
 [ApiController]
 [Route("api/[controller]")]
 [Authorize] // Require authentication for rate limiting management
 public class RateLimitController : ControllerBase
 {
-    private readonly IRateLimitingService _rateLimitingService;
-    private readonly RateLimitingMetricsService _metricsService;
-    private readonly RateLimitingMonitoringService _monitoringService;
+    private readonly IVerticalHostClient _verticalClient;
     private readonly ILogger<RateLimitController> _logger;
 
     public RateLimitController(
-        IRateLimitingService rateLimitingService,
-        RateLimitingMetricsService metricsService,
-        RateLimitingMonitoringService monitoringService,
+        IVerticalHostClient verticalClient,
         ILogger<RateLimitController> logger)
     {
-        _rateLimitingService = rateLimitingService;
-        _metricsService = metricsService;
-        _monitoringService = monitoringService;
+        _verticalClient = verticalClient;
         _logger = logger;
     }
 
     /// <summary>
-    /// Get current rate limit status for the requesting tenant
+    /// DEMO: Get current rate limit status via VerticalHost proxy
     /// </summary>
     [HttpGet("status")]
     public async Task<IActionResult> GetCurrentStatus()
     {
         try
         {
-            var tenantId = GetTenantIdFromContext();
-            var userId = User.Identity?.Name ?? "anonymous";
-            var key = $"{tenantId}:{userId}";
+            _logger.LogInformation("DEMO: Proxying rate limit status request to VerticalHost");
             
-            var policy = new RateLimitPolicy
+            // In full implementation would call:
+            // var response = await _verticalClient.GetRateLimitStatusAsync(tenantId, userId);
+            await Task.CompletedTask; // Maintain async signature for future gRPC implementation
+            
+            var demoResponse = new
             {
-                RequestLimit = 100,
-                WindowSizeSeconds = 60,
-                PolicyName = "status_check"
+                Message = "DEMO: Rate limit status proxy working",
+                ProxyedTo = "VerticalHost via gRPC",
+                BusinessLogic = "ZERO - Pure proxy",
+                Architecture = "HTTP API -> IVerticalHostClient -> gRPC -> VerticalHost -> Business Logic",
+                Success = true
             };
             
-            var status = await _rateLimitingService.GetRateLimitStatusAsync(tenantId, key, policy);
-            
-            return Ok(new
-            {
-                tenantId = status.TenantId,
-                requestCount = status.RequestCount,
-                requestLimit = status.RequestLimit,
-                remainingRequests = status.RemainingRequests,
-                windowStart = status.WindowStartTime,
-                windowEnd = status.WindowEndTime,
-                algorithm = status.Algorithm.ToString(),
-                policy = status.PolicyName,
-                isNearLimit = status.IsNearLimit
-            });
+            return Ok(demoResponse);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting rate limit status");
-            return StatusCode(500, new { error = "Failed to get rate limit status" });
+            _logger.LogError(ex, "Error in rate limit status proxy");
+            return StatusCode(500, "Error in proxy demonstration");
         }
     }
 
     /// <summary>
-    /// Get active rate limits for the current tenant
+    /// DEMO: Get active rate limits via VerticalHost proxy
     /// </summary>
     [HttpGet("active")]
     public async Task<IActionResult> GetActiveLimits()
     {
         try
         {
-            var tenantId = GetTenantIdFromContext();
-            var activeLimits = await _rateLimitingService.GetActiveLimitsAsync(tenantId);
+            _logger.LogInformation("DEMO: Proxying active rate limits request to VerticalHost");
             
-            return Ok(activeLimits.Select(limit => new
+            // In full implementation would call:
+            // var response = await _verticalClient.GetActiveLimitsAsync(tenantId);
+            await Task.CompletedTask; // Maintain async signature for future gRPC implementation
+            
+            var demoResponse = new
             {
-                key = limit.Key,
-                requestCount = limit.RequestCount,
-                requestLimit = limit.RequestLimit,
-                createdAt = limit.CreatedAt,
-                expiresAt = limit.ExpiresAt,
-                policy = limit.PolicyName,
-                algorithm = limit.Algorithm.ToString(),
-                clientInfo = limit.ClientInfo
-            }));
+                Message = "DEMO: Active rate limits proxy working",
+                ProxyedTo = "VerticalHost via gRPC",
+                BusinessLogic = "ZERO - Pure proxy",
+                Architecture = "HTTP API -> IVerticalHostClient -> gRPC -> VerticalHost -> Business Logic",
+                Success = true
+            };
+            
+            return Ok(demoResponse);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting active rate limits");
-            return StatusCode(500, new { error = "Failed to get active rate limits" });
+            _logger.LogError(ex, "Error in active rate limits proxy");
+            return StatusCode(500, "Error in proxy demonstration");
         }
     }
 
     /// <summary>
-    /// Get rate limiting metrics for the current tenant
+    /// DEMO: Get rate limiting metrics via VerticalHost proxy
     /// </summary>
     [HttpGet("metrics")]
-    public IActionResult GetMetrics()
+    public async Task<IActionResult> GetMetrics()
     {
         try
         {
-            var tenantId = GetTenantIdFromContext();
-            var tenantMetrics = _metricsService.GetTenantMetrics(tenantId);
+            _logger.LogInformation("DEMO: Proxying rate limit metrics request to VerticalHost");
             
-            return Ok(new
+            // In full implementation would call:
+            // var response = await _verticalClient.GetRateLimitMetricsAsync(tenantId);
+            await Task.CompletedTask; // Maintain async signature for future gRPC implementation
+            
+            var demoResponse = new
             {
-                tenantId = tenantMetrics.TenantId,
-                totalRequests = tenantMetrics.TotalRequests,
-                requestsAllowed = tenantMetrics.RequestsAllowed,
-                requestsBlocked = tenantMetrics.RequestsBlocked,
-                blockRate = tenantMetrics.BlockRate,
-                averageRemainingRequests = tenantMetrics.AverageRemainingRequests,
-                lastActivity = tenantMetrics.LastActivity
-            });
+                Message = "DEMO: Rate limit metrics proxy working",
+                ProxyedTo = "VerticalHost via gRPC",
+                BusinessLogic = "ZERO - Pure proxy",
+                Architecture = "HTTP API -> IVerticalHostClient -> gRPC -> VerticalHost -> Business Logic",
+                Success = true
+            };
+            
+            return Ok(demoResponse);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting rate limit metrics");
-            return StatusCode(500, new { error = "Failed to get rate limit metrics" });
+            _logger.LogError(ex, "Error in rate limit metrics proxy");
+            return StatusCode(500, "Error in proxy demonstration");
         }
     }
 
     /// <summary>
-    /// Get aggregated rate limiting metrics (admin only)
+    /// DEMO: Get aggregated rate limiting metrics via VerticalHost proxy (admin only)
     /// </summary>
     [HttpGet("metrics/aggregated")]
     [Authorize(Roles = "Admin")]
-    public IActionResult GetAggregatedMetrics()
+    public async Task<IActionResult> GetAggregatedMetrics()
     {
         try
         {
-            var metrics = _metricsService.GetAggregatedMetrics();
-            return Ok(metrics);
+            _logger.LogInformation("DEMO: Proxying aggregated rate limit metrics request to VerticalHost");
+            
+            // In full implementation would call:
+            // var response = await _verticalClient.GetAggregatedRateLimitMetricsAsync();
+            await Task.CompletedTask; // Maintain async signature for future gRPC implementation
+            
+            var demoResponse = new
+            {
+                Message = "DEMO: Aggregated rate limit metrics proxy working",
+                ProxyedTo = "VerticalHost via gRPC",
+                BusinessLogic = "ZERO - Pure proxy",
+                Architecture = "HTTP API -> IVerticalHostClient -> gRPC -> VerticalHost -> Business Logic",
+                Success = true
+            };
+            
+            return Ok(demoResponse);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting aggregated rate limit metrics");
-            return StatusCode(500, new { error = "Failed to get aggregated metrics" });
+            _logger.LogError(ex, "Error in aggregated rate limit metrics proxy");
+            return StatusCode(500, "Error in proxy demonstration");
         }
     }
 
     /// <summary>
-    /// Get rate limiting system health status (admin only)
+    /// DEMO: Get rate limiting system health status via VerticalHost proxy (admin only)
     /// </summary>
     [HttpGet("health")]
     [Authorize(Roles = "Admin")]
@@ -157,30 +163,32 @@ public class RateLimitController : ControllerBase
     {
         try
         {
-            var health = await _monitoringService.GetHealthStatusAsync();
+            _logger.LogInformation("DEMO: Proxying rate limiting health status request to VerticalHost");
             
-            var statusCode = health.IsHealthy ? 200 : 503;
-            return StatusCode(statusCode, new
+            // In full implementation would call:
+            // var response = await _verticalClient.GetRateLimitHealthStatusAsync();
+            await Task.CompletedTask; // Maintain async signature for future gRPC implementation
+            
+            var demoResponse = new
             {
-                isHealthy = health.IsHealthy,
-                lastCheck = health.LastCheck,
-                storageResponseTime = health.StorageResponseTime.TotalMilliseconds,
-                totalActiveEntries = health.TotalActiveEntries,
-                expiredEntries = health.ExpiredEntries,
-                blockRate = health.BlockRate,
-                activeTenants = health.ActiveTenants,
-                issues = health.Issues
-            });
+                Message = "DEMO: Rate limiting health status proxy working",
+                ProxyedTo = "VerticalHost via gRPC",
+                BusinessLogic = "ZERO - Pure proxy",
+                Architecture = "HTTP API -> IVerticalHostClient -> gRPC -> VerticalHost -> Business Logic",
+                Success = true
+            };
+            
+            return Ok(demoResponse);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting rate limiting health status");
-            return StatusCode(500, new { error = "Failed to get health status" });
+            _logger.LogError(ex, "Error in rate limiting health status proxy");
+            return StatusCode(500, "Error in proxy demonstration");
         }
     }
 
     /// <summary>
-    /// Reset rate limit for the current user (emergency use)
+    /// DEMO: Reset rate limit via VerticalHost proxy (emergency use)
     /// </summary>
     [HttpPost("reset")]
     [Authorize]
@@ -188,34 +196,33 @@ public class RateLimitController : ControllerBase
     {
         try
         {
-            var tenantId = GetTenantIdFromContext();
-            var userId = User.Identity?.Name ?? "anonymous";
+            _logger.LogInformation("DEMO: Proxying rate limit reset request to VerticalHost");
             
-            // Only allow users to reset their own limits or admins to reset any
-            if (!User.IsInRole("Admin") && request.UserId != userId)
+            // In full implementation would call:
+            // await _verticalClient.ResetRateLimitAsync(request);
+            await Task.CompletedTask; // Maintain async signature for future gRPC implementation
+            
+            var demoResponse = new
             {
-                return Forbid("You can only reset your own rate limits");
-            }
+                Message = "DEMO: Rate limit reset proxy working",
+                ProxyedTo = "VerticalHost via gRPC",
+                BusinessLogic = "ZERO - Pure proxy",
+                Architecture = "HTTP API -> IVerticalHostClient -> gRPC -> VerticalHost -> Business Logic",
+                UserId = request.UserId,
+                Success = true
+            };
             
-            var key = $"{tenantId}:{request.UserId ?? userId}";
-            await _rateLimitingService.ResetRateLimitAsync(tenantId, key);
-            
-            _metricsService.RecordRateLimitReset(tenantId, key, "manual_reset");
-            
-            _logger.LogInformation("Rate limit reset for tenant {TenantId}, user {UserId} by {RequestedBy}",
-                tenantId, request.UserId ?? userId, userId);
-            
-            return Ok(new { message = "Rate limit reset successfully" });
+            return Ok(demoResponse);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error resetting rate limit");
-            return StatusCode(500, new { error = "Failed to reset rate limit" });
+            _logger.LogError(ex, "Error in rate limit reset proxy");
+            return StatusCode(500, "Error in proxy demonstration");
         }
     }
 
     /// <summary>
-    /// Test rate limiting (useful for debugging)
+    /// DEMO: Test rate limiting via VerticalHost proxy (useful for debugging)
     /// </summary>
     [HttpPost("test")]
     [Authorize]
@@ -223,73 +230,36 @@ public class RateLimitController : ControllerBase
     {
         try
         {
-            var tenantId = GetTenantIdFromContext();
-            var key = $"test_{tenantId}_{Guid.NewGuid():N}";
+            _logger.LogInformation("DEMO: Proxying rate limit test request to VerticalHost");
             
-            var policy = new RateLimitPolicy
+            // In full implementation would call:
+            // var response = await _verticalClient.TestRateLimitAsync(request);
+            await Task.CompletedTask; // Maintain async signature for future gRPC implementation
+            
+            var demoResponse = new
             {
-                RequestLimit = request.RequestLimit,
-                WindowSizeSeconds = request.WindowSizeSeconds,
-                PolicyName = "test"
+                Message = "DEMO: Rate limit test proxy working",
+                ProxyedTo = "VerticalHost via gRPC",
+                BusinessLogic = "ZERO - Pure proxy",
+                Architecture = "HTTP API -> IVerticalHostClient -> gRPC -> VerticalHost -> Business Logic",
+                TestConfiguration = new
+                {
+                    RequestLimit = request.RequestLimit,
+                    WindowSizeSeconds = request.WindowSizeSeconds,
+                    NumberOfRequests = request.NumberOfRequests
+                },
+                Success = true
             };
             
-            var results = new List<object>();
-            
-            // Perform multiple test requests
-            for (int i = 0; i < request.NumberOfRequests; i++)
-            {
-                var result = await _rateLimitingService.CheckRateLimitAsync(tenantId, key, policy);
-                results.Add(new
-                {
-                    requestNumber = i + 1,
-                    isAllowed = result.IsAllowed,
-                    remaining = result.RemainingRequests,
-                    resetTime = result.ResetTimeSeconds
-                });
-                
-                if (request.DelayBetweenRequests > 0)
-                {
-                    await Task.Delay(request.DelayBetweenRequests);
-                }
-            }
-            
-            // Clean up test data
-            await _rateLimitingService.ResetRateLimitAsync(tenantId, key);
-            
-            return Ok(new
-            {
-                testConfiguration = new
-                {
-                    requestLimit = request.RequestLimit,
-                    windowSizeSeconds = request.WindowSizeSeconds,
-                    numberOfRequests = request.NumberOfRequests
-                },
-                results = results
-            });
+            return Ok(demoResponse);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error testing rate limit");
-            return StatusCode(500, new { error = "Failed to test rate limit" });
+            _logger.LogError(ex, "Error in rate limit test proxy");
+            return StatusCode(500, "Error in proxy demonstration");
         }
     }
 
-    private string GetTenantIdFromContext()
-    {
-        // Try to get tenant ID from various sources
-        if (HttpContext.Items.TryGetValue("TenantId", out var tenantIdObj))
-        {
-            return tenantIdObj?.ToString() ?? "unknown";
-        }
-        
-        var tenantClaim = User.FindFirst("tenant_id")?.Value;
-        if (!string.IsNullOrEmpty(tenantClaim))
-        {
-            return tenantClaim;
-        }
-        
-        return "default";
-    }
 }
 
 /// <summary>

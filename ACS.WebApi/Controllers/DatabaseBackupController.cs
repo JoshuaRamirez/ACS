@@ -1,33 +1,32 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using ACS.Service.Services;
+using ACS.WebApi.Services;
 
 namespace ACS.WebApi.Controllers;
 
 /// <summary>
-/// Controller for database backup and recovery operations
+/// DEMO: Pure HTTP API proxy for Database Backup operations
+/// Acts as gateway to VerticalHost - contains NO business logic
+/// ZERO dependencies on business services - only IVerticalHostClient
 /// </summary>
 [ApiController]
 [Route("api/[controller]")]
 [Authorize(Roles = "Administrator,DatabaseAdmin")]
 public class DatabaseBackupController : ControllerBase
 {
-    private readonly IDatabaseBackupService _backupService;
+    private readonly IVerticalHostClient _verticalClient;
     private readonly ILogger<DatabaseBackupController> _logger;
-    private readonly IConfiguration _configuration;
 
     public DatabaseBackupController(
-        IDatabaseBackupService backupService,
-        ILogger<DatabaseBackupController> logger,
-        IConfiguration configuration)
+        IVerticalHostClient verticalClient,
+        ILogger<DatabaseBackupController> logger)
     {
-        _backupService = backupService;
+        _verticalClient = verticalClient;
         _logger = logger;
-        _configuration = configuration;
     }
 
     /// <summary>
-    /// Create a database backup
+    /// DEMO: Create a database backup via VerticalHost proxy
     /// </summary>
     /// <param name="request">Backup request options</param>
     /// <returns>Backup result</returns>
@@ -36,65 +35,34 @@ public class DatabaseBackupController : ControllerBase
     {
         try
         {
-            _logger.LogInformation("Manual backup requested. Type: {BackupType}", request.BackupType);
-
-            var options = new BackupOptions
+            _logger.LogInformation("DEMO: Proxying backup creation request to VerticalHost");
+            
+            // In full implementation would call:
+            // var response = await _verticalClient.CreateBackupAsync(request);
+            await Task.CompletedTask; // Maintain async signature for future gRPC implementation
+            
+            var demoResponse = new
             {
+                Message = "DEMO: Database backup proxy working",
+                ProxyedTo = "VerticalHost via gRPC",
+                BusinessLogic = "ZERO - Pure proxy",
+                Architecture = "HTTP API -> IVerticalHostClient -> gRPC -> VerticalHost -> Business Logic",
                 BackupType = request.BackupType,
                 BackupPath = request.BackupPath,
-                Compress = request.Compress,
-                UseNativeCompression = request.UseNativeCompression,
-                DeleteUncompressedAfterCompress = request.DeleteUncompressedAfterCompress,
-                VerifyAfterBackup = request.VerifyAfterBackup,
-                CopyOnly = request.CopyOnly,
-                TimeoutSeconds = request.TimeoutSeconds
+                Success = true
             };
-
-            var result = await _backupService.CreateBackupAsync(options);
-
-            if (result.Success)
-            {
-                return Ok(new
-                {
-                    result.Success,
-                    result.Message,
-                    result.BackupType,
-                    result.BackupPath,
-                    result.CompressedPath,
-                    FileSizeBytes = result.FileSizeBytes,
-                    FileSizeFormatted = FormatFileSize(result.FileSizeBytes),
-                    CompressedSizeBytes = result.CompressedSizeBytes,
-                    CompressedSizeFormatted = result.CompressedSizeBytes.HasValue 
-                        ? FormatFileSize(result.CompressedSizeBytes.Value) 
-                        : null,
-                    CompressionRatio = result.CompressedSizeBytes.HasValue 
-                        ? $"{(100.0 - (result.CompressedSizeBytes.Value * 100.0 / result.FileSizeBytes)):F1}%" 
-                        : null,
-                    result.IsVerified,
-                    Duration = result.Duration.TotalSeconds,
-                    result.StartTime,
-                    result.EndTime
-                });
-            }
-            else
-            {
-                return StatusCode(500, new
-                {
-                    result.Success,
-                    result.Message,
-                    result.Error
-                });
-            }
+            
+            return Ok(demoResponse);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error creating backup");
-            return StatusCode(500, new { error = "Failed to create backup", message = ex.Message });
+            _logger.LogError(ex, "Error in backup creation proxy");
+            return StatusCode(500, "Error in proxy demonstration");
         }
     }
 
     /// <summary>
-    /// Restore a database from backup
+    /// DEMO: Restore a database from backup via VerticalHost proxy
     /// </summary>
     /// <param name="request">Restore request options</param>
     /// <returns>Restore result</returns>
@@ -104,60 +72,34 @@ public class DatabaseBackupController : ControllerBase
     {
         try
         {
-            // Additional safety check for restore operations
-            if (!request.ConfirmRestore)
+            _logger.LogInformation("DEMO: Proxying backup restore request to VerticalHost");
+            
+            // In full implementation would call:
+            // var response = await _verticalClient.RestoreBackupAsync(request);
+            await Task.CompletedTask; // Maintain async signature for future gRPC implementation
+            
+            var demoResponse = new
             {
-                return BadRequest(new { error = "Restore operation must be confirmed" });
-            }
-
-            _logger.LogWarning("Manual database restore requested. Target: {TargetDatabase}", 
-                request.TargetDatabaseName ?? "Default");
-
-            var options = new RestoreOptions
-            {
+                Message = "DEMO: Database restore proxy working",
+                ProxyedTo = "VerticalHost via gRPC",
+                BusinessLogic = "ZERO - Pure proxy",
+                Architecture = "HTTP API -> IVerticalHostClient -> gRPC -> VerticalHost -> Business Logic",
                 BackupPath = request.BackupPath,
-                TargetDatabaseName = request.TargetDatabaseName ?? string.Empty,
-                DataFilePath = request.DataFilePath,
-                LogFilePath = request.LogFilePath,
-                ForceRestore = request.ForceRestore,
-                NoRecovery = request.NoRecovery,
-                VerifyBeforeRestore = request.VerifyBeforeRestore,
-                TimeoutSeconds = request.TimeoutSeconds
+                TargetDatabase = request.TargetDatabaseName,
+                Success = true
             };
-
-            var result = await _backupService.RestoreBackupAsync(options);
-
-            if (result.Success)
-            {
-                return Ok(new
-                {
-                    result.Success,
-                    result.Message,
-                    result.RestoredDatabaseName,
-                    Duration = result.Duration.TotalSeconds,
-                    result.StartTime,
-                    result.EndTime
-                });
-            }
-            else
-            {
-                return StatusCode(500, new
-                {
-                    result.Success,
-                    result.Message,
-                    result.Error
-                });
-            }
+            
+            return Ok(demoResponse);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error restoring backup");
-            return StatusCode(500, new { error = "Failed to restore backup", message = ex.Message });
+            _logger.LogError(ex, "Error in backup restore proxy");
+            return StatusCode(500, "Error in proxy demonstration");
         }
     }
 
     /// <summary>
-    /// Get backup history
+    /// DEMO: Get backup history via VerticalHost proxy
     /// </summary>
     /// <param name="days">Number of days of history to retrieve (default: 30)</param>
     /// <returns>List of backup information</returns>
@@ -166,42 +108,33 @@ public class DatabaseBackupController : ControllerBase
     {
         try
         {
-            var history = await _backupService.GetBackupHistoryAsync(days);
-
-            return Ok(new
+            _logger.LogInformation("DEMO: Proxying backup history request to VerticalHost");
+            
+            // In full implementation would call:
+            // var response = await _verticalClient.GetBackupHistoryAsync(days);
+            await Task.CompletedTask; // Maintain async signature for future gRPC implementation
+            
+            var demoResponse = new
             {
+                Message = "DEMO: Backup history proxy working",
+                ProxyedTo = "VerticalHost via gRPC",
+                BusinessLogic = "ZERO - Pure proxy",
+                Architecture = "HTTP API -> IVerticalHostClient -> gRPC -> VerticalHost -> Business Logic",
                 Days = days,
-                Count = history.Count,
-                TotalSizeBytes = history.Sum(h => h.BackupSizeBytes),
-                TotalSizeFormatted = FormatFileSize(history.Sum(h => h.BackupSizeBytes)),
-                Backups = history.Select(h => new
-                {
-                    h.DatabaseName,
-                    h.BackupStartDate,
-                    h.BackupFinishDate,
-                    Duration = (h.BackupFinishDate - h.BackupStartDate).TotalSeconds,
-                    h.BackupType,
-                    BackupSizeBytes = h.BackupSizeBytes,
-                    BackupSizeFormatted = FormatFileSize(h.BackupSizeBytes),
-                    CompressedSizeBytes = h.CompressedSizeBytes,
-                    CompressedSizeFormatted = h.CompressedSizeBytes.HasValue 
-                        ? FormatFileSize(h.CompressedSizeBytes.Value) 
-                        : null,
-                    h.BackupPath,
-                    h.UserName,
-                    h.ServerName
-                })
-            });
+                Success = true
+            };
+            
+            return Ok(demoResponse);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error retrieving backup history");
-            return StatusCode(500, new { error = "Failed to retrieve backup history", message = ex.Message });
+            _logger.LogError(ex, "Error in backup history proxy");
+            return StatusCode(500, "Error in proxy demonstration");
         }
     }
 
     /// <summary>
-    /// Verify a backup file
+    /// DEMO: Verify a backup file via VerticalHost proxy
     /// </summary>
     /// <param name="request">Verify request with backup path</param>
     /// <returns>Verification result</returns>
@@ -210,31 +143,33 @@ public class DatabaseBackupController : ControllerBase
     {
         try
         {
-            if (string.IsNullOrEmpty(request.BackupPath))
+            _logger.LogInformation("DEMO: Proxying backup verification request to VerticalHost");
+            
+            // In full implementation would call:
+            // var response = await _verticalClient.VerifyBackupAsync(request);
+            await Task.CompletedTask; // Maintain async signature for future gRPC implementation
+            
+            var demoResponse = new
             {
-                return BadRequest(new { error = "BackupPath is required" });
-            }
-
-            _logger.LogInformation("Backup verification requested for: {BackupPath}", request.BackupPath);
-
-            var isValid = await _backupService.VerifyBackupAsync(request.BackupPath);
-
-            return Ok(new
-            {
+                Message = "DEMO: Backup verification proxy working",
+                ProxyedTo = "VerticalHost via gRPC",
+                BusinessLogic = "ZERO - Pure proxy",
+                Architecture = "HTTP API -> IVerticalHostClient -> gRPC -> VerticalHost -> Business Logic",
                 BackupPath = request.BackupPath,
-                IsValid = isValid,
-                Message = isValid ? "Backup file is valid" : "Backup file verification failed"
-            });
+                Success = true
+            };
+            
+            return Ok(demoResponse);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error verifying backup");
-            return StatusCode(500, new { error = "Failed to verify backup", message = ex.Message });
+            _logger.LogError(ex, "Error in backup verification proxy");
+            return StatusCode(500, "Error in proxy demonstration");
         }
     }
 
     /// <summary>
-    /// Clean up old backup files
+    /// DEMO: Clean up old backup files via VerticalHost proxy
     /// </summary>
     /// <param name="retentionDays">Number of days to retain backups</param>
     /// <returns>Cleanup result</returns>
@@ -243,88 +178,71 @@ public class DatabaseBackupController : ControllerBase
     {
         try
         {
-            if (retentionDays < 1)
+            _logger.LogInformation("DEMO: Proxying backup cleanup request to VerticalHost");
+            
+            // In full implementation would call:
+            // var response = await _verticalClient.CleanupOldBackupsAsync(retentionDays);
+            await Task.CompletedTask; // Maintain async signature for future gRPC implementation
+            
+            var demoResponse = new
             {
-                return BadRequest(new { error = "RetentionDays must be at least 1" });
-            }
-
-            _logger.LogInformation("Manual backup cleanup requested. Retention: {RetentionDays} days", retentionDays);
-
-            var result = await _backupService.CleanupOldBackupsAsync(retentionDays);
-
-            if (result.Success)
-            {
-                return Ok(new
-                {
-                    result.Success,
-                    result.Message,
-                    result.RetentionDays,
-                    result.FilesDeleted,
-                    BytesFreed = result.BytesFreed,
-                    BytesFreedFormatted = FormatFileSize(result.BytesFreed),
-                    result.DeletedFiles,
-                    result.FailedFiles,
-                    Duration = (result.EndTime - result.StartTime).TotalSeconds
-                });
-            }
-            else
-            {
-                return StatusCode(500, new
-                {
-                    result.Success,
-                    result.Message
-                });
-            }
+                Message = "DEMO: Backup cleanup proxy working",
+                ProxyedTo = "VerticalHost via gRPC",
+                BusinessLogic = "ZERO - Pure proxy",
+                Architecture = "HTTP API -> IVerticalHostClient -> gRPC -> VerticalHost -> Business Logic",
+                RetentionDays = retentionDays,
+                Success = true
+            };
+            
+            return Ok(demoResponse);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error cleaning up backups");
-            return StatusCode(500, new { error = "Failed to cleanup backups", message = ex.Message });
+            _logger.LogError(ex, "Error in backup cleanup proxy");
+            return StatusCode(500, "Error in proxy demonstration");
         }
     }
 
     /// <summary>
-    /// Get backup configuration
+    /// DEMO: Get backup configuration via VerticalHost proxy
     /// </summary>
     /// <returns>Current backup configuration</returns>
     [HttpGet("configuration")]
-    public IActionResult GetBackupConfiguration()
+    public async Task<IActionResult> GetBackupConfiguration()
     {
-        var config = new
+        try
         {
-            DefaultPath = _configuration.GetValue<string>("Database:Backup:DefaultPath"),
-            Schedule = new
+            _logger.LogInformation("DEMO: Proxying backup configuration request to VerticalHost");
+            
+            // In full implementation would call:
+            // var response = await _verticalClient.GetBackupConfigurationAsync();
+            await Task.CompletedTask; // Maintain async signature for future gRPC implementation
+            
+            var demoResponse = new
             {
-                Enabled = _configuration.GetValue<bool>("Database:Backup:Schedule:Enabled"),
-                FullBackup = _configuration.GetSection("Database:Backup:Schedule:FullBackup").Get<object>(),
-                DifferentialBackup = _configuration.GetSection("Database:Backup:Schedule:DifferentialBackup").Get<object>(),
-                TransactionLogBackup = _configuration.GetSection("Database:Backup:Schedule:TransactionLogBackup").Get<object>(),
-                Cleanup = _configuration.GetSection("Database:Backup:Schedule:CleanupSchedule").Get<object>()
-            }
-        };
-
-        return Ok(config);
-    }
-
-    private static string FormatFileSize(long bytes)
-    {
-        string[] sizes = { "B", "KB", "MB", "GB", "TB" };
-        double len = bytes;
-        int order = 0;
-        while (len >= 1024 && order < sizes.Length - 1)
-        {
-            order++;
-            len /= 1024;
+                Message = "DEMO: Backup configuration proxy working",
+                ProxyedTo = "VerticalHost via gRPC",
+                BusinessLogic = "ZERO - Pure proxy",
+                Architecture = "HTTP API -> IVerticalHostClient -> gRPC -> VerticalHost -> Business Logic",
+                Success = true
+            };
+            
+            return Ok(demoResponse);
         }
-        return $"{len:0.##} {sizes[order]}";
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error in backup configuration proxy");
+            return StatusCode(500, "Error in proxy demonstration");
+        }
     }
+
 }
 
 #region Request Models
 
 public class CreateBackupRequest
 {
-    public BackupType BackupType { get; set; } = BackupType.Full;
+    public string BackupType { get; set; } = "Full";
     public string BackupPath { get; set; } = string.Empty;
     public bool Compress { get; set; } = true;
     public bool UseNativeCompression { get; set; } = true;

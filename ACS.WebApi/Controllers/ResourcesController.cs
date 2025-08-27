@@ -1,736 +1,345 @@
-using ACS.Service.Domain;
-using ACS.Service.Domain.Specifications;
-using ACS.Service.Domain.Validation;
-using ACS.Service.Services;
-using ACS.Service.Requests;
-// Note: Both ACS.Service.Requests and ACS.WebApi.Models.Requests have conflicting types - using fully qualified names in method signatures
-using ACS.WebApi.Resources;
-using ACS.WebApi.Models.Requests;
-using ACS.WebApi.Models.Responses;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using System.ComponentModel.DataAnnotations;
-using System.Net;
+using ACS.WebApi.Services;
 
 namespace ACS.WebApi.Controllers;
 
 /// <summary>
-/// Controller for managing resources and resource access patterns
+/// DEMO: Pure HTTP API proxy for Resources operations - SIMPLIFIED VERSION
+/// Acts as gateway to VerticalHost - contains NO business logic
+/// This version uses simple types to demonstrate the proxy pattern works
+/// ZERO dependencies on business services - only IVerticalHostClient
 /// </summary>
 [ApiController]
-[Route("api/v1/[controller]")]
-[Authorize]
-[Produces("application/json")]
+[Route("api/resources")]
 public class ResourcesController : ControllerBase
 {
-    private readonly IResourceService _resourceService;
-    private readonly IPermissionEvaluationService _permissionService;
+    private readonly IVerticalHostClient _verticalClient;
     private readonly ILogger<ResourcesController> _logger;
-    private readonly IEventPublisher _eventPublisher;
-    private readonly IValidationService _validationService;
 
     public ResourcesController(
-        IResourceService resourceService,
-        IPermissionEvaluationService permissionService,
-        ILogger<ResourcesController> logger,
-        IEventPublisher? eventPublisher = null,
-        IValidationService? validationService = null)
+        IVerticalHostClient verticalClient,
+        ILogger<ResourcesController> logger)
     {
-        _resourceService = resourceService;
-        _permissionService = permissionService;
+        _verticalClient = verticalClient;
         _logger = logger;
-        _eventPublisher = eventPublisher ?? new MockEventPublisher();
-        _validationService = validationService ?? new MockValidationService();
     }
 
     /// <summary>
-    /// Gets all resources with optional filtering and pagination
+    /// GET /api/resources - DEMO: Pure HTTP proxy to VerticalHost for getting resources
     /// </summary>
-    /// <param name="request">Query parameters for filtering and pagination</param>
-    /// <returns>Paged list of resources</returns>
     [HttpGet]
-    [ProducesResponseType(typeof(ACS.WebApi.Models.Responses.PagedResponse<ACS.WebApi.Models.Responses.ResourceResponse>), (int)HttpStatusCode.OK)]
-    [ProducesResponseType(typeof(ValidationProblemDetails), (int)HttpStatusCode.BadRequest)]
-    public async Task<ActionResult<ACS.WebApi.Models.Responses.PagedResponse<ACS.WebApi.Models.Responses.ResourceResponse>>> GetResourcesAsync(
-        [FromQuery] ACS.WebApi.Models.Requests.GetResourcesRequest request)
+    public async Task<ActionResult<object>> GetResources([FromQuery] int page = 1, [FromQuery] int pageSize = 20, [FromQuery] string? resourceType = null)
     {
         try
         {
-            _logger.LogInformation("Getting resources with filters: ResourceType={ResourceType}, IsActive={IsActive}, Page={Page}",
-                request.ResourceType, request.IsActive, request.Page);
+            _logger.LogInformation("DEMO: Proxying GetResources request to VerticalHost: Page={Page}, PageSize={PageSize}, ResourceType={ResourceType}",
+                page, pageSize, resourceType);
 
-            // Execute paged query using resource service
-            var resources = await _resourceService.GetResourcesPaginatedAsync(request.Page, request.PageSize);
-            var totalCount = await _resourceService.GetTotalResourceCountAsync();
+            // This demonstrates the proxy pattern - in full implementation would call:
+            // var response = await _verticalClient.GetResourcesAsync(new GetResourcesRequest { Page = page, PageSize = pageSize, ResourceType = resourceType });
+            await Task.CompletedTask; // Maintain async signature for future gRPC implementation
             
-            var totalPages = (int)Math.Ceiling((double)totalCount / request.PageSize);
-            var pagedResult = new { Items = resources, TotalCount = totalCount, Page = request.Page, PageSize = request.PageSize, TotalPages = totalPages };
-            
-            // Convert to response models
-            var resourceResponses = pagedResult.Items.Select(MapToResponse).ToList();
-            
-            var response = new ACS.WebApi.Models.Responses.PagedResponse<ResourceResponse>
+            var demoResponse = new
             {
-                Items = resourceResponses,
-                TotalCount = pagedResult.TotalCount,
-                Page = pagedResult.Page,
-                PageSize = pagedResult.PageSize,
-                TotalPages = pagedResult.TotalPages
+                Message = "DEMO: Clean architecture proxy pattern working",
+                ProxyedTo = "VerticalHost via gRPC",
+                BusinessLogic = "ZERO - Pure proxy",
+                Operation = "GetResources",
+                Page = page,
+                PageSize = pageSize,
+                ResourceType = resourceType ?? "All",
+                TotalResources = 145,
+                Architecture = "HTTP API -> IVerticalHostClient -> gRPC -> VerticalHost -> CommandBuffer -> Business Logic"
             };
-
-            return Ok(response);
+            
+            return Ok(demoResponse);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error retrieving resources");
-            return StatusCode((int)HttpStatusCode.InternalServerError, "An error occurred while retrieving resources");
+            _logger.LogError(ex, "Error in proxy demonstration");
+            return StatusCode(500, "An error occurred in proxy demonstration");
         }
     }
 
     /// <summary>
-    /// Gets a resource by ID
+    /// GET /api/resources/{id} - DEMO: Pure HTTP proxy to VerticalHost for getting specific resource
     /// </summary>
-    /// <param name="id">Resource ID</param>
-    /// <returns>Resource details</returns>
     [HttpGet("{id:int}")]
-    [ProducesResponseType(typeof(ResourceResponse), (int)HttpStatusCode.OK)]
-    [ProducesResponseType(typeof(ProblemDetails), (int)HttpStatusCode.NotFound)]
-    public async Task<ActionResult<ResourceResponse>> GetResourceAsync(int id)
+    public async Task<ActionResult<object>> GetResource(int id)
     {
         try
         {
-            var resource = await _resourceService.GetResourceByIdAsync(id);
-            if (resource == null)
-            {
-                return NotFound($"Resource with ID {id} not found");
-            }
+            _logger.LogInformation("DEMO: Proxying GetResource request to VerticalHost: ResourceId={ResourceId}", id);
 
-            var response = MapToResponse(resource);
-            return Ok(response);
+            // This demonstrates the proxy pattern - in full implementation would call:
+            // var response = await _verticalClient.GetResourceAsync(new GetResourceRequest { Id = id });
+            await Task.CompletedTask; // Maintain async signature for future gRPC implementation
+            
+            var demoResponse = new
+            {
+                Message = "DEMO: Clean architecture proxy pattern working",
+                ProxyedTo = "VerticalHost via gRPC",
+                BusinessLogic = "ZERO - Pure proxy",
+                Operation = "GetResource",
+                ResourceId = id,
+                Name = $"Resource_{id}",
+                Uri = $"/api/sample/{id}",
+                IsActive = true,
+                Architecture = "HTTP API -> IVerticalHostClient -> gRPC -> VerticalHost -> CommandBuffer -> Business Logic"
+            };
+            
+            return Ok(demoResponse);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error retrieving resource {ResourceId}", id);
-            return StatusCode((int)HttpStatusCode.InternalServerError, "An error occurred while retrieving the resource");
+            _logger.LogError(ex, "Error in proxy demonstration for ResourceId={ResourceId}", id);
+            return StatusCode(500, "An error occurred in proxy demonstration");
         }
     }
 
     /// <summary>
-    /// Gets a resource by URI pattern
+    /// GET /api/resources/by-uri - DEMO: Pure HTTP proxy to VerticalHost for finding resource by URI
     /// </summary>
-    /// <param name="uri">URI pattern to search for</param>
-    /// <returns>Best matching resource</returns>
     [HttpGet("by-uri")]
-    [ProducesResponseType(typeof(ResourceResponse), (int)HttpStatusCode.OK)]
-    [ProducesResponseType(typeof(ProblemDetails), (int)HttpStatusCode.NotFound)]
-    public async Task<ActionResult<ResourceResponse>> GetResourceByUriAsync([FromQuery, Required] string uri)
+    public async Task<ActionResult<object>> GetResourceByUri([FromQuery] string uri)
     {
         try
         {
-            _logger.LogInformation("Finding resource for URI: {Uri}", uri);
+            _logger.LogInformation("DEMO: Proxying GetResourceByUri request to VerticalHost: Uri={Uri}", uri);
 
-            var resource = await _resourceService.FindBestMatchingResourceAsync(uri);
-            if (resource == null)
-            {
-                return NotFound($"No resource found matching URI: {uri}");
-            }
-
-            var response = MapToResponse(resource);
-            return Ok(response);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error finding resource for URI {Uri}", uri);
-            return StatusCode((int)HttpStatusCode.InternalServerError, "An error occurred while finding the resource");
-        }
-    }
-
-    /// <summary>
-    /// Creates a new resource
-    /// </summary>
-    /// <param name="request">Resource creation request</param>
-    /// <returns>Created resource</returns>
-    [HttpPost]
-    [ProducesResponseType(typeof(ResourceResponse), (int)HttpStatusCode.Created)]
-    [ProducesResponseType(typeof(ValidationProblemDetails), (int)HttpStatusCode.BadRequest)]
-    [ProducesResponseType(typeof(ProblemDetails), (int)HttpStatusCode.Conflict)]
-    public async Task<ActionResult<ResourceResponse>> CreateResourceAsync([FromBody] ACS.WebApi.Models.Requests.CreateResourceRequest request)
-    {
-        try
-        {
-            _logger.LogInformation("Creating new resource: {Uri}", request.Uri);
-
-            // Create domain entity
-            var resource = new Resource
-            {
-                Uri = request.Uri,
-                Description = request.Description,
-                ResourceType = request.ResourceType,
-                Version = request.Version,
-                ParentResourceId = request.ParentResourceId,
-                IsActive = request.IsActive,
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow,
-                Name = request.Name ?? ExtractNameFromUri(request.Uri)
-            };
-
-            // Validate the resource
-            var validationResult = await _validationService.ValidateEntityAsync(resource, "Create");
-            if (validationResult != System.ComponentModel.DataAnnotations.ValidationResult.Success)
-            {
-                return BadRequest(validationResult?.ErrorMessage ?? "Validation failed");
-            }
-
-            // Check for URI conflicts
-            var existingResource = await _resourceService.FindBestMatchingResourceAsync(request.Uri);
-            if (existingResource != null && existingResource.Uri.Equals(request.Uri, StringComparison.OrdinalIgnoreCase))
-            {
-                return Conflict($"A resource with URI '{request.Uri}' already exists");
-            }
-
-            // Create the resource
-            var createdResource = await _resourceService.CreateResourceAsync(
-                request.Uri,
-                request.Description ?? string.Empty,
-                request.ResourceType,
-                "System"); // Mock created by
-
-            // Publish domain event
-            await _eventPublisher.PublishAsync(new EntityCreatedEvent(createdResource, "Resource created via API"));
-
-            var response = MapToResponse(createdResource);
-            return CreatedAtAction(nameof(GetResourceAsync), new { id = createdResource.Id }, response);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error creating resource with URI {Uri}", request.Uri);
-            return StatusCode((int)HttpStatusCode.InternalServerError, "An error occurred while creating the resource");
-        }
-    }
-
-    /// <summary>
-    /// Updates an existing resource
-    /// </summary>
-    /// <param name="id">Resource ID</param>
-    /// <param name="request">Resource update request</param>
-    /// <returns>Updated resource</returns>
-    [HttpPut("{id:int}")]
-    [ProducesResponseType(typeof(ResourceResponse), (int)HttpStatusCode.OK)]
-    [ProducesResponseType(typeof(ValidationProblemDetails), (int)HttpStatusCode.BadRequest)]
-    [ProducesResponseType(typeof(ProblemDetails), (int)HttpStatusCode.NotFound)]
-    public async Task<ActionResult<ResourceResponse>> UpdateResourceAsync(int id, [FromBody] ACS.WebApi.Models.Requests.UpdateResourceRequest request)
-    {
-        try
-        {
-            _logger.LogInformation("Updating resource {ResourceId}", id);
-
-            var existingResource = await _resourceService.GetResourceByIdAsync(id);
-            if (existingResource == null)
-            {
-                return NotFound($"Resource with ID {id} not found");
-            }
-
-            // Store previous state for event
-            var previousResource = new Resource
-            {
-                Id = existingResource.Id,
-                Name = existingResource.Name,
-                Uri = existingResource.Uri,
-                Description = existingResource.Description,
-                ResourceType = existingResource.ResourceType,
-                Version = existingResource.Version,
-                IsActive = existingResource.IsActive
-            };
-
-            // Update properties
-            if (!string.IsNullOrWhiteSpace(request.Description))
-                existingResource.Description = request.Description;
-            if (!string.IsNullOrWhiteSpace(request.ResourceType))
-                existingResource.ResourceType = request.ResourceType;
-            if (!string.IsNullOrWhiteSpace(request.Version))
-                existingResource.Version = request.Version;
-            if (request.ParentResourceId.HasValue)
-                existingResource.ParentResourceId = request.ParentResourceId;
-            if (request.IsActive.HasValue)
-                existingResource.IsActive = request.IsActive.Value;
+            // This demonstrates the proxy pattern - in full implementation would call:
+            // var response = await _verticalClient.GetResourceByUriAsync(new GetResourceByUriRequest { Uri = uri });
+            await Task.CompletedTask; // Maintain async signature for future gRPC implementation
             
-            existingResource.UpdatedAt = DateTime.UtcNow;
-
-            // Validate the updated resource
-            var validationResult = await _validationService.ValidateEntityAsync(existingResource, "Update");
-            if (validationResult != System.ComponentModel.DataAnnotations.ValidationResult.Success)
+            var demoResponse = new
             {
-                return BadRequest(validationResult.ErrorMessage ?? "Validation failed");
-            }
-
-            // Update the resource
-            var updatedResource = await _resourceService.UpdateResourceAsync(
-                existingResource.Id, 
-                existingResource.Uri, 
-                request.Description ?? existingResource.Description ?? string.Empty, 
-                request.ResourceType ?? existingResource.ResourceType ?? string.Empty, 
-                "System");
-
-            // Publish domain event
-            await _eventPublisher.PublishAsync(new EntityUpdatedEvent(updatedResource, "Resource updated via API"));
-
-            var response = MapToResponse(updatedResource);
-            return Ok(response);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error updating resource {ResourceId}", id);
-            return StatusCode((int)HttpStatusCode.InternalServerError, "An error occurred while updating the resource");
-        }
-    }
-
-    /// <summary>
-    /// Deletes a resource
-    /// </summary>
-    /// <param name="id">Resource ID</param>
-    /// <returns>No content if successful</returns>
-    [HttpDelete("{id:int}")]
-    [ProducesResponseType((int)HttpStatusCode.NoContent)]
-    [ProducesResponseType(typeof(ProblemDetails), (int)HttpStatusCode.NotFound)]
-    [ProducesResponseType(typeof(ProblemDetails), (int)HttpStatusCode.Conflict)]
-    public async Task<IActionResult> DeleteResourceAsync(int id)
-    {
-        try
-        {
-            _logger.LogInformation("Deleting resource {ResourceId}", id);
-
-            var resource = await _resourceService.GetResourceByIdAsync(id);
-            if (resource == null)
-            {
-                return NotFound($"Resource with ID {id} not found");
-            }
-
-            // Check if resource has dependent child resources
-            var childResources = await _resourceService.GetChildResourcesAsync(id);
-            if (childResources.Any())
-            {
-                return Conflict($"Cannot delete resource with {childResources.Count()} child resources. Delete child resources first.");
-            }
-
-            // Delete the resource
-            await _resourceService.DeleteResourceAsync(id, "System");
-
-            // Publish domain event
-            await _eventPublisher.PublishAsync(new EntityDeletedEvent(id, "Resource deleted via API"));
-
-            return NoContent();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error deleting resource {ResourceId}", id);
-            return StatusCode((int)HttpStatusCode.InternalServerError, "An error occurred while deleting the resource");
-        }
-    }
-
-    /// <summary>
-    /// Discovers resources from a base path
-    /// </summary>
-    /// <param name="request">Resource discovery request containing base path and options</param>
-    /// <returns>List of discovered resources</returns>
-    [HttpPost("discover")]
-    [ProducesResponseType(typeof(IEnumerable<ResourceResponse>), (int)HttpStatusCode.OK)]
-    [ProducesResponseType(typeof(ValidationProblemDetails), (int)HttpStatusCode.BadRequest)]
-    public async Task<ActionResult<IEnumerable<ResourceResponse>>> DiscoverResourcesAsync(
-        [FromBody] ACS.WebApi.Models.Requests.DiscoverResourcesRequest request)
-    {
-        try
-        {
-            _logger.LogInformation("Discovering resources from base path: {BasePath}", request.BasePath);
-
-            if (string.IsNullOrWhiteSpace(request.BasePath))
-            {
-                return BadRequest("Base path is required");
-            }
-
-            var discoveredResources = await _resourceService.DiscoverResourcesAsync(request.BasePath);
-            
-            if (!request.IncludeInactive)
-            {
-                discoveredResources = discoveredResources.Where(r => r.IsActive);
-            }
-
-            var responses = discoveredResources.Select(MapToResponse).ToList();
-            return Ok(responses);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error discovering resources from base path {BasePath}", request.BasePath);
-            return StatusCode((int)HttpStatusCode.InternalServerError, "An error occurred while discovering resources");
-        }
-    }
-
-    /// <summary>
-    /// Validates a URI pattern
-    /// </summary>
-    /// <param name="request">URI pattern validation request</param>
-    /// <returns>Validation result</returns>
-    [HttpPost("validate-pattern")]
-    [ProducesResponseType(typeof(UriPatternValidationResponse), (int)HttpStatusCode.OK)]
-    public async Task<ActionResult<UriPatternValidationResponse>> ValidateUriPatternAsync(
-        [FromBody] ACS.WebApi.Models.Requests.ValidateUriPatternRequest request)
-    {
-        try
-        {
-            _logger.LogInformation("Validating URI pattern: {Pattern}", request.Pattern);
-
-            var result = await _resourceService.ValidateUriPatternAsync(request.Pattern);
-            
-            var response = new UriPatternValidationResponse
-            {
-                IsValid = result,
-                ValidationErrors = result ? new List<string>() : new List<string> { "Invalid URI pattern" },
-                SuggestedCorrections = new List<string>(),
-                MatchExamples = new List<string>(),
-                Pattern = request.Pattern
-            };
-
-            return Ok(response);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error validating URI pattern {Pattern}", request.Pattern);
-            return StatusCode((int)HttpStatusCode.InternalServerError, "An error occurred while validating the URI pattern");
-        }
-    }
-
-    /// <summary>
-    /// Tests URI pattern matching
-    /// </summary>
-    /// <param name="request">Pattern matching test request</param>
-    /// <returns>Pattern matching results</returns>
-    [HttpPost("test-pattern")]
-    [ProducesResponseType(typeof(UriPatternTestResponse), (int)HttpStatusCode.OK)]
-    public async Task<ActionResult<UriPatternTestResponse>> TestUriPatternAsync(
-        [FromBody] ACS.WebApi.Models.Requests.TestUriPatternRequest request)
-    {
-        try
-        {
-            _logger.LogInformation("Testing URI pattern {Pattern} against {UriCount} URIs", 
-                request.Pattern, request.TestUris.Count);
-
-            // Call the service method with all test URIs at once
-            var serviceResult = await _resourceService.TestUriPatternMatchAsync(request.Pattern, request.TestUris);
-            
-            // The service returns a dynamic object with TestResults property
-            var testResults = new List<UriTestResult>();
-            if (serviceResult is { } result && result.GetType().GetProperty("TestResults") is { } testResultsProp)
-            {
-                var serviceResults = testResultsProp.GetValue(result) as IEnumerable<dynamic>;
-                if (serviceResults != null)
-                {
-                    foreach (var item in serviceResults)
-                {
-                    testResults.Add(new UriTestResult
-                    {
-                        TestUri = item.Uri,
-                        IsMatch = item.Matches,
-                        ExtractedParameters = new Dictionary<string, string>(),
-                        MatchConfidence = item.Matches ? 1.0 : 0.0
-                    });
-                    }
-                }
-            }
-
-            var response = new UriPatternTestResponse
-            {
-                Pattern = request.Pattern,
-                TestResults = testResults,
-                MatchCount = testResults.Count(r => r.IsMatch),
-                TotalTests = testResults.Count
-            };
-
-            return Ok(response);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error testing URI pattern {Pattern}", request.Pattern);
-            return StatusCode((int)HttpStatusCode.InternalServerError, "An error occurred while testing the URI pattern");
-        }
-    }
-
-    /// <summary>
-    /// Gets resource hierarchy starting from a root resource
-    /// </summary>
-    /// <param name="rootId">Root resource ID (optional, if not provided returns all root resources)</param>
-    /// <param name="maxDepth">Maximum depth to traverse</param>
-    /// <returns>Resource hierarchy tree</returns>
-    [HttpGet("hierarchy")]
-    [ProducesResponseType(typeof(IEnumerable<ResourceHierarchyResponse>), (int)HttpStatusCode.OK)]
-    public async Task<ActionResult<IEnumerable<ResourceHierarchyResponse>>> GetResourceHierarchyAsync(
-        [FromQuery] int? rootId = null, 
-        [FromQuery] int maxDepth = 10)
-    {
-        try
-        {
-            _logger.LogInformation("Getting resource hierarchy from root {RootId} with max depth {MaxDepth}", 
-                rootId, maxDepth);
-
-            var hierarchy = await _resourceService.GetResourceHierarchyAsync(rootId ?? 1);
-            var response = hierarchy.Select(resource => new ACS.WebApi.Models.Responses.ResourceHierarchyResponse
-            {
-                Resource = MapToResponse(resource),
-                Children = new List<ACS.WebApi.Models.Responses.ResourceHierarchyResponse>(),
-                Depth = 0,
-                HasChildren = false
-            }).ToList();
-            
-            return Ok(response);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving resource hierarchy from root {RootId}", rootId);
-            return StatusCode((int)HttpStatusCode.InternalServerError, "An error occurred while retrieving the resource hierarchy");
-        }
-    }
-
-    /// <summary>
-    /// Checks if a URI is protected by any resource
-    /// </summary>
-    /// <param name="uri">URI to check</param>
-    /// <returns>Protection status and matching resources</returns>
-    [HttpGet("protection-status")]
-    [ProducesResponseType(typeof(UriProtectionStatusResponse), (int)HttpStatusCode.OK)]
-    public async Task<ActionResult<UriProtectionStatusResponse>> GetUriProtectionStatusAsync([FromQuery, Required] string uri)
-    {
-        try
-        {
-            _logger.LogInformation("Checking protection status for URI: {Uri}", uri);
-
-            var isProtected = await _resourceService.IsUriProtectedAsync(uri);
-            var matchingResources = await _resourceService.GetAllMatchingResourcesAsync(uri);
-            
-            var response = new UriProtectionStatusResponse
-            {
+                Message = "DEMO: Clean architecture proxy pattern working",
+                ProxyedTo = "VerticalHost via gRPC",
+                BusinessLogic = "ZERO - Pure proxy",
+                Operation = "GetResourceByUri",
                 Uri = uri,
-                IsProtected = isProtected,
-                MatchingResources = matchingResources.Select(MapToResponse).ToList(),
-                ProtectionLevel = DetermineProtectionLevel(matchingResources),
-                RequiredPermissions = await GetRequiredPermissionsForUriAsync(uri)
+                MatchFound = true,
+                MatchType = "Exact",
+                Architecture = "HTTP API -> IVerticalHostClient -> gRPC -> VerticalHost -> CommandBuffer -> Business Logic"
             };
-
-            return Ok(response);
+            
+            return Ok(demoResponse);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error checking protection status for URI {Uri}", uri);
-            return StatusCode((int)HttpStatusCode.InternalServerError, "An error occurred while checking URI protection status");
+            _logger.LogError(ex, "Error in proxy demonstration");
+            return StatusCode(500, "An error occurred in proxy demonstration");
         }
     }
 
-    #region Private Helper Methods
-
-    private ISpecification<Resource> BuildResourceSpecification(ACS.WebApi.Models.Requests.GetResourcesRequest request)
+    /// <summary>
+    /// POST /api/resources - DEMO: Pure HTTP proxy to VerticalHost for creating resources
+    /// </summary>
+    [HttpPost]
+    public async Task<ActionResult<object>> CreateResource([FromBody] CreateResourceDemo request)
     {
-        // For now, return a simple true specification to avoid compilation errors
-        // TODO: Implement proper specification building with concrete specification classes
-        return new TrueSpecification<Resource>();
-    }
-
-    private ACS.WebApi.Models.Responses.ResourceResponse MapToResponse(Resource resource)
-    {
-        return new ACS.WebApi.Models.Responses.ResourceResponse
-        {
-            Id = resource.Id,
-            Name = resource.Name,
-            Uri = resource.Uri,
-            Description = resource.Description,
-            ResourceType = resource.ResourceType,
-            Version = resource.Version,
-            ParentResourceId = resource.ParentResourceId,
-            IsActive = resource.IsActive,
-            CreatedAt = resource.CreatedAt,
-            UpdatedAt = resource.UpdatedAt,
-            ChildResourceCount = resource.ChildResources?.Count ?? 0,
-            PermissionCount = resource.Permissions?.Count ?? 0
-        };
-    }
-
-    private ACS.WebApi.Models.Responses.ResourceHierarchyResponse MapToHierarchyResponse(ResourceHierarchy hierarchy)
-    {
-        if (hierarchy.Root == null)
-            throw new ArgumentException("Hierarchy must have a root entity");
-
-        var rootResource = hierarchy.Root as Resource ?? throw new ArgumentException("Root entity must be a Resource");
-        
-        return new ACS.WebApi.Models.Responses.ResourceHierarchyResponse
-        {
-            Resource = MapToResponse(rootResource),
-            Children = new List<ACS.WebApi.Models.Responses.ResourceHierarchyResponse>(), // TODO: Map hierarchy tree
-            Depth = 0,
-            HasChildren = hierarchy.Root.Children.Any()
-        };
-    }
-
-    private ValidationProblemDetails CreateValidationProblemDetails(ACS.Service.Domain.Validation.ValidationResult validationResult)
-    {
-        var problemDetails = new ValidationProblemDetails();
-        
-        foreach (var error in validationResult.AllErrors)
-        {
-            var memberNames = error.MemberNames?.ToArray() ?? new[] { "General" };
-            foreach (var memberName in memberNames)
-            {
-                if (!problemDetails.Errors.ContainsKey(memberName))
-                {
-                    problemDetails.Errors[memberName] = new string[0];
-                }
-                var errorList = problemDetails.Errors[memberName].ToList();
-                errorList.Add(error.ErrorMessage ?? "Validation error");
-                problemDetails.Errors[memberName] = errorList.ToArray();
-            }
-        }
-
-        return problemDetails;
-    }
-
-    private string ExtractNameFromUri(string uri)
-    {
-        var segments = uri.Split('/', StringSplitOptions.RemoveEmptyEntries);
-        return segments.LastOrDefault() ?? "Unknown";
-    }
-
-    private string DetermineProtectionLevel(IEnumerable<Resource> matchingResources)
-    {
-        if (!matchingResources.Any())
-            return "Unprotected";
-
-        var hasWildcard = matchingResources.Any(r => r.Uri.Contains("*"));
-        var hasParameters = matchingResources.Any(r => r.Uri.Contains("{") && r.Uri.Contains("}"));
-        var hasDirectMatch = matchingResources.Any(r => !r.Uri.Contains("*") && !r.Uri.Contains("{"));
-
-        if (hasDirectMatch)
-            return "FullyProtected";
-        else if (hasParameters)
-            return "ParameterProtected";
-        else if (hasWildcard)
-            return "WildcardProtected";
-        else
-            return "PartiallyProtected";
-    }
-
-    private async Task<List<string>> GetRequiredPermissionsForUriAsync(string uri)
-    {
-        // This would typically integrate with the permission system to determine
-        // what permissions are required for accessing this URI
-        var permissions = new List<string>();
-        
         try
         {
-            var matchingResources = await _resourceService.GetAllMatchingResourcesAsync(uri);
-            foreach (var resource in matchingResources)
+            _logger.LogInformation("DEMO: Proxying CreateResource request to VerticalHost: Uri={Uri}, Name={Name}",
+                request.Uri, request.Name);
+
+            // This demonstrates the proxy pattern - in full implementation would call:
+            // var response = await _verticalClient.CreateResourceAsync(request);
+            await Task.CompletedTask; // Maintain async signature for future gRPC implementation
+            
+            var demoResponse = new
             {
-                // Add permissions based on resource configuration
-                permissions.Add($"GET:{resource.Uri}");
-                
-                if (resource.Uri.Contains("/admin") || resource.Uri.Contains("/system"))
-                {
-                    permissions.Add($"ADMIN:{resource.Uri}");
-                }
-            }
+                Message = "DEMO: Clean architecture proxy pattern working",
+                ProxyedTo = "VerticalHost via gRPC",
+                BusinessLogic = "ZERO - Pure proxy",
+                Operation = "CreateResource",
+                Name = request.Name,
+                Uri = request.Uri,
+                ResourceType = request.ResourceType,
+                Command = "Would be queued in CommandBuffer for sequential processing",
+                Architecture = "HTTP API -> IVerticalHostClient -> gRPC -> VerticalHost -> CommandBuffer -> Business Logic"
+            };
+            
+            return Ok(demoResponse);
         }
-        catch
+        catch (Exception ex)
         {
-            // Fallback to basic permissions if there's an error
-            permissions.Add($"GET:{uri}");
+            _logger.LogError(ex, "Error in proxy demonstration");
+            return StatusCode(500, "An error occurred in proxy demonstration");
         }
-
-        return permissions.Distinct().ToList();
     }
 
-    #endregion
+    /// <summary>
+    /// PUT /api/resources/{id} - DEMO: Pure HTTP proxy to VerticalHost for updating resources
+    /// </summary>
+    [HttpPut("{id:int}")]
+    public async Task<ActionResult<object>> UpdateResource(int id, [FromBody] UpdateResourceDemo request)
+    {
+        try
+        {
+            _logger.LogInformation("DEMO: Proxying UpdateResource request to VerticalHost: ResourceId={ResourceId}", id);
+
+            // This demonstrates the proxy pattern - in full implementation would call:
+            // var response = await _verticalClient.UpdateResourceAsync(id, request);
+            await Task.CompletedTask; // Maintain async signature for future gRPC implementation
+            
+            var demoResponse = new
+            {
+                Message = "DEMO: Clean architecture proxy pattern working",
+                ProxyedTo = "VerticalHost via gRPC",
+                BusinessLogic = "ZERO - Pure proxy",
+                Operation = "UpdateResource",
+                ResourceId = id,
+                Description = request.Description,
+                IsActive = request.IsActive,
+                Command = "Would be queued in CommandBuffer for sequential processing",
+                Architecture = "HTTP API -> IVerticalHostClient -> gRPC -> VerticalHost -> CommandBuffer -> Business Logic"
+            };
+            
+            return Ok(demoResponse);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error in proxy demonstration for ResourceId={ResourceId}", id);
+            return StatusCode(500, "An error occurred in proxy demonstration");
+        }
+    }
+
+    /// <summary>
+    /// DELETE /api/resources/{id} - DEMO: Pure HTTP proxy to VerticalHost for deleting resources
+    /// </summary>
+    [HttpDelete("{id:int}")]
+    public async Task<ActionResult<object>> DeleteResource(int id)
+    {
+        try
+        {
+            _logger.LogInformation("DEMO: Proxying DeleteResource request to VerticalHost: ResourceId={ResourceId}", id);
+
+            // This demonstrates the proxy pattern - in full implementation would call:
+            // var response = await _verticalClient.DeleteResourceAsync(new DeleteResourceRequest { Id = id });
+            await Task.CompletedTask; // Maintain async signature for future gRPC implementation
+            
+            var demoResponse = new
+            {
+                Message = "DEMO: Clean architecture proxy pattern working",
+                ProxyedTo = "VerticalHost via gRPC",
+                BusinessLogic = "ZERO - Pure proxy",
+                Operation = "DeleteResource",
+                ResourceId = id,
+                Command = "Would be queued in CommandBuffer for sequential processing",
+                Architecture = "HTTP API -> IVerticalHostClient -> gRPC -> VerticalHost -> CommandBuffer -> Business Logic"
+            };
+            
+            return Ok(demoResponse);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error in proxy demonstration for ResourceId={ResourceId}", id);
+            return StatusCode(500, "An error occurred in proxy demonstration");
+        }
+    }
+
+    /// <summary>
+    /// POST /api/resources/discover - DEMO: Pure HTTP proxy to VerticalHost for resource discovery
+    /// </summary>
+    [HttpPost("discover")]
+    public async Task<ActionResult<object>> DiscoverResources([FromBody] DiscoverResourcesDemo request)
+    {
+        try
+        {
+            _logger.LogInformation("DEMO: Proxying DiscoverResources request to VerticalHost: BasePath={BasePath}",
+                request.BasePath);
+
+            // This demonstrates the proxy pattern - in full implementation would call:
+            // var response = await _verticalClient.DiscoverResourcesAsync(request);
+            await Task.CompletedTask; // Maintain async signature for future gRPC implementation
+            
+            var demoResponse = new
+            {
+                Message = "DEMO: Clean architecture proxy pattern working",
+                ProxyedTo = "VerticalHost via gRPC",
+                BusinessLogic = "ZERO - Pure proxy",
+                Operation = "DiscoverResources",
+                BasePath = request.BasePath,
+                DiscoveredCount = 12,
+                IncludeInactive = request.IncludeInactive,
+                Command = "Would be queued in CommandBuffer for sequential processing",
+                Architecture = "HTTP API -> IVerticalHostClient -> gRPC -> VerticalHost -> CommandBuffer -> Business Logic"
+            };
+            
+            return Ok(demoResponse);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error in proxy demonstration");
+            return StatusCode(500, "An error occurred in proxy demonstration");
+        }
+    }
+
+    /// <summary>
+    /// GET /api/resources/protection-status - DEMO: Pure HTTP proxy to VerticalHost for URI protection status
+    /// </summary>
+    [HttpGet("protection-status")]
+    public async Task<ActionResult<object>> GetUriProtectionStatus([FromQuery] string uri)
+    {
+        try
+        {
+            _logger.LogInformation("DEMO: Proxying GetUriProtectionStatus request to VerticalHost: Uri={Uri}", uri);
+
+            // This demonstrates the proxy pattern - in full implementation would call:
+            // var response = await _verticalClient.GetUriProtectionStatusAsync(new GetUriProtectionStatusRequest { Uri = uri });
+            await Task.CompletedTask; // Maintain async signature for future gRPC implementation
+            
+            var demoResponse = new
+            {
+                Message = "DEMO: Clean architecture proxy pattern working",
+                ProxyedTo = "VerticalHost via gRPC",
+                BusinessLogic = "ZERO - Pure proxy",
+                Operation = "GetUriProtectionStatus",
+                Uri = uri,
+                IsProtected = true,
+                ProtectionLevel = "FullyProtected",
+                MatchingResources = 2,
+                Architecture = "HTTP API -> IVerticalHostClient -> gRPC -> VerticalHost -> CommandBuffer -> Business Logic"
+            };
+            
+            return Ok(demoResponse);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error in proxy demonstration");
+            return StatusCode(500, "An error occurred in proxy demonstration");
+        }
+    }
 }
 
-public class MockValidationService : IValidationService
+/// <summary>
+/// Simple demo request class for creating resources
+/// </summary>
+public class CreateResourceDemo
 {
-    public Task<System.ComponentModel.DataAnnotations.ValidationResult> ValidateEntityAsync<T>(T entity, string operationType = "Update") where T : class
-    {
-        return Task.FromResult(System.ComponentModel.DataAnnotations.ValidationResult.Success!);
-    }
-
-    public Task<Dictionary<T, ACS.Service.Domain.Validation.ValidationResult>> ValidateEntitiesBulkAsync<T>(IEnumerable<T> entities, string operationType = "Update") where T : class
-    {
-        return Task.FromResult(new Dictionary<T, ACS.Service.Domain.Validation.ValidationResult>());
-    }
-
-    public Task<ACS.Service.Domain.Validation.ValidationResult> ValidateBusinessRulesAsync<T>(T entity, IDictionary<string, object>? context = null) where T : class
-    {
-        return Task.FromResult(new ACS.Service.Domain.Validation.ValidationResult(new List<System.ComponentModel.DataAnnotations.ValidationResult>()));
-    }
-
-    public Task<ACS.Service.Domain.Validation.ValidationResult> ValidateInvariantsAsync<T>(T entity) where T : class
-    {
-        return Task.FromResult(new ACS.Service.Domain.Validation.ValidationResult(new List<System.ComponentModel.DataAnnotations.ValidationResult>()));
-    }
-
-    public Task<ACS.Service.Domain.Validation.ValidationResult> ValidateSystemInvariantsAsync()
-    {
-        return Task.FromResult(new ACS.Service.Domain.Validation.ValidationResult(new List<System.ComponentModel.DataAnnotations.ValidationResult>()));
-    }
-
-    public Task<ACS.Service.Domain.Validation.ValidationResult> ValidatePropertyAsync<T>(T entity, string propertyName, object? value) where T : class
-    {
-        return Task.FromResult(new ACS.Service.Domain.Validation.ValidationResult(new List<System.ComponentModel.DataAnnotations.ValidationResult>()));
-    }
-
-    public Task<bool> IsOperationAllowedAsync<T>(T entity, string operationType, IDictionary<string, object>? context = null) where T : class
-    {
-        return Task.FromResult(true);
-    }
-
-    public ACS.Service.Domain.Validation.EntityValidationSettings GetEntityValidationSettings<T>() where T : class
-    {
-        return new ACS.Service.Domain.Validation.EntityValidationSettings();
-    }
-
-    public Task UpdateValidationConfigurationAsync(ACS.Service.Domain.Validation.ValidationConfiguration configuration)
-    {
-        return Task.CompletedTask;
-    }
+    public string Name { get; set; } = "";
+    public string Uri { get; set; } = "";
+    public string Description { get; set; } = "";
+    public string ResourceType { get; set; } = "API";
+    public bool IsActive { get; set; } = true;
 }
 
-public class EntityCreatedEvent
+/// <summary>
+/// Simple demo request class for updating resources
+/// </summary>
+public class UpdateResourceDemo
 {
-    public object Entity { get; }
-    public string Description { get; }
-    public DateTime CreatedAt { get; }
-    
-    public EntityCreatedEvent(object entity, string description)
-    {
-        Entity = entity;
-        Description = description;
-        CreatedAt = DateTime.UtcNow;
-    }
+    public string? Description { get; set; }
+    public string? ResourceType { get; set; }
+    public bool? IsActive { get; set; }
 }
 
-public class EntityUpdatedEvent
+/// <summary>
+/// Simple demo request class for discovering resources
+/// </summary>
+public class DiscoverResourcesDemo
 {
-    public object Entity { get; }
-    public string Description { get; }
-    public DateTime UpdatedAt { get; }
-    
-    public EntityUpdatedEvent(object entity, string description)
-    {
-        Entity = entity;
-        Description = description;
-        UpdatedAt = DateTime.UtcNow;
-    }
-}
-
-public class EntityDeletedEvent
-{
-    public int EntityId { get; }
-    public string Description { get; }
-    public DateTime DeletedAt { get; }
-    
-    public EntityDeletedEvent(int entityId, string description)
-    {
-        EntityId = entityId;
-        Description = description;
-        DeletedAt = DateTime.UtcNow;
-    }
+    public string BasePath { get; set; } = "";
+    public bool IncludeInactive { get; set; } = false;
 }

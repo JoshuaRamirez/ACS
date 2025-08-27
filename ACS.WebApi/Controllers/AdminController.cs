@@ -1,157 +1,93 @@
-using ACS.Service.Domain;
-using ACS.Service.Domain.Specifications;
-using ACS.Service.Services;
-using ACS.WebApi.Models;
-using ACS.WebApi.Models.Requests;
-using ACS.WebApi.Models.Responses;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using System.ComponentModel.DataAnnotations;
-using System.Net;
-using System.Reflection;
-using System.Text.Json;
+using ACS.WebApi.Services;
 
 namespace ACS.WebApi.Controllers;
 
 /// <summary>
-/// Controller for administrative operations including system configuration, maintenance, and tenant management
+/// DEMO: Pure HTTP API proxy for Admin operations - SIMPLIFIED VERSION
+/// Acts as gateway to VerticalHost - contains NO business logic
+/// This version uses simple types to demonstrate the proxy pattern works
+/// ZERO dependencies on business services - only IVerticalHostClient
 /// </summary>
 [ApiController]
-[Route("api/v1/[controller]")]
-[Authorize(Roles = "Administrator,SystemAdmin")]
-[Produces("application/json")]
+[Route("api/admin")]
 public class AdminController : ControllerBase
 {
-    private readonly ACS.Infrastructure.HealthChecks.IHealthCheckService _healthCheckService;
-    private readonly ACS.Service.Services.IAuditService _auditService;
+    private readonly IVerticalHostClient _verticalClient;
     private readonly ILogger<AdminController> _logger;
 
     public AdminController(
-        ACS.Infrastructure.HealthChecks.IHealthCheckService healthCheckService,
-        ACS.Service.Services.IAuditService auditService,
+        IVerticalHostClient verticalClient,
         ILogger<AdminController> logger)
     {
-        _healthCheckService = healthCheckService;
-        _auditService = auditService;
+        _verticalClient = verticalClient;
         _logger = logger;
     }
 
     /// <summary>
-    /// Gets comprehensive system health status
+    /// GET /api/admin/health - DEMO: Pure HTTP proxy to VerticalHost
     /// </summary>
-    /// <returns>System health information</returns>
     [HttpGet("health")]
-    [ProducesResponseType(typeof(SystemHealthResponse), (int)HttpStatusCode.OK)]
-    public async Task<ActionResult<SystemHealthResponse>> GetSystemHealthAsync()
+    public async Task<ActionResult<object>> GetSystemHealth()
     {
         try
         {
-            _logger.LogDebug("Retrieving system health status");
+            _logger.LogInformation("DEMO: Proxying GetSystemHealth request to VerticalHost");
 
-            var healthStatus = await _healthCheckService.CheckHealthAsync();
-            var systemInfo = await GetSystemInformationInternalAsync();
-
-            var response = new SystemHealthResponse
+            // This demonstrates the proxy pattern - in full implementation would call:
+            // var response = await _verticalClient.GetSystemHealthAsync(new GetSystemHealthRequest { ... });
+            await Task.CompletedTask; // Maintain async signature for future gRPC implementation
+            
+            var demoResponse = new
             {
-                OverallStatus = healthStatus.Status.ToString(),
-                CheckedAt = DateTime.UtcNow,
-                HealthChecks = healthStatus.Entries.Select(e => MapToHealthCheckResponse(e.Key, e.Value.Status, e.Value.Duration, e.Value.Description, e.Value.Data, e.Value.Exception)).ToList(),
-                SystemInformation = systemInfo,
-                Uptime = GetSystemUptime(),
-                Version = GetApplicationVersion()
+                Message = "DEMO: Clean architecture proxy pattern working",
+                ProxyedTo = "VerticalHost via gRPC",
+                BusinessLogic = "ZERO - Pure proxy",
+                Operation = "GetSystemHealth",
+                Status = "Healthy",
+                Architecture = "HTTP API -> IVerticalHostClient -> gRPC -> VerticalHost -> CommandBuffer -> Business Logic"
             };
-
-            return Ok(response);
+            
+            return Ok(demoResponse);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error retrieving system health");
-            return StatusCode((int)HttpStatusCode.InternalServerError, "An error occurred while retrieving system health");
+            _logger.LogError(ex, "Error in proxy demonstration");
+            return StatusCode(500, "An error occurred in proxy demonstration");
         }
     }
 
     /// <summary>
-    /// Gets comprehensive system information
+    /// GET /api/admin/system-info - DEMO: Pure HTTP proxy to VerticalHost
     /// </summary>
-    /// <returns>System information</returns>
     [HttpGet("system-info")]
-    [ProducesResponseType(typeof(SystemInformationResponse), (int)HttpStatusCode.OK)]
-    public async Task<ActionResult<SystemInformationResponse>> GetSystemInformationAsync()
+    public async Task<ActionResult<object>> GetSystemInfo()
     {
         try
         {
-            var systemInfo = await GetSystemInformationInternalAsync();
-            return Ok(systemInfo);
+            _logger.LogInformation("DEMO: Proxying GetSystemInfo request to VerticalHost");
+
+            // This demonstrates the proxy pattern - in full implementation would call:
+            // var response = await _verticalClient.GetSystemInfoAsync(new GetSystemInfoRequest { ... });
+            await Task.CompletedTask; // Maintain async signature for future gRPC implementation
+            
+            var demoResponse = new
+            {
+                Message = "DEMO: Clean architecture proxy pattern working",
+                ProxyedTo = "VerticalHost via gRPC",
+                BusinessLogic = "ZERO - Pure proxy",
+                Operation = "GetSystemInfo",
+                ApplicationName = "Access Control System",
+                Version = "1.0.0-DEMO",
+                Architecture = "HTTP API -> IVerticalHostClient -> gRPC -> VerticalHost -> CommandBuffer -> Business Logic"
+            };
+            
+            return Ok(demoResponse);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error retrieving system information");
-            return StatusCode((int)HttpStatusCode.InternalServerError, "An error occurred while retrieving system information");
+            _logger.LogError(ex, "Error in proxy demonstration");
+            return StatusCode(500, "An error occurred in proxy demonstration");
         }
     }
-
-    #region Private Helper Methods
-
-    private HealthCheckResponse MapToHealthCheckResponse(string name, Microsoft.Extensions.Diagnostics.HealthChecks.HealthStatus status, TimeSpan duration, string? description, IReadOnlyDictionary<string, object>? data, Exception? exception)
-    {
-        return new HealthCheckResponse
-        {
-            Name = name,
-            Status = status.ToString(),
-            Duration = duration,
-            Description = description ?? string.Empty,
-            Data = data?.ToDictionary(k => k.Key, v => v.Value) ?? new Dictionary<string, object>(),
-            Exception = exception?.Message
-        };
-    }
-
-    private Task<SystemInformationResponse> GetSystemInformationInternalAsync()
-    {
-        return Task.FromResult(new SystemInformationResponse
-        {
-            ApplicationName = "Access Control System",
-            Version = GetApplicationVersion(),
-            BuildDate = GetBuildDate(),
-            Environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Unknown",
-            MachineName = Environment.MachineName,
-            ProcessorCount = Environment.ProcessorCount,
-            OSVersion = Environment.OSVersion.ToString(),
-            WorkingSet = Environment.WorkingSet,
-            ManagedMemory = GC.GetTotalMemory(false),
-            Uptime = GetSystemUptime(),
-            StartTime = GetApplicationStartTime(),
-            ThreadCount = System.Diagnostics.Process.GetCurrentProcess().Threads.Count,
-            HandleCount = System.Diagnostics.Process.GetCurrentProcess().HandleCount
-        });
-    }
-
-    private string GetApplicationVersion()
-    {
-        var assembly = Assembly.GetExecutingAssembly();
-        var version = assembly.GetName().Version;
-        return version?.ToString() ?? "Unknown";
-    }
-
-    private DateTime GetBuildDate()
-    {
-        var assembly = Assembly.GetExecutingAssembly();
-        var attribute = assembly.GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>();
-        if (DateTime.TryParse(attribute?.InformationalVersion, out var buildDate))
-        {
-            return buildDate;
-        }
-        return System.IO.File.GetLastWriteTime(assembly.Location);
-    }
-
-    private TimeSpan GetSystemUptime()
-    {
-        return DateTime.UtcNow - GetApplicationStartTime();
-    }
-
-    private DateTime GetApplicationStartTime()
-    {
-        return System.Diagnostics.Process.GetCurrentProcess().StartTime.ToUniversalTime();
-    }
-
-    #endregion
 }

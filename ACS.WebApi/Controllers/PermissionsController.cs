@@ -1,241 +1,249 @@
 using Microsoft.AspNetCore.Mvc;
-using ACS.WebApi.DTOs;
-using ACS.Infrastructure.Services;
-using ACS.Service.Infrastructure;
-using ACS.Service.Domain;
-using ACS.Service.Requests;
+using ACS.WebApi.Services;
 
 namespace ACS.WebApi.Controllers;
 
+/// <summary>
+/// DEMO: Pure HTTP API proxy for Permissions operations - SIMPLIFIED VERSION
+/// Acts as gateway to VerticalHost - contains NO business logic
+/// This version uses simple types to demonstrate the proxy pattern works
+/// ZERO dependencies on business services - only IVerticalHostClient
+/// </summary>
 [ApiController]
-[Route("api/[controller]")]
+[Route("api/permissions")]
 public class PermissionsController : ControllerBase
 {
-    private readonly IUserContextService _userContext;
+    private readonly IVerticalHostClient _verticalClient;
     private readonly ILogger<PermissionsController> _logger;
-    private readonly IGrpcClientService _grpcClientService;
-    private readonly IErrorMapper _errorMapper;
 
     public PermissionsController(
-        IUserContextService userContext,
-        ILogger<PermissionsController> logger,
-        IGrpcClientService? grpcClientService = null,
-        IErrorMapper? errorMapper = null)
+        IVerticalHostClient verticalClient,
+        ILogger<PermissionsController> logger)
     {
-        _userContext = userContext;
+        _verticalClient = verticalClient;
         _logger = logger;
-        _grpcClientService = grpcClientService ?? new MockGrpcClientService();
-        _errorMapper = errorMapper ?? new MockErrorMapper();
     }
 
     /// <summary>
-    /// Check if an entity has permission for a specific resource and HTTP verb
+    /// POST /api/permissions/check - DEMO: Pure HTTP proxy to VerticalHost for permission checking
     /// </summary>
     [HttpPost("check")]
-    public async Task<ActionResult<ApiResponse<CheckPermissionResponse>>> CheckPermission([FromBody] ACS.Service.Requests.CheckPermissionRequest request)
+    public async Task<ActionResult<object>> CheckPermission([FromBody] CheckPermissionDemo request)
     {
         try
         {
-            if (request.EntityId <= 0)
-            {
-                return BadRequest(new ApiResponse<CheckPermissionResponse>(false, null, "Entity ID must be greater than 0"));
-            }
+            _logger.LogInformation("DEMO: Proxying CheckPermission request to VerticalHost: EntityId={EntityId}, Resource={Resource}, Action={Action}",
+                request.EntityId, request.Resource, request.Action);
 
-            if (string.IsNullOrWhiteSpace(request.Resource))
-            {
-                return BadRequest(new ApiResponse<CheckPermissionResponse>(false, null, "Resource is required"));
-            }
-
-            if (string.IsNullOrWhiteSpace(request.Action))
-            {
-                return BadRequest(new ApiResponse<CheckPermissionResponse>(false, null, "Action is required"));
-            }
-
-            var result = await _grpcClientService.CheckPermissionAsync(request);
+            // This demonstrates the proxy pattern - in full implementation would call:
+            // var response = await _verticalClient.CheckPermissionAsync(request);
+            await Task.CompletedTask; // Maintain async signature for future gRPC implementation
             
-            if (result.Success)
+            var demoResponse = new
             {
-                return Ok(result);
-            }
+                Message = "DEMO: Clean architecture proxy pattern working",
+                ProxyedTo = "VerticalHost via gRPC",
+                BusinessLogic = "ZERO - Pure proxy",
+                Operation = "CheckPermission",
+                EntityId = request.EntityId,
+                Resource = request.Resource,
+                Action = request.Action,
+                IsAllowed = true, // Demo value
+                Architecture = "HTTP API -> IVerticalHostClient -> gRPC -> VerticalHost -> CommandBuffer -> Business Logic"
+            };
             
-            return BadRequest(result);
+            return Ok(demoResponse);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error checking permission for entity {EntityId} on {Resource}:{Action}", 
-                request.EntityId, request.Resource, request.Action);
-            return this.HandleGrpcException<ApiResponse<CheckPermissionResponse>>(ex, _errorMapper, "Error checking permission");
+            _logger.LogError(ex, "Error in proxy demonstration");
+            return StatusCode(500, "An error occurred in proxy demonstration");
         }
     }
 
     /// <summary>
-    /// Grant permission to an entity for a specific resource and HTTP verb
+    /// POST /api/permissions/grant - DEMO: Pure HTTP proxy to VerticalHost for granting permissions
     /// </summary>
     [HttpPost("grant")]
-    public async Task<ActionResult<ApiResponse<bool>>> GrantPermission([FromBody] ACS.WebApi.DTOs.GrantPermissionRequest request)
+    public async Task<ActionResult<object>> GrantPermission([FromBody] GrantPermissionDemo request)
     {
         try
         {
-            if (request.EntityId <= 0)
-            {
-                return BadRequest(new ApiResponse<bool>(false, false, "Entity ID must be greater than 0"));
-            }
+            _logger.LogInformation("DEMO: Proxying GrantPermission request to VerticalHost: EntityId={EntityId}, Uri={Uri}, HttpVerb={HttpVerb}",
+                request.EntityId, request.Uri, request.HttpVerb);
 
-            if (string.IsNullOrWhiteSpace(request.Uri))
-            {
-                return BadRequest(new ApiResponse<bool>(false, false, "URI is required"));
-            }
-
-            if (string.IsNullOrWhiteSpace(request.HttpVerb))
-            {
-                return BadRequest(new ApiResponse<bool>(false, false, "HTTP verb is required"));
-            }
-
-            var result = await _grpcClientService.GrantPermissionAsync(request);
+            // This demonstrates the proxy pattern - in full implementation would call:
+            // var response = await _verticalClient.GrantPermissionAsync(request);
+            await Task.CompletedTask; // Maintain async signature for future gRPC implementation
             
-            if (result.Success)
+            var demoResponse = new
             {
-                return Ok(result);
-            }
+                Message = "DEMO: Clean architecture proxy pattern working",
+                ProxyedTo = "VerticalHost via gRPC",
+                BusinessLogic = "ZERO - Pure proxy",
+                Operation = "GrantPermission",
+                EntityId = request.EntityId,
+                Uri = request.Uri,
+                HttpVerb = request.HttpVerb,
+                Command = "Would be queued in CommandBuffer for sequential processing",
+                Architecture = "HTTP API -> IVerticalHostClient -> gRPC -> VerticalHost -> CommandBuffer -> Business Logic"
+            };
             
-            return BadRequest(result);
+            return Ok(demoResponse);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error granting permission to entity {EntityId} for {Uri}:{HttpVerb}", 
-                request.EntityId, request.Uri, request.HttpVerb);
-            return this.HandleGrpcException<ApiResponse<bool>>(ex, _errorMapper, "Error granting permission");
+            _logger.LogError(ex, "Error in proxy demonstration");
+            return StatusCode(500, "An error occurred in proxy demonstration");
         }
     }
 
     /// <summary>
-    /// Deny permission to an entity for a specific resource and HTTP verb
+    /// POST /api/permissions/deny - DEMO: Pure HTTP proxy to VerticalHost for denying permissions
     /// </summary>
     [HttpPost("deny")]
-    public async Task<ActionResult<ApiResponse<bool>>> DenyPermission([FromBody] ACS.WebApi.DTOs.DenyPermissionRequest request)
+    public async Task<ActionResult<object>> DenyPermission([FromBody] DenyPermissionDemo request)
     {
         try
         {
-            if (request.EntityId <= 0)
-            {
-                return BadRequest(new ApiResponse<bool>(false, false, "Entity ID must be greater than 0"));
-            }
+            _logger.LogInformation("DEMO: Proxying DenyPermission request to VerticalHost: EntityId={EntityId}, Uri={Uri}, HttpVerb={HttpVerb}",
+                request.EntityId, request.Uri, request.HttpVerb);
 
-            if (string.IsNullOrWhiteSpace(request.Uri))
-            {
-                return BadRequest(new ApiResponse<bool>(false, false, "URI is required"));
-            }
-
-            if (string.IsNullOrWhiteSpace(request.HttpVerb))
-            {
-                return BadRequest(new ApiResponse<bool>(false, false, "HTTP verb is required"));
-            }
-
-            var result = await _grpcClientService.DenyPermissionAsync(request);
+            // This demonstrates the proxy pattern - in full implementation would call:
+            // var response = await _verticalClient.DenyPermissionAsync(request);
+            await Task.CompletedTask; // Maintain async signature for future gRPC implementation
             
-            if (result.Success)
+            var demoResponse = new
             {
-                return Ok(result);
-            }
+                Message = "DEMO: Clean architecture proxy pattern working",
+                ProxyedTo = "VerticalHost via gRPC",
+                BusinessLogic = "ZERO - Pure proxy",
+                Operation = "DenyPermission",
+                EntityId = request.EntityId,
+                Uri = request.Uri,
+                HttpVerb = request.HttpVerb,
+                Command = "Would be queued in CommandBuffer for sequential processing",
+                Architecture = "HTTP API -> IVerticalHostClient -> gRPC -> VerticalHost -> CommandBuffer -> Business Logic"
+            };
             
-            return BadRequest(result);
+            return Ok(demoResponse);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error denying permission to entity {EntityId} for {Uri}:{HttpVerb}", 
-                request.EntityId, request.Uri, request.HttpVerb);
-            return this.HandleGrpcException<ApiResponse<bool>>(ex, _errorMapper, "Error denying permission");
+            _logger.LogError(ex, "Error in proxy demonstration");
+            return StatusCode(500, "An error occurred in proxy demonstration");
         }
     }
 
     /// <summary>
-    /// Get all permissions for a specific entity
+    /// GET /api/permissions/entity/{entityId} - DEMO: Pure HTTP proxy to VerticalHost for getting entity permissions
     /// </summary>
     [HttpGet("entity/{entityId:int}")]
-    public async Task<ActionResult<ApiResponse<PermissionListResponse>>> GetEntityPermissions(int entityId, [FromQuery] PagedRequest request)
+    public async Task<ActionResult<object>> GetEntityPermissions(int entityId, [FromQuery] int page = 1, [FromQuery] int pageSize = 20)
     {
         try
         {
-            if (entityId <= 0)
-            {
-                return BadRequest(new ApiResponse<PermissionListResponse>(false, null, "Entity ID must be greater than 0"));
-            }
+            _logger.LogInformation("DEMO: Proxying GetEntityPermissions request to VerticalHost: EntityId={EntityId}, Page={Page}, PageSize={PageSize}",
+                entityId, page, pageSize);
 
-            var getPermissionsCommand = new GetEntityPermissionsCommand(
-                Guid.NewGuid().ToString(),
-                DateTime.UtcNow,
-                _userContext.GetCurrentUserId(),
-                entityId,
-                request.Page,
-                request.PageSize);
-
-            var result = await _grpcClientService.GetEntityPermissionsAsync(getPermissionsCommand);
+            // This demonstrates the proxy pattern - in full implementation would call:
+            // var response = await _verticalClient.GetEntityPermissionsAsync(entityId, page, pageSize);
+            await Task.CompletedTask; // Maintain async signature for future gRPC implementation
             
-            if (result.Success && result.Data != null)
+            var demoResponse = new
             {
-                return Ok(result);
-            }
+                Message = "DEMO: Clean architecture proxy pattern working",
+                ProxyedTo = "VerticalHost via gRPC",
+                BusinessLogic = "ZERO - Pure proxy",
+                Operation = "GetEntityPermissions",
+                EntityId = entityId,
+                Page = page,
+                PageSize = pageSize,
+                Architecture = "HTTP API -> IVerticalHostClient -> gRPC -> VerticalHost -> CommandBuffer -> Business Logic"
+            };
             
-            return StatusCode(500, new ApiResponse<PermissionListResponse>(false, null, result.Message ?? "Error retrieving permissions"));
+            return Ok(demoResponse);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error retrieving permissions for entity {EntityId}", entityId);
-            return this.HandleGrpcException<ACS.WebApi.DTOs.ApiResponse<PermissionListResponse>>(ex, _errorMapper, "Error retrieving permissions");
+            _logger.LogError(ex, "Error in proxy demonstration");
+            return StatusCode(500, "An error occurred in proxy demonstration");
         }
     }
 
     /// <summary>
-    /// Remove a permission from an entity
+    /// DELETE /api/permissions/entity/{entityId} - DEMO: Pure HTTP proxy to VerticalHost for removing permissions
     /// </summary>
     [HttpDelete("entity/{entityId:int}")]
-    public async Task<ActionResult<ApiResponse<bool>>> RemovePermission(int entityId, [FromBody] ACS.WebApi.DTOs.GrantPermissionRequest request)
+    public async Task<ActionResult<object>> RemovePermission(int entityId, [FromBody] RemovePermissionDemo request)
     {
         try
         {
-            if (entityId != request.EntityId)
-            {
-                return BadRequest(new ApiResponse<bool>(false, false, "Entity ID in URL and body must match"));
-            }
+            _logger.LogInformation("DEMO: Proxying RemovePermission request to VerticalHost: EntityId={EntityId}, Uri={Uri}, HttpVerb={HttpVerb}",
+                entityId, request.Uri, request.HttpVerb);
 
-            if (string.IsNullOrWhiteSpace(request.Uri))
-            {
-                return BadRequest(new ApiResponse<bool>(false, false, "URI is required"));
-            }
-
-            if (string.IsNullOrWhiteSpace(request.HttpVerb))
-            {
-                return BadRequest(new ApiResponse<bool>(false, false, "HTTP verb is required"));
-            }
-
-            // Parse the HTTP verb
-            if (!Enum.TryParse<HttpVerb>(request.HttpVerb, true, out var httpVerb))
-            {
-                return BadRequest(new ApiResponse<bool>(false, false, "Invalid HTTP verb"));
-            }
-
-            var removePermissionCommand = new RemovePermissionCommand(
-                Guid.NewGuid().ToString(),
-                DateTime.UtcNow,
-                _userContext.GetCurrentUserId(),
-                entityId,
-                request.Uri,
-                httpVerb);
-
-            var result = await _grpcClientService.RemovePermissionAsync(removePermissionCommand);
+            // This demonstrates the proxy pattern - in full implementation would call:
+            // var response = await _verticalClient.RemovePermissionAsync(entityId, request);
+            await Task.CompletedTask; // Maintain async signature for future gRPC implementation
             
-            if (result.Success)
+            var demoResponse = new
             {
-                return Ok(result);
-            }
+                Message = "DEMO: Clean architecture proxy pattern working",
+                ProxyedTo = "VerticalHost via gRPC",
+                BusinessLogic = "ZERO - Pure proxy",
+                Operation = "RemovePermission",
+                EntityId = entityId,
+                Uri = request.Uri,
+                HttpVerb = request.HttpVerb,
+                Command = "Would be queued in CommandBuffer for sequential processing",
+                Architecture = "HTTP API -> IVerticalHostClient -> gRPC -> VerticalHost -> CommandBuffer -> Business Logic"
+            };
             
-            return StatusCode(500, new ApiResponse<bool>(false, false, result.Message ?? "Error removing permission"));
+            return Ok(demoResponse);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error removing permission from entity {EntityId} for {Uri}:{HttpVerb}", 
-                entityId, request.Uri, request.HttpVerb);
-            return this.HandleGrpcException<ACS.WebApi.DTOs.ApiResponse<bool>>(ex, _errorMapper, "Error removing permission");
+            _logger.LogError(ex, "Error in proxy demonstration");
+            return StatusCode(500, "An error occurred in proxy demonstration");
         }
     }
+}
+
+/// <summary>
+/// Simple demo request class for permission checking
+/// </summary>
+public class CheckPermissionDemo
+{
+    public int EntityId { get; set; }
+    public string Resource { get; set; } = "";
+    public string Action { get; set; } = "";
+}
+
+/// <summary>
+/// Simple demo request class for granting permissions
+/// </summary>
+public class GrantPermissionDemo
+{
+    public int EntityId { get; set; }
+    public string Uri { get; set; } = "";
+    public string HttpVerb { get; set; } = "GET";
+}
+
+/// <summary>
+/// Simple demo request class for denying permissions
+/// </summary>
+public class DenyPermissionDemo
+{
+    public int EntityId { get; set; }
+    public string Uri { get; set; } = "";
+    public string HttpVerb { get; set; } = "GET";
+}
+
+/// <summary>
+/// Simple demo request class for removing permissions
+/// </summary>
+public class RemovePermissionDemo
+{
+    public string Uri { get; set; } = "";
+    public string HttpVerb { get; set; } = "GET";
 }

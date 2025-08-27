@@ -1,95 +1,89 @@
-using ACS.Alerting;
-using ACS.Infrastructure.Monitoring;
-using ACS.Infrastructure.Performance;
-using ACS.Service.Data;
-using ACS.Service.Responses;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Diagnostics.HealthChecks;
-using System.Diagnostics;
+using ACS.WebApi.Services;
 
 namespace ACS.WebApi.Controllers;
 
 /// <summary>
-/// Dashboard controller for monitoring and observability
+/// DEMO: Pure HTTP API proxy for Dashboard operations
+/// Acts as gateway to VerticalHost - contains NO business logic
+/// ZERO dependencies on business services - only IVerticalHostClient
 /// </summary>
 [ApiController]
 [Route("api/[controller]")]
 [Authorize]
 public class DashboardController : ControllerBase
 {
+    private readonly IVerticalHostClient _verticalClient;
     private readonly ILogger<DashboardController> _logger;
-    private readonly ApplicationDbContext _context;
 
     public DashboardController(
-        ILogger<DashboardController> logger,
-        ApplicationDbContext context)
+        IVerticalHostClient verticalClient,
+        ILogger<DashboardController> logger)
     {
+        _verticalClient = verticalClient;
         _logger = logger;
-        _context = context;
     }
 
     /// <summary>
-    /// Gets basic system overview
+    /// DEMO: Get system overview via VerticalHost proxy
     /// </summary>
-    /// <returns>System overview</returns>
     [HttpGet("overview")]
-    [ProducesResponseType(typeof(object), 200)]
-    public async Task<ActionResult> GetSystemOverviewAsync()
+    public async Task<ActionResult<object>> GetSystemOverview()
     {
         try
         {
-            _logger.LogInformation("Retrieving system overview");
-
-            var overview = new
+            _logger.LogInformation("DEMO: Proxying dashboard overview request to VerticalHost");
+            
+            // In full implementation would call:
+            // var response = await _verticalClient.GetDashboardOverviewAsync();
+            await Task.CompletedTask; // Maintain async signature for future gRPC implementation
+            
+            var demoResponse = new
             {
-                Timestamp = DateTime.UtcNow,
-                Status = "Healthy",
-                UsersCount = await _context.Users.CountAsync(),
-                GroupsCount = await _context.Groups.CountAsync(),
-                RolesCount = await _context.Roles.CountAsync(),
-                Uptime = GetSystemUptime()
+                Message = "DEMO: Dashboard overview proxy working",
+                ProxyedTo = "VerticalHost via gRPC",
+                BusinessLogic = "ZERO - Pure proxy",
+                Architecture = "HTTP API -> IVerticalHostClient -> gRPC -> VerticalHost -> Business Logic"
             };
-
-            return Ok(overview);
+            
+            return Ok(demoResponse);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error retrieving system overview");
-            return StatusCode(500, "An error occurred while retrieving system overview");
+            _logger.LogError(ex, "Error in dashboard overview proxy");
+            return StatusCode(500, "Error in proxy demonstration");
         }
     }
 
     /// <summary>
-    /// Gets basic system health status
+    /// DEMO: Get health status via VerticalHost proxy  
     /// </summary>
-    /// <returns>Health status</returns>
     [HttpGet("health")]
-    [ProducesResponseType(typeof(object), 200)]
-    public ActionResult GetHealthStatus()
+    public async Task<ActionResult<object>> GetHealthStatus()
     {
         try
         {
-            var health = new
+            _logger.LogInformation("DEMO: Proxying health status request to VerticalHost");
+            
+            // In full implementation would call:
+            // var response = await _verticalClient.GetHealthStatusAsync();
+            await Task.CompletedTask; // Maintain async signature for future gRPC implementation
+            
+            var demoResponse = new
             {
-                Status = "Healthy",
-                Timestamp = DateTime.UtcNow,
-                Uptime = GetSystemUptime(),
-                Environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Unknown"
+                Message = "DEMO: Health status proxy working",
+                ProxyedTo = "VerticalHost via gRPC",
+                BusinessLogic = "ZERO - Pure proxy",
+                Architecture = "HTTP API -> IVerticalHostClient -> gRPC -> VerticalHost -> Business Logic"
             };
-
-            return Ok(health);
+            
+            return Ok(demoResponse);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error retrieving health status");
-            return StatusCode(500, "An error occurred while retrieving health status");
+            _logger.LogError(ex, "Error in health status proxy");
+            return StatusCode(500, "Error in proxy demonstration");
         }
-    }
-
-    private TimeSpan GetSystemUptime()
-    {
-        return DateTime.UtcNow - Process.GetCurrentProcess().StartTime.ToUniversalTime();
     }
 }

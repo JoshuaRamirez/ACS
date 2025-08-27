@@ -329,6 +329,9 @@ public static class ServiceCollectionExtensions
                        .AllowAnyHeader());
         });
         
+        // Add WebApi-specific mapping services
+        services.AddWebApiMapping();
+        
         return services;
     }
 
@@ -674,6 +677,21 @@ public static class ServiceRegistrationValidator
     {
         // Diagnostic service
         services.AddSingleton<IDiagnosticService, DiagnosticService>();
+        
+        return services;
+    }
+    
+    /// <summary>
+    /// Register WebApi mapping services for resource-based contracts
+    /// TEMPORARILY COMMENTED OUT - Will be moved to WebApi project for clean architecture
+    /// </summary>
+    public static IServiceCollection AddWebApiMapping(this IServiceCollection services)
+    {
+        // TODO: Move these to WebApi project to enforce clean boundaries
+        // Register resource mappers for converting between domain models and API contracts
+        // services.AddScoped<ACS.WebApi.Mapping.IResourceMapper, ACS.WebApi.Mapping.ResourceMapper>();
+        // services.AddScoped<ACS.WebApi.Mapping.IServiceRequestMapper, ACS.WebApi.Mapping.ServiceRequestMapper>();
+        // services.AddScoped<ACS.WebApi.Mapping.IAuditResourceMapper, ACS.WebApi.Mapping.AuditResourceMapper>();
         
         return services;
     }

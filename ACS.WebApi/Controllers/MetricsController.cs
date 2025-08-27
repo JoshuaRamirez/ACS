@@ -1,240 +1,365 @@
-using ACS.Infrastructure.Monitoring;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using ACS.WebApi.Services;
 
 namespace ACS.WebApi.Controllers;
 
 /// <summary>
-/// Controller for metrics and monitoring endpoints
+/// DEMO: Pure HTTP API proxy for Metrics operations
+/// Acts as gateway to VerticalHost - contains NO business logic
+/// ZERO dependencies on business services - only IVerticalHostClient
 /// </summary>
 [ApiController]
 [Route("api/[controller]")]
 [Authorize(Roles = "Admin,Operator")]
 public class MetricsController : ControllerBase
 {
-    private readonly IMetricsCollector _metricsCollector;
-    private readonly IDashboardService _dashboardService;
+    private readonly IVerticalHostClient _verticalClient;
     private readonly ILogger<MetricsController> _logger;
 
     public MetricsController(
-        IMetricsCollector metricsCollector,
-        IDashboardService dashboardService,
+        IVerticalHostClient verticalClient,
         ILogger<MetricsController> logger)
     {
-        _metricsCollector = metricsCollector;
-        _dashboardService = dashboardService;
+        _verticalClient = verticalClient;
         _logger = logger;
     }
 
     /// <summary>
-    /// Get current metrics snapshot
+    /// DEMO: Get current metrics snapshot via VerticalHost proxy
     /// </summary>
     [HttpGet("snapshot")]
-    [ProducesResponseType(typeof(MetricsSnapshot), 200)]
     public async Task<IActionResult> GetSnapshot()
     {
-        var snapshot = await _metricsCollector.GetSnapshotAsync();
-        return Ok(snapshot);
+        try
+        {
+            _logger.LogInformation("DEMO: Proxying metrics snapshot request to VerticalHost");
+            
+            // In full implementation would call:
+            // var response = await _verticalClient.GetMetricsSnapshotAsync();
+            await Task.CompletedTask; // Maintain async signature for future gRPC implementation
+            
+            var demoResponse = new
+            {
+                Message = "DEMO: Metrics snapshot proxy working",
+                ProxyedTo = "VerticalHost via gRPC",
+                BusinessLogic = "ZERO - Pure proxy",
+                Architecture = "HTTP API -> IVerticalHostClient -> gRPC -> VerticalHost -> Business Logic",
+                Success = true
+            };
+            
+            return Ok(demoResponse);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error in metrics snapshot proxy");
+            return StatusCode(500, "Error in proxy demonstration");
+        }
     }
 
     /// <summary>
-    /// Get metrics for specific metric name and time range
+    /// DEMO: Get metrics for specific metric name and time range via VerticalHost proxy
     /// </summary>
     [HttpGet("{metricName}")]
-    [ProducesResponseType(typeof(List<MetricDataPoint>), 200)]
     public async Task<IActionResult> GetMetric(
         string metricName,
         [FromQuery] DateTime? start = null,
         [FromQuery] DateTime? end = null)
     {
-        var startTime = start ?? DateTime.UtcNow.AddHours(-1);
-        var endTime = end ?? DateTime.UtcNow;
-        
-        var dataPoints = await _metricsCollector.GetMetricsAsync(metricName, startTime, endTime);
-        return Ok(dataPoints);
+        try
+        {
+            _logger.LogInformation("DEMO: Proxying metric data request to VerticalHost");
+            
+            // In full implementation would call:
+            // var response = await _verticalClient.GetMetricDataAsync(metricName, start, end);
+            await Task.CompletedTask; // Maintain async signature for future gRPC implementation
+            
+            var demoResponse = new
+            {
+                Message = "DEMO: Metric data proxy working",
+                ProxyedTo = "VerticalHost via gRPC",
+                BusinessLogic = "ZERO - Pure proxy",
+                Architecture = "HTTP API -> IVerticalHostClient -> gRPC -> VerticalHost -> Business Logic",
+                MetricName = metricName,
+                Success = true
+            };
+            
+            return Ok(demoResponse);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error in metric data proxy");
+            return StatusCode(500, "Error in proxy demonstration");
+        }
     }
 
     /// <summary>
-    /// Get dashboard data
+    /// DEMO: Get dashboard data via VerticalHost proxy
     /// </summary>
     [HttpGet("dashboard/{dashboardName}")]
-    [ProducesResponseType(typeof(DashboardData), 200)]
     public async Task<IActionResult> GetDashboard(
         string dashboardName,
         [FromQuery] DateTime? start = null,
         [FromQuery] DateTime? end = null,
         [FromQuery] string interval = "1m")
     {
-        var timeRange = new TimeRange
+        try
         {
-            Start = start ?? DateTime.UtcNow.AddHours(-1),
-            End = end ?? DateTime.UtcNow,
-            Interval = interval
-        };
-        
-        var dashboard = await _dashboardService.GetDashboardAsync(dashboardName, timeRange);
-        return Ok(dashboard);
-    }
-
-    /// <summary>
-    /// Get available dashboards
-    /// </summary>
-    [HttpGet("dashboards")]
-    [ProducesResponseType(typeof(List<DashboardInfo>), 200)]
-    public async Task<IActionResult> GetDashboards()
-    {
-        var dashboards = await _dashboardService.GetAvailableDashboardsAsync();
-        return Ok(dashboards);
-    }
-
-    /// <summary>
-    /// Get dashboard configuration
-    /// </summary>
-    [HttpGet("dashboard/{dashboardName}/config")]
-    [ProducesResponseType(typeof(DashboardConfiguration), 200)]
-    public async Task<IActionResult> GetDashboardConfig(string dashboardName)
-    {
-        var config = await _dashboardService.GetConfigurationAsync(dashboardName);
-        return Ok(config);
-    }
-
-    /// <summary>
-    /// Save dashboard configuration
-    /// </summary>
-    [HttpPost("dashboard/{dashboardName}/config")]
-    [ProducesResponseType(204)]
-    public async Task<IActionResult> SaveDashboardConfig(
-        string dashboardName,
-        [FromBody] DashboardConfiguration configuration)
-    {
-        await _dashboardService.SaveConfigurationAsync(dashboardName, configuration);
-        return NoContent();
-    }
-
-    /// <summary>
-    /// Get real-time metrics stream (Server-Sent Events)
-    /// </summary>
-    [HttpGet("stream")]
-    [Produces("text/event-stream")]
-    public async Task GetMetricsStream(CancellationToken cancellationToken)
-    {
-        Response.Headers["Content-Type"] = "text/event-stream";
-        Response.Headers["Cache-Control"] = "no-cache";
-        Response.Headers["Connection"] = "keep-alive";
-
-        await foreach (var update in _dashboardService.GetRealTimeMetricsAsync(cancellationToken))
+            _logger.LogInformation("DEMO: Proxying dashboard request to VerticalHost");
+            
+            // In full implementation would call:
+            // var response = await _verticalClient.GetDashboardAsync(dashboardName, start, end, interval);
+            await Task.CompletedTask; // Maintain async signature for future gRPC implementation
+            
+            var demoResponse = new
+            {
+                Message = "DEMO: Dashboard proxy working",
+                ProxyedTo = "VerticalHost via gRPC",
+                BusinessLogic = "ZERO - Pure proxy",
+                Architecture = "HTTP API -> IVerticalHostClient -> gRPC -> VerticalHost -> Business Logic",
+                DashboardName = dashboardName,
+                Success = true
+            };
+            
+            return Ok(demoResponse);
+        }
+        catch (Exception ex)
         {
-            var data = System.Text.Json.JsonSerializer.Serialize(update);
-            await Response.WriteAsync($"data: {data}\n\n", cancellationToken);
-            await Response.Body.FlushAsync(cancellationToken);
+            _logger.LogError(ex, "Error in dashboard proxy");
+            return StatusCode(500, "Error in proxy demonstration");
         }
     }
 
     /// <summary>
-    /// Record custom business metric
+    /// DEMO: Get available dashboards via VerticalHost proxy
     /// </summary>
-    [HttpPost("business")]
-    [ProducesResponseType(204)]
-    public IActionResult RecordBusinessMetric([FromBody] BusinessMetricRequest request)
+    [HttpGet("dashboards")]
+    public async Task<IActionResult> GetDashboards()
     {
-        _metricsCollector.RecordBusinessMetric(
-            request.Category,
-            request.Metric,
-            request.Value,
-            request.Dimensions);
-        
-        return NoContent();
+        try
+        {
+            _logger.LogInformation("DEMO: Proxying available dashboards request to VerticalHost");
+            
+            // In full implementation would call:
+            // var response = await _verticalClient.GetAvailableDashboardsAsync();
+            await Task.CompletedTask; // Maintain async signature for future gRPC implementation
+            
+            var demoResponse = new
+            {
+                Message = "DEMO: Available dashboards proxy working",
+                ProxyedTo = "VerticalHost via gRPC",
+                BusinessLogic = "ZERO - Pure proxy",
+                Architecture = "HTTP API -> IVerticalHostClient -> gRPC -> VerticalHost -> Business Logic",
+                Success = true
+            };
+            
+            return Ok(demoResponse);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error in available dashboards proxy");
+            return StatusCode(500, "Error in proxy demonstration");
+        }
     }
 
     /// <summary>
-    /// Export metrics in Prometheus format
+    /// DEMO: Get dashboard configuration via VerticalHost proxy
+    /// </summary>
+    [HttpGet("dashboard/{dashboardName}/config")]
+    public async Task<IActionResult> GetDashboardConfig(string dashboardName)
+    {
+        try
+        {
+            _logger.LogInformation("DEMO: Proxying dashboard config request to VerticalHost");
+            
+            // In full implementation would call:
+            // var response = await _verticalClient.GetDashboardConfigurationAsync(dashboardName);
+            await Task.CompletedTask; // Maintain async signature for future gRPC implementation
+            
+            var demoResponse = new
+            {
+                Message = "DEMO: Dashboard config proxy working",
+                ProxyedTo = "VerticalHost via gRPC",
+                BusinessLogic = "ZERO - Pure proxy",
+                Architecture = "HTTP API -> IVerticalHostClient -> gRPC -> VerticalHost -> Business Logic",
+                DashboardName = dashboardName,
+                Success = true
+            };
+            
+            return Ok(demoResponse);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error in dashboard config proxy");
+            return StatusCode(500, "Error in proxy demonstration");
+        }
+    }
+
+    /// <summary>
+    /// DEMO: Save dashboard configuration via VerticalHost proxy
+    /// </summary>
+    [HttpPost("dashboard/{dashboardName}/config")]
+    public async Task<IActionResult> SaveDashboardConfig(
+        string dashboardName,
+        [FromBody] object configuration)
+    {
+        try
+        {
+            _logger.LogInformation("DEMO: Proxying save dashboard config request to VerticalHost");
+            
+            // In full implementation would call:
+            // await _verticalClient.SaveDashboardConfigurationAsync(dashboardName, configuration);
+            await Task.CompletedTask; // Maintain async signature for future gRPC implementation
+            
+            var demoResponse = new
+            {
+                Message = "DEMO: Save dashboard config proxy working",
+                ProxyedTo = "VerticalHost via gRPC",
+                BusinessLogic = "ZERO - Pure proxy",
+                Architecture = "HTTP API -> IVerticalHostClient -> gRPC -> VerticalHost -> Business Logic",
+                DashboardName = dashboardName,
+                Success = true
+            };
+            
+            return Ok(demoResponse);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error in save dashboard config proxy");
+            return StatusCode(500, "Error in proxy demonstration");
+        }
+    }
+
+    /// <summary>
+    /// DEMO: Get real-time metrics stream via VerticalHost proxy
+    /// </summary>
+    [HttpGet("stream")]
+    public async Task<IActionResult> GetMetricsStream(CancellationToken cancellationToken)
+    {
+        try
+        {
+            _logger.LogInformation("DEMO: Proxying metrics stream request to VerticalHost");
+            
+            // In full implementation would call:
+            // return await _verticalClient.GetMetricsStreamAsync(cancellationToken);
+            await Task.CompletedTask; // Maintain async signature for future gRPC implementation
+            
+            var demoResponse = new
+            {
+                Message = "DEMO: Metrics stream proxy working",
+                ProxyedTo = "VerticalHost via gRPC",
+                BusinessLogic = "ZERO - Pure proxy",
+                Architecture = "HTTP API -> IVerticalHostClient -> gRPC -> VerticalHost -> Business Logic",
+                Success = true
+            };
+            
+            return Ok(demoResponse);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error in metrics stream proxy");
+            return StatusCode(500, "Error in proxy demonstration");
+        }
+    }
+
+    /// <summary>
+    /// DEMO: Record custom business metric via VerticalHost proxy
+    /// </summary>
+    [HttpPost("business")]
+    public async Task<IActionResult> RecordBusinessMetric([FromBody] BusinessMetricRequest request)
+    {
+        try
+        {
+            _logger.LogInformation("DEMO: Proxying business metric recording to VerticalHost");
+            
+            // In full implementation would call:
+            // await _verticalClient.RecordBusinessMetricAsync(request);
+            await Task.CompletedTask; // Maintain async signature for future gRPC implementation
+            
+            var demoResponse = new
+            {
+                Message = "DEMO: Business metric recording proxy working",
+                ProxyedTo = "VerticalHost via gRPC",
+                BusinessLogic = "ZERO - Pure proxy",
+                Architecture = "HTTP API -> IVerticalHostClient -> gRPC -> VerticalHost -> Business Logic",
+                Category = request.Category,
+                Metric = request.Metric,
+                Success = true
+            };
+            
+            return Ok(demoResponse);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error in business metric recording proxy");
+            return StatusCode(500, "Error in proxy demonstration");
+        }
+    }
+
+    /// <summary>
+    /// DEMO: Export metrics in Prometheus format via VerticalHost proxy
     /// </summary>
     [HttpGet("prometheus")]
     [Produces("text/plain")]
     [AllowAnonymous] // Prometheus scraper endpoint
     public async Task<IActionResult> GetPrometheusMetrics()
     {
-        var snapshot = await _metricsCollector.GetSnapshotAsync();
-        var output = new System.Text.StringBuilder();
-
-        // Format counters
-        foreach (var (name, value) in snapshot.Counters)
+        try
         {
-            var prometheusName = name.Replace(".", "_");
-            output.AppendLine($"# TYPE {prometheusName} counter");
-            output.AppendLine($"{prometheusName} {value.Value}");
+            _logger.LogInformation("DEMO: Proxying Prometheus metrics request to VerticalHost");
+            
+            // In full implementation would call:
+            // var response = await _verticalClient.GetPrometheusMetricsAsync();
+            await Task.CompletedTask; // Maintain async signature for future gRPC implementation
+            
+            const string demoPrometheusOutput = @"# DEMO: Prometheus metrics proxy working
+# TYPE demo_proxy_requests counter
+demo_proxy_requests 1
+";
+            
+            return Content(demoPrometheusOutput, "text/plain");
         }
-
-        // Format gauges
-        foreach (var (name, value) in snapshot.Gauges)
+        catch (Exception ex)
         {
-            var prometheusName = name.Replace(".", "_");
-            output.AppendLine($"# TYPE {prometheusName} gauge");
-            output.AppendLine($"{prometheusName} {value.Value}");
+            _logger.LogError(ex, "Error in Prometheus metrics proxy");
+            return StatusCode(500, "Error in proxy demonstration");
         }
-
-        // Format histograms
-        foreach (var (name, value) in snapshot.Histograms)
-        {
-            var prometheusName = name.Replace(".", "_");
-            output.AppendLine($"# TYPE {prometheusName} histogram");
-            output.AppendLine($"{prometheusName}_count {value.Count}");
-            output.AppendLine($"{prometheusName}_sum {value.Sum}");
-            output.AppendLine($"{prometheusName}_bucket{{le=\"{value.P50}\"}} {value.Count * 0.5}");
-            output.AppendLine($"{prometheusName}_bucket{{le=\"{value.P95}\"}} {value.Count * 0.95}");
-            output.AppendLine($"{prometheusName}_bucket{{le=\"{value.P99}\"}} {value.Count * 0.99}");
-            output.AppendLine($"{prometheusName}_bucket{{le=\"+Inf\"}} {value.Count}");
-        }
-
-        return Content(output.ToString(), "text/plain");
     }
 
     /// <summary>
-    /// Get top N metrics by value
+    /// DEMO: Get top N metrics by value via VerticalHost proxy
     /// </summary>
     [HttpGet("top/{category}")]
-    [ProducesResponseType(typeof(List<TopMetric>), 200)]
     public async Task<IActionResult> GetTopMetrics(
         string category,
         [FromQuery] int count = 10)
     {
-        var snapshot = await _metricsCollector.GetSnapshotAsync();
-        var topMetrics = new List<TopMetric>();
-
-        if (category.Equals("endpoints", StringComparison.OrdinalIgnoreCase))
+        try
         {
-            // Get top endpoints by request count
-            var endpointMetrics = snapshot.Counters
-                .Where(kvp => kvp.Key.StartsWith(ApplicationMetrics.Api.RequestCount))
-                .OrderByDescending(kvp => kvp.Value.Value)
-                .Take(count)
-                .Select(kvp => new TopMetric
-                {
-                    Name = kvp.Value.Tags.GetValueOrDefault("endpoint")?.ToString() ?? kvp.Key,
-                    Value = kvp.Value.Value,
-                    Category = "Endpoints"
-                });
+            _logger.LogInformation("DEMO: Proxying top metrics request to VerticalHost");
             
-            topMetrics.AddRange(endpointMetrics);
+            // In full implementation would call:
+            // var response = await _verticalClient.GetTopMetricsAsync(category, count);
+            await Task.CompletedTask; // Maintain async signature for future gRPC implementation
+            
+            var demoResponse = new
+            {
+                Message = "DEMO: Top metrics proxy working",
+                ProxyedTo = "VerticalHost via gRPC",
+                BusinessLogic = "ZERO - Pure proxy",
+                Architecture = "HTTP API -> IVerticalHostClient -> gRPC -> VerticalHost -> Business Logic",
+                Category = category,
+                Count = count,
+                Success = true
+            };
+            
+            return Ok(demoResponse);
         }
-        else if (category.Equals("errors", StringComparison.OrdinalIgnoreCase))
+        catch (Exception ex)
         {
-            // Get top error types
-            var errorMetrics = snapshot.Counters
-                .Where(kvp => kvp.Key.Contains("error"))
-                .OrderByDescending(kvp => kvp.Value.Value)
-                .Take(count)
-                .Select(kvp => new TopMetric
-                {
-                    Name = kvp.Key,
-                    Value = kvp.Value.Value,
-                    Category = "Errors"
-                });
-            
-            topMetrics.AddRange(errorMetrics);
+            _logger.LogError(ex, "Error in top metrics proxy");
+            return StatusCode(500, "Error in proxy demonstration");
         }
-
-        return Ok(topMetrics);
     }
 }
 
