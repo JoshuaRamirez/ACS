@@ -11,6 +11,7 @@ using ACS.Service.Services;
 using ACS.VerticalHost.Services;
 using ACS.VerticalHost.Handlers;
 using ACS.VerticalHost.Commands;
+using ACS.VerticalHost.Extensions;
 using CommandIndexAnalysisReport = ACS.VerticalHost.Commands.IndexAnalysisReport;
 using CommandMissingIndexRecommendation = ACS.VerticalHost.Commands.MissingIndexRecommendation;
 using CommandMetricsSnapshot = ACS.VerticalHost.Commands.MetricsSnapshot;
@@ -88,6 +89,9 @@ public class Program
         // Configure ALL business services (this is where they belong)
         builder.Services.ConfigureServices(builder.Configuration, logger, "VerticalHost");
         
+        // Add service layer dependencies (includes InMemoryEntityGraph, IAuthenticationService, etc.)
+        builder.Services.AddAcsServiceLayer(builder.Configuration);
+        
         // ================================
         // COMMAND BUFFER SYSTEM
         // ================================
@@ -95,8 +99,8 @@ public class Program
         // Register the command buffer as singleton (per tenant process)
         builder.Services.AddSingleton<ICommandBuffer, CommandBuffer>();
         
-        // Register command/query handlers
-        builder.Services.AddCommandQueryHandlers();
+        // Register command/query handlers using auto-registration
+        builder.Services.AddHandlersAutoRegistration();
         
         // Add VerticalHost-specific services
         builder.Services.AddHostedService<TenantAccessControlHostedService>();
@@ -196,76 +200,10 @@ public static class CommandQueryHandlerRegistration
 {
     public static IServiceCollection AddCommandQueryHandlers(this IServiceCollection services)
     {
-        // Register user command handlers (non-generic ICommand)
-        services.AddTransient<ACS.VerticalHost.Services.ICommandHandler<ACS.VerticalHost.Commands.CreateUserCommand>, CreateUserCommandHandler>();
-        services.AddTransient<ACS.VerticalHost.Services.ICommandHandler<ACS.VerticalHost.Commands.UpdateUserCommand>, UpdateUserCommandHandler>();
-        services.AddTransient<ACS.VerticalHost.Services.ICommandHandler<ACS.VerticalHost.Commands.DeleteUserCommand>, DeleteUserCommandHandler>();
-        services.AddTransient<ACS.VerticalHost.Services.ICommandHandler<ACS.VerticalHost.Commands.AddUserToGroupCommand>, AddUserToGroupCommandHandler>();
-        services.AddTransient<ACS.VerticalHost.Services.ICommandHandler<ACS.VerticalHost.Commands.RemoveUserFromGroupCommand>, RemoveUserFromGroupCommandHandler>();
-        
-        // Register authentication command handlers (generic ICommand<T>)
-        services.AddTransient<ACS.VerticalHost.Services.ICommandHandler<LoginCommand, AuthResult>, LoginCommandHandler>();
-        services.AddTransient<ACS.VerticalHost.Services.ICommandHandler<RefreshTokenCommand, AuthResult>, RefreshTokenCommandHandler>();
-        services.AddTransient<ACS.VerticalHost.Services.ICommandHandler<ChangePasswordCommand, bool>, ChangePasswordCommandHandler>();
-        
-        // Register system command handlers (generic ICommand<T>)
-        services.AddTransient<ACS.VerticalHost.Services.ICommandHandler<ValidateMigrationsCommand, Commands.MigrationValidationResult>, ValidateMigrationsCommandHandler>();
-        
-        // Register query handlers
-        services.AddTransient<ACS.VerticalHost.Services.IQueryHandler<GetUserQuery, User>, GetUserQueryHandler>();
-        services.AddTransient<ACS.VerticalHost.Services.IQueryHandler<GetUsersQuery, List<User>>, GetUsersQueryHandler>();
-        services.AddTransient<ACS.VerticalHost.Services.IQueryHandler<GetUserGroupsQuery, List<Group>>, GetUserGroupsQueryHandler>();
-        
-        // Register system query handlers
-        services.AddTransient<ACS.VerticalHost.Services.IQueryHandler<GetSystemOverviewQuery, SystemOverview>, GetSystemOverviewQueryHandler>();
-        services.AddTransient<ACS.VerticalHost.Services.IQueryHandler<GetHealthStatusQuery, Commands.HealthStatus>, GetHealthStatusQueryHandler>();
-        services.AddTransient<ACS.VerticalHost.Services.IQueryHandler<GetMigrationHistoryQuery, List<Commands.MigrationInfo>>, GetMigrationHistoryQueryHandler>();
-        services.AddTransient<ACS.VerticalHost.Services.IQueryHandler<GetSystemInfoQuery, SystemDiagnosticInfo>, GetSystemInfoQueryHandler>();
-        
-        // Register database backup command handlers
-        services.AddTransient<ACS.VerticalHost.Services.ICommandHandler<CreateBackupCommand, ACS.VerticalHost.Commands.BackupResult>, CreateBackupCommandHandler>();
-        services.AddTransient<ACS.VerticalHost.Services.ICommandHandler<RestoreBackupCommand, ACS.VerticalHost.Commands.RestoreResult>, RestoreBackupCommandHandler>();
-        services.AddTransient<ACS.VerticalHost.Services.ICommandHandler<VerifyBackupCommand, bool>, VerifyBackupCommandHandler>();
-        services.AddTransient<ACS.VerticalHost.Services.ICommandHandler<CleanupOldBackupsCommand, ACS.VerticalHost.Commands.CleanupResult>, CleanupOldBackupsCommandHandler>();
-        
-        // Register database backup query handlers
-        services.AddTransient<ACS.VerticalHost.Services.IQueryHandler<GetBackupHistoryQuery, List<ACS.VerticalHost.Commands.BackupHistoryInfo>>, GetBackupHistoryQueryHandler>();
-        services.AddTransient<ACS.VerticalHost.Services.IQueryHandler<GetBackupConfigurationQuery, ACS.VerticalHost.Commands.BackupConfiguration>, GetBackupConfigurationQueryHandler>();
-        
-        // Register index maintenance command handlers
-        services.AddTransient<ACS.VerticalHost.Services.ICommandHandler<RebuildIndexCommand, bool>, RebuildIndexCommandHandler>();
-        services.AddTransient<ACS.VerticalHost.Services.ICommandHandler<ReorganizeIndexCommand, bool>, ReorganizeIndexCommandHandler>();
-        
-        // Register index maintenance query handlers
-        services.AddTransient<ACS.VerticalHost.Services.IQueryHandler<AnalyzeIndexesQuery, CommandIndexAnalysisReport>, AnalyzeIndexesQueryHandler>();
-        services.AddTransient<ACS.VerticalHost.Services.IQueryHandler<GetMissingIndexRecommendationsQuery, List<CommandMissingIndexRecommendation>>, GetMissingIndexRecommendationsQueryHandler>();
-        services.AddTransient<ACS.VerticalHost.Services.IQueryHandler<GetUnusedIndexesQuery, List<UnusedIndexInfo>>, GetUnusedIndexesQueryHandler>();
-        services.AddTransient<ACS.VerticalHost.Services.IQueryHandler<GetFragmentedIndexesQuery, List<FragmentedIndexInfo>>, GetFragmentedIndexesQueryHandler>();
-        
-        // Register metrics command handlers
-        services.AddTransient<ACS.VerticalHost.Services.ICommandHandler<RecordBusinessMetricCommand>, RecordBusinessMetricCommandHandler>();
-        services.AddTransient<ACS.VerticalHost.Services.ICommandHandler<SaveDashboardConfigurationCommand>, SaveDashboardConfigurationCommandHandler>();
-        
-        // Register metrics query handlers
-        services.AddTransient<ACS.VerticalHost.Services.IQueryHandler<GetMetricsSnapshotQuery, CommandMetricsSnapshot>, GetMetricsSnapshotQueryHandler>();
-        services.AddTransient<ACS.VerticalHost.Services.IQueryHandler<GetMetricDataQuery, List<CommandMetricDataPoint>>, GetMetricDataQueryHandler>();
-        services.AddTransient<ACS.VerticalHost.Services.IQueryHandler<GetDashboardQuery, CommandDashboardData>, GetDashboardQueryHandler>();
-        services.AddTransient<ACS.VerticalHost.Services.IQueryHandler<GetAvailableDashboardsQuery, List<CommandDashboardInfo>>, GetAvailableDashboardsQueryHandler>();
-        services.AddTransient<ACS.VerticalHost.Services.IQueryHandler<GetDashboardConfigurationQuery, CommandDashboardConfiguration>, GetDashboardConfigurationQueryHandler>();
-        services.AddTransient<ACS.VerticalHost.Services.IQueryHandler<GetTopMetricsQuery, List<TopMetric>>, GetTopMetricsQueryHandler>();
-        
-        // Register rate limiting command handlers
-        services.AddTransient<ACS.VerticalHost.Services.ICommandHandler<ResetRateLimitCommand>, ResetRateLimitCommandHandler>();
-        services.AddTransient<ACS.VerticalHost.Services.ICommandHandler<TestRateLimitCommand, RateLimitTestResult>, TestRateLimitCommandHandler>();
-        
-        // Register rate limiting query handlers
-        services.AddTransient<ACS.VerticalHost.Services.IQueryHandler<GetRateLimitStatusQuery, CommandRateLimitStatus>, GetRateLimitStatusQueryHandler>();
-        services.AddTransient<ACS.VerticalHost.Services.IQueryHandler<GetActiveLimitsQuery, List<ActiveRateLimit>>, GetActiveLimitsQueryHandler>();
-        services.AddTransient<ACS.VerticalHost.Services.IQueryHandler<GetRateLimitMetricsQuery, RateLimitMetrics>, GetRateLimitMetricsQueryHandler>();
-        services.AddTransient<ACS.VerticalHost.Services.IQueryHandler<GetAggregatedRateLimitMetricsQuery, CommandAggregatedRateLimitMetrics>, GetAggregatedRateLimitMetricsQueryHandler>();
-        services.AddTransient<ACS.VerticalHost.Services.IQueryHandler<GetRateLimitHealthStatusQuery, RateLimitHealthStatus>, GetRateLimitHealthStatusQueryHandler>();
-        
-        return services;
+        // 🎯 CONVENTION-BASED AUTO-REGISTRATION
+        // Automatically discovers and registers all handlers in ACS.VerticalHost.Handlers namespace
+        // Replaces 70+ lines of manual registration with reflection-based discovery
+        return services.AddHandlersAutoRegistration();
     }
 }
 

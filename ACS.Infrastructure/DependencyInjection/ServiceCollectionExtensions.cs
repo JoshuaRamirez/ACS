@@ -215,6 +215,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IResourceService, ResourceService>();
         services.AddScoped<IPermissionEvaluationService, PermissionEvaluationService>();
         services.AddScoped<IAuditService, AuditService>();
+        services.AddScoped<ISystemMetricsService, SystemMetricsService>();
         
         // Command processing
         services.AddScoped<ICommandProcessingService, CommandProcessingService>();

@@ -2,12 +2,14 @@ using ACS.VerticalHost.Services;
 using ACS.VerticalHost.Commands;
 using ACS.Service.Domain;
 using ACS.Service.Services;
+using static ACS.VerticalHost.Services.HandlerErrorHandling;
+using static ACS.VerticalHost.Services.HandlerExtensions;
 // Use fully qualified names to avoid conflicts
 
 namespace ACS.VerticalHost.Handlers;
 
 // Command Handlers
-public class CreateUserCommandHandler : ICommandHandler<ACS.VerticalHost.Commands.CreateUserCommand>
+public class CreateUserCommandHandler : ICommandHandler<ACS.VerticalHost.Commands.CreateUserCommand, ACS.Service.Domain.User>
 {
     private readonly IUserService _userService;
     private readonly ILogger<CreateUserCommandHandler> _logger;
@@ -18,9 +20,12 @@ public class CreateUserCommandHandler : ICommandHandler<ACS.VerticalHost.Command
         _logger = logger;
     }
 
-    public async Task<object?> HandleAsync(ACS.VerticalHost.Commands.CreateUserCommand command, CancellationToken cancellationToken)
+    public async Task<ACS.Service.Domain.User> HandleAsync(ACS.VerticalHost.Commands.CreateUserCommand command, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("Creating user: {Name}, {Email}", command.Name, command.Email);
+        var correlationId = GetCorrelationId();
+        var context = GetContext(nameof(CreateUserCommandHandler), nameof(HandleAsync));
+        
+        LogOperationStart(_logger, context, new { Name = command.Name, Email = command.Email }, correlationId);
         
         try
         {
@@ -35,18 +40,18 @@ public class CreateUserCommandHandler : ICommandHandler<ACS.VerticalHost.Command
             var user = response.User;
 
             if (user == null) throw new InvalidOperationException("User creation failed - null user returned");
-            _logger.LogInformation("User created successfully: {UserId}", user.Id);
+            
+            LogCommandSuccess(_logger, context, new { UserId = user.Id, Name = user.Name }, correlationId);
             return user;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to create user {Name}, {Email}", command.Name, command.Email);
-            throw;
+            return HandleCommandError<ACS.Service.Domain.User>(_logger, ex, context, correlationId);
         }
     }
 }
 
-public class UpdateUserCommandHandler : ICommandHandler<ACS.VerticalHost.Commands.UpdateUserCommand>
+public class UpdateUserCommandHandler : ICommandHandler<ACS.VerticalHost.Commands.UpdateUserCommand, ACS.Service.Domain.User>
 {
     private readonly IUserService _userService;
     private readonly ILogger<UpdateUserCommandHandler> _logger;
@@ -57,9 +62,12 @@ public class UpdateUserCommandHandler : ICommandHandler<ACS.VerticalHost.Command
         _logger = logger;
     }
 
-    public async Task<object?> HandleAsync(ACS.VerticalHost.Commands.UpdateUserCommand command, CancellationToken cancellationToken)
+    public async Task<ACS.Service.Domain.User> HandleAsync(ACS.VerticalHost.Commands.UpdateUserCommand command, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("Updating user: {UserId}", command.UserId);
+        var correlationId = GetCorrelationId();
+        var context = GetContext(nameof(UpdateUserCommandHandler), nameof(HandleAsync));
+        
+        LogOperationStart(_logger, context, new { UserId = command.UserId, Name = command.Name }, correlationId);
         
         try
         {
@@ -80,18 +88,21 @@ public class UpdateUserCommandHandler : ICommandHandler<ACS.VerticalHost.Command
             
             var getUserResponse = await _userService.GetByIdAsync(getRequest);
             var updatedUser = getUserResponse.User;
-            _logger.LogInformation("User {UserId} updated successfully", command.UserId);
+            
+            if (updatedUser == null) 
+                throw new InvalidOperationException($"Updated user {command.UserId} not found");
+            
+            LogCommandSuccess(_logger, context, new { UserId = command.UserId, Name = updatedUser.Name }, correlationId);
             return updatedUser;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to update user {UserId}", command.UserId);
-            throw;
+            return HandleCommandError<ACS.Service.Domain.User>(_logger, ex, context, correlationId);
         }
     }
 }
 
-public class DeleteUserCommandHandler : ICommandHandler<ACS.VerticalHost.Commands.DeleteUserCommand>
+public class DeleteUserCommandHandler : ICommandHandler<ACS.VerticalHost.Commands.DeleteUserCommand, DeleteUserResult>
 {
     private readonly IUserService _userService;
     private readonly ILogger<DeleteUserCommandHandler> _logger;
@@ -102,9 +113,12 @@ public class DeleteUserCommandHandler : ICommandHandler<ACS.VerticalHost.Command
         _logger = logger;
     }
 
-    public async Task<object?> HandleAsync(ACS.VerticalHost.Commands.DeleteUserCommand command, CancellationToken cancellationToken)
+    public async Task<DeleteUserResult> HandleAsync(ACS.VerticalHost.Commands.DeleteUserCommand command, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("Deleting user: {UserId}, ForceDelete: {ForceDelete}", command.UserId, command.ForceDelete);
+        var correlationId = GetCorrelationId();
+        var context = GetContext(nameof(DeleteUserCommandHandler), nameof(HandleAsync));
+        
+        LogOperationStart(_logger, context, new { UserId = command.UserId, ForceDelete = command.ForceDelete }, correlationId);
         
         try
         {
@@ -117,18 +131,25 @@ public class DeleteUserCommandHandler : ICommandHandler<ACS.VerticalHost.Command
             
             await _userService.DeleteAsync(request);
             
-            _logger.LogInformation("User {UserId} deleted successfully", command.UserId);
-            return new { Success = true, UserId = command.UserId, DeletedAt = DateTime.UtcNow };
+            var result = new DeleteUserResult
+            {
+                Success = true,
+                UserId = command.UserId,
+                DeletedAt = DateTime.UtcNow,
+                Message = "User deleted successfully"
+            };
+            
+            LogCommandSuccess(_logger, context, new { UserId = command.UserId }, correlationId);
+            return result;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to delete user {UserId}", command.UserId);
-            throw;
+            return HandleCommandError<DeleteUserResult>(_logger, ex, context, correlationId);
         }
     }
 }
 
-public class AddUserToGroupCommandHandler : ICommandHandler<ACS.VerticalHost.Commands.AddUserToGroupCommand>
+public class AddUserToGroupCommandHandler : ICommandHandler<ACS.VerticalHost.Commands.AddUserToGroupCommand, UserGroupOperationResult>
 {
     private readonly IGroupService _groupService;
     private readonly ILogger<AddUserToGroupCommandHandler> _logger;
@@ -139,27 +160,39 @@ public class AddUserToGroupCommandHandler : ICommandHandler<ACS.VerticalHost.Com
         _logger = logger;
     }
 
-    public async Task<object?> HandleAsync(ACS.VerticalHost.Commands.AddUserToGroupCommand command, CancellationToken cancellationToken)
+    public async Task<UserGroupOperationResult> HandleAsync(ACS.VerticalHost.Commands.AddUserToGroupCommand command, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("Adding user {UserId} to group {GroupId}", command.UserId, command.GroupId);
+        var correlationId = GetCorrelationId();
+        var context = GetContext(nameof(AddUserToGroupCommandHandler), nameof(HandleAsync));
+        
+        LogOperationStart(_logger, context, new { UserId = command.UserId, GroupId = command.GroupId }, correlationId);
         
         try
         {
             // Call real group service
             await _groupService.AddUserToGroupAsync(command.UserId, command.GroupId, command.AddedBy ?? "system");
             
-            _logger.LogInformation("User {UserId} added to group {GroupId} successfully", command.UserId, command.GroupId);
-            return new { Success = true, UserId = command.UserId, GroupId = command.GroupId, AddedAt = DateTime.UtcNow };
+            var result = new UserGroupOperationResult
+            {
+                Success = true,
+                UserId = command.UserId,
+                GroupId = command.GroupId,
+                OperationAt = DateTime.UtcNow,
+                Operation = "Added",
+                Message = "User added to group successfully"
+            };
+            
+            LogCommandSuccess(_logger, context, new { UserId = command.UserId, GroupId = command.GroupId }, correlationId);
+            return result;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to add user {UserId} to group {GroupId}", command.UserId, command.GroupId);
-            throw;
+            return HandleCommandError<UserGroupOperationResult>(_logger, ex, context, correlationId);
         }
     }
 }
 
-public class RemoveUserFromGroupCommandHandler : ICommandHandler<ACS.VerticalHost.Commands.RemoveUserFromGroupCommand>
+public class RemoveUserFromGroupCommandHandler : ICommandHandler<ACS.VerticalHost.Commands.RemoveUserFromGroupCommand, UserGroupOperationResult>
 {
     private readonly IGroupService _groupService;
     private readonly ILogger<RemoveUserFromGroupCommandHandler> _logger;
@@ -170,22 +203,34 @@ public class RemoveUserFromGroupCommandHandler : ICommandHandler<ACS.VerticalHos
         _logger = logger;
     }
 
-    public async Task<object?> HandleAsync(ACS.VerticalHost.Commands.RemoveUserFromGroupCommand command, CancellationToken cancellationToken)
+    public async Task<UserGroupOperationResult> HandleAsync(ACS.VerticalHost.Commands.RemoveUserFromGroupCommand command, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("Removing user {UserId} from group {GroupId}", command.UserId, command.GroupId);
+        var correlationId = GetCorrelationId();
+        var context = GetContext(nameof(RemoveUserFromGroupCommandHandler), nameof(HandleAsync));
+        
+        LogOperationStart(_logger, context, new { UserId = command.UserId, GroupId = command.GroupId }, correlationId);
         
         try
         {
             // Call real group service
             await _groupService.RemoveUserFromGroupAsync(command.UserId, command.GroupId, command.RemovedBy ?? "system");
             
-            _logger.LogInformation("User {UserId} removed from group {GroupId} successfully", command.UserId, command.GroupId);
-            return new { Success = true, UserId = command.UserId, GroupId = command.GroupId, RemovedAt = DateTime.UtcNow };
+            var result = new UserGroupOperationResult
+            {
+                Success = true,
+                UserId = command.UserId,
+                GroupId = command.GroupId,
+                OperationAt = DateTime.UtcNow,
+                Operation = "Removed",
+                Message = "User removed from group successfully"
+            };
+            
+            LogCommandSuccess(_logger, context, new { UserId = command.UserId, GroupId = command.GroupId }, correlationId);
+            return result;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to remove user {UserId} from group {GroupId}", command.UserId, command.GroupId);
-            throw;
+            return HandleCommandError<UserGroupOperationResult>(_logger, ex, context, correlationId);
         }
     }
 }
@@ -204,7 +249,10 @@ public class GetUserQueryHandler : IQueryHandler<GetUserQuery, User>
 
     public async Task<User> HandleAsync(GetUserQuery query, CancellationToken cancellationToken)
     {
-        _logger.LogDebug("Getting user: {UserId}", query.UserId);
+        var correlationId = GetCorrelationId();
+        var context = GetContext(nameof(GetUserQueryHandler), nameof(HandleAsync));
+        
+        LogOperationStart(_logger, context, new { UserId = query.UserId }, correlationId);
         
         try
         {
@@ -218,17 +266,16 @@ public class GetUserQueryHandler : IQueryHandler<GetUserQuery, User>
             
             if (user == null)
             {
-                _logger.LogWarning("User {UserId} not found", query.UserId);
+                _logger.LogWarning("User {UserId} not found. CorrelationId: {CorrelationId}", query.UserId, correlationId);
                 throw new InvalidOperationException($"User with ID {query.UserId} not found");
             }
             
-            _logger.LogDebug("User {UserId} retrieved successfully", query.UserId);
+            LogQuerySuccess(_logger, context, new { UserId = query.UserId, Name = user.Name }, correlationId);
             return user;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to retrieve user {UserId}", query.UserId);
-            throw;
+            return HandleQueryError<User>(_logger, ex, context, correlationId);
         }
     }
 }
@@ -246,8 +293,11 @@ public class GetUsersQueryHandler : IQueryHandler<GetUsersQuery, List<User>>
 
     public async Task<List<User>> HandleAsync(GetUsersQuery query, CancellationToken cancellationToken)
     {
-        _logger.LogDebug("Getting users: Page={Page}, PageSize={PageSize}, Search={Search}", 
-            query.Page, query.PageSize, query.Search);
+        var correlationId = GetCorrelationId();
+        var context = GetContext(nameof(GetUsersQueryHandler), nameof(HandleAsync));
+        
+        LogOperationStart(_logger, context, 
+            new { Page = query.Page, PageSize = query.PageSize, Search = query.Search }, correlationId);
         
         try
         {
@@ -261,13 +311,14 @@ public class GetUsersQueryHandler : IQueryHandler<GetUsersQuery, List<User>>
             var response = await _userService.GetAllAsync(request);
             var users = response.Users;
             
-            _logger.LogDebug("Retrieved {Count} users for page {Page}", users.Count(), query.Page);
-            return users.ToList();
+            var result = users.ToList();
+            LogQuerySuccess(_logger, context, 
+                new { Page = query.Page, Count = result.Count }, correlationId);
+            return result;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to retrieve users");
-            throw;
+            return HandleQueryError<List<User>>(_logger, ex, context, correlationId);
         }
     }
 }
@@ -275,43 +326,34 @@ public class GetUsersQueryHandler : IQueryHandler<GetUsersQuery, List<User>>
 public class GetUserGroupsQueryHandler : IQueryHandler<GetUserGroupsQuery, List<Group>>
 {
     private readonly IGroupService _groupService;
-    private readonly ACS.Service.Infrastructure.InMemoryEntityGraph _entityGraph;
     private readonly ILogger<GetUserGroupsQueryHandler> _logger;
 
-    public GetUserGroupsQueryHandler(IGroupService groupService, ACS.Service.Infrastructure.InMemoryEntityGraph entityGraph, ILogger<GetUserGroupsQueryHandler> logger)
+    public GetUserGroupsQueryHandler(IGroupService groupService, ILogger<GetUserGroupsQueryHandler> logger)
     {
         _groupService = groupService;
-        _entityGraph = entityGraph;
         _logger = logger;
     }
 
     public async Task<List<Group>> HandleAsync(GetUserGroupsQuery query, CancellationToken cancellationToken)
     {
-        _logger.LogDebug("Getting groups for user: {UserId}", query.UserId);
+        var correlationId = GetCorrelationId();
+        var context = GetContext(nameof(GetUserGroupsQueryHandler), nameof(HandleAsync));
+        
+        LogOperationStart(_logger, context, new { UserId = query.UserId }, correlationId);
         
         try
         {
-            // Get group IDs for the user from the in-memory entity graph
-            var groupIds = _entityGraph.GetUserGroups(query.UserId);
+            // Use proper service layer abstraction - single abstraction level
+            var groups = await _groupService.GetGroupsByUserAsync(query.UserId);
             
-            // Retrieve the full group objects
-            var groups = new List<ACS.Service.Domain.Group>();
-            foreach (var groupId in groupIds)
-            {
-                var group = await _groupService.GetGroupByIdAsync(groupId);
-                if (group != null)
-                {
-                    groups.Add(group);
-                }
-            }
-            
-            _logger.LogDebug("Retrieved {Count} groups for user {UserId}", groups.Count, query.UserId);
-            return groups;
+            var result = groups.ToList();
+            LogQuerySuccess(_logger, context, 
+                new { UserId = query.UserId, Count = result.Count }, correlationId);
+            return result;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to retrieve groups for user {UserId}", query.UserId);
-            throw;
+            return HandleQueryError<List<Group>>(_logger, ex, context, correlationId);
         }
     }
 }

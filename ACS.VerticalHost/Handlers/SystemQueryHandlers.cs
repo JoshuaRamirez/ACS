@@ -1,10 +1,13 @@
 using ACS.VerticalHost.Services;
 using ACS.VerticalHost.Commands;
-using ACS.Service.Data;
+using MigrationValidationResult = ACS.VerticalHost.Commands.MigrationValidationResult;
+using ACS.Service.Services;
+using ACS.Service.Requests;
 using ACS.Infrastructure.Diagnostics;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using System.Diagnostics;
+using static ACS.VerticalHost.Services.HandlerErrorHandling;
+using static ACS.VerticalHost.Services.HandlerExtensions;
 using ServiceMigrationValidationResult = ACS.Service.Services.MigrationValidationResult;
 using ServiceMigrationInfo = ACS.Service.Services.MigrationInfo;
 using ServiceIMigrationValidationService = ACS.Service.Services.IMigrationValidationService;
@@ -13,44 +16,59 @@ namespace ACS.VerticalHost.Handlers;
 
 public class GetSystemOverviewQueryHandler : IQueryHandler<GetSystemOverviewQuery, SystemOverview>
 {
-    private readonly ApplicationDbContext _context;
+    private readonly ISystemMetricsService _systemMetricsService;
     private readonly ILogger<GetSystemOverviewQueryHandler> _logger;
 
     public GetSystemOverviewQueryHandler(
-        ApplicationDbContext context,
+        ISystemMetricsService systemMetricsService,
         ILogger<GetSystemOverviewQueryHandler> logger)
     {
-        _context = context;
+        _systemMetricsService = systemMetricsService;
         _logger = logger;
     }
 
     public async Task<SystemOverview> HandleAsync(GetSystemOverviewQuery query, CancellationToken cancellationToken)
     {
+        var correlationId = GetCorrelationId();
+        var context = GetContext(nameof(GetSystemOverviewQueryHandler), nameof(HandleAsync));
+        
+        LogOperationStart(_logger, context, new { TenantId = query.TenantId }, correlationId);
+
         try
         {
-            _logger.LogInformation("Getting system overview for tenant {TenantId}", query.TenantId);
-
-            var overview = new SystemOverview
+            var request = new SystemOverviewRequest
             {
-                Timestamp = DateTime.UtcNow,
-                Status = "Healthy",
-                UsersCount = await _context.Users.CountAsync(cancellationToken),
-                GroupsCount = await _context.Groups.CountAsync(cancellationToken),
-                RolesCount = await _context.Roles.CountAsync(cancellationToken),
-                Uptime = DateTime.UtcNow - Process.GetCurrentProcess().StartTime.ToUniversalTime()
+                TenantId = query.TenantId,
+                RequestedBy = "system"
             };
 
-            return overview;
+            var response = await _systemMetricsService.GetSystemOverviewAsync(request);
+
+            if (response.Success && response.Data != null)
+            {
+                var result = new SystemOverview
+                {
+                    Timestamp = response.Data.Timestamp,
+                    Status = response.Data.Status,
+                    UsersCount = response.Data.UsersCount,
+                    GroupsCount = response.Data.GroupsCount,
+                    RolesCount = response.Data.RolesCount,
+                    Uptime = response.Data.Uptime
+                };
+                
+                LogQuerySuccess(_logger, context, new { TenantId = query.TenantId, Status = response.Data.Status }, correlationId);
+                return result;
+            }
+            else
+            {
+                var error = $"System metrics service returned error: {response.Message}";
+                _logger.LogError("{Error}. CorrelationId: {CorrelationId}", error, correlationId);
+                throw new InvalidOperationException(error);
+            }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting system overview");
-            return new SystemOverview
-            {
-                Timestamp = DateTime.UtcNow,
-                Status = "Error",
-                Uptime = TimeSpan.Zero
-            };
+            return HandleQueryError<SystemOverview>(_logger, ex, context, correlationId);
         }
     }
 }
@@ -66,11 +84,14 @@ public class GetHealthStatusQueryHandler : IQueryHandler<GetHealthStatusQuery, H
 
     public async Task<HealthStatus> HandleAsync(GetHealthStatusQuery query, CancellationToken cancellationToken)
     {
+        var correlationId = GetCorrelationId();
+        var context = GetContext(nameof(GetHealthStatusQueryHandler), nameof(HandleAsync));
+        
+        LogOperationStart(_logger, context, new { TenantId = query.TenantId }, correlationId);
+
         try
         {
             await Task.CompletedTask; // For async signature
-
-            _logger.LogDebug("Getting health status for tenant {TenantId}", query.TenantId);
 
             var health = new HealthStatus
             {
@@ -80,62 +101,74 @@ public class GetHealthStatusQueryHandler : IQueryHandler<GetHealthStatusQuery, H
                 Environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Unknown"
             };
 
+            LogQuerySuccess(_logger, context, new { TenantId = query.TenantId, Status = health.Status }, correlationId);
             return health;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting health status");
-            return new HealthStatus
-            {
-                Status = "Unhealthy",
-                Timestamp = DateTime.UtcNow,
-                Environment = "Error"
-            };
+            return HandleQueryError<HealthStatus>(_logger, ex, context, correlationId);
         }
     }
 }
 
-public class GetMigrationHistoryQueryHandler : IQueryHandler<GetMigrationHistoryQuery, List<MigrationInfo>>
+public class GetMigrationHistoryQueryHandler : IQueryHandler<GetMigrationHistoryQuery, List<Commands.MigrationInfo>>
 {
-    private readonly ApplicationDbContext _context;
+    private readonly ISystemMetricsService _systemMetricsService;
     private readonly ILogger<GetMigrationHistoryQueryHandler> _logger;
 
     public GetMigrationHistoryQueryHandler(
-        ApplicationDbContext context,
+        ISystemMetricsService systemMetricsService,
         ILogger<GetMigrationHistoryQueryHandler> logger)
     {
-        _context = context;
+        _systemMetricsService = systemMetricsService;
         _logger = logger;
     }
 
-    public async Task<List<MigrationInfo>> HandleAsync(GetMigrationHistoryQuery query, CancellationToken cancellationToken)
+    public async Task<List<Commands.MigrationInfo>> HandleAsync(GetMigrationHistoryQuery query, CancellationToken cancellationToken)
     {
+        var correlationId = GetCorrelationId();
+        var context = GetContext(nameof(GetMigrationHistoryQueryHandler), nameof(HandleAsync));
+        
+        LogOperationStart(_logger, context, new { TenantId = query.TenantId }, correlationId);
+
         try
         {
-            _logger.LogInformation("Getting migration history for tenant {TenantId}", query.TenantId);
-
-            // Get applied migrations from database
-            var appliedMigrations = await _context.Database.GetAppliedMigrationsAsync();
-            
-            var migrationInfos = appliedMigrations.Select(migration => new Commands.MigrationInfo
+            var request = new MigrationHistoryRequest
             {
-                Id = migration,
-                Name = migration.Split('_').Skip(1).FirstOrDefault() ?? migration,
-                AppliedDate = DateTime.UtcNow, // EF Core doesn't track application date by default
-                Status = "Applied"
-            }).ToList();
+                TenantId = query.TenantId,
+                RequestedBy = "system"
+            };
 
-            return migrationInfos;
+            var response = await _systemMetricsService.GetMigrationHistoryAsync(request);
+
+            if (response.Success)
+            {
+                var result = response.Migrations.Select(m => new Commands.MigrationInfo
+                {
+                    Id = m.Id,
+                    Name = m.Name,
+                    AppliedDate = m.AppliedDate,
+                    Status = m.Status
+                }).ToList();
+                
+                LogQuerySuccess(_logger, context, new { TenantId = query.TenantId, Count = result.Count }, correlationId);
+                return result;
+            }
+            else
+            {
+                var error = $"System metrics service returned error: {response.Message}";
+                _logger.LogError("{Error}. CorrelationId: {CorrelationId}", error, correlationId);
+                throw new InvalidOperationException(error);
+            }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting migration history");
-            return new List<Commands.MigrationInfo>();
+            return HandleQueryError<List<Commands.MigrationInfo>>(_logger, ex, context, correlationId);
         }
     }
 }
 
-public class ValidateMigrationsCommandHandler : ICommandHandler<ValidateMigrationsCommand, MigrationValidationResult>
+public class ValidateMigrationsCommandHandler : ICommandHandler<ValidateMigrationsCommand, Commands.MigrationValidationResult>
 {
     private readonly ServiceIMigrationValidationService _migrationService;
     private readonly ILogger<ValidateMigrationsCommandHandler> _logger;
@@ -148,24 +181,36 @@ public class ValidateMigrationsCommandHandler : ICommandHandler<ValidateMigratio
         _logger = logger;
     }
 
-    public async Task<MigrationValidationResult> HandleAsync(ValidateMigrationsCommand command, CancellationToken cancellationToken)
+    public async Task<Commands.MigrationValidationResult> HandleAsync(ValidateMigrationsCommand command, CancellationToken cancellationToken)
     {
+        var correlationId = GetCorrelationId();
+        var context = GetContext(nameof(ValidateMigrationsCommandHandler), nameof(HandleAsync));
+        
+        LogOperationStart(_logger, context, new { TenantId = command.TenantId }, correlationId);
+
         try
         {
-            _logger.LogInformation("Validating migrations for tenant {TenantId}", command.TenantId);
-
             var healthCheck = await _migrationService.CheckMigrationHealthAsync();
 
-            return new MigrationValidationResult
+            var result = new MigrationValidationResult
             {
                 IsValid = healthCheck.IsHealthy,
                 Issues = healthCheck.Errors?.ToList() ?? new List<string>(),
                 ValidatedAt = DateTime.UtcNow
             };
+            
+            LogCommandSuccess(_logger, context, 
+                new { TenantId = command.TenantId, IsValid = result.IsValid, IssueCount = result.Issues.Count }, 
+                correlationId);
+                
+            return result;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error validating migrations");
+            // For migration validation, return error result instead of throwing
+            // to provide operational details to the caller
+            _logger.LogError(ex, "Error validating migrations for tenant {TenantId}. CorrelationId: {CorrelationId}", 
+                command.TenantId, correlationId);
             return new MigrationValidationResult
             {
                 IsValid = false,
@@ -191,14 +236,17 @@ public class GetSystemInfoQueryHandler : IQueryHandler<GetSystemInfoQuery, Syste
 
     public async Task<SystemDiagnosticInfo> HandleAsync(GetSystemInfoQuery query, CancellationToken cancellationToken)
     {
+        var correlationId = GetCorrelationId();
+        var context = GetContext(nameof(GetSystemInfoQueryHandler), nameof(HandleAsync));
+        
+        LogOperationStart(_logger, context, new { TenantId = query.TenantId }, correlationId);
+
         try
         {
-            _logger.LogInformation("Getting system diagnostic info for tenant {TenantId}", query.TenantId);
-
             var process = Process.GetCurrentProcess();
             var diagnostics = await _diagnosticService.GetSystemInfoAsync();
 
-            return new SystemDiagnosticInfo
+            var result = new SystemDiagnosticInfo
             {
                 MachineName = Environment.MachineName,
                 ProcessId = process.Id.ToString(),
@@ -207,17 +255,16 @@ public class GetSystemInfoQueryHandler : IQueryHandler<GetSystemInfoQuery, Syste
                 StartTime = process.StartTime.ToUniversalTime(),
                 Version = diagnostics?.RuntimeVersion ?? "Unknown"
             };
+            
+            LogQuerySuccess(_logger, context, 
+                new { TenantId = query.TenantId, MachineName = result.MachineName, ProcessId = result.ProcessId }, 
+                correlationId);
+                
+            return result;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting system diagnostic info");
-            return new SystemDiagnosticInfo
-            {
-                MachineName = Environment.MachineName,
-                ProcessId = Environment.ProcessId.ToString(),
-                StartTime = DateTime.UtcNow,
-                Version = "Error"
-            };
+            return HandleQueryError<SystemDiagnosticInfo>(_logger, ex, context, correlationId);
         }
     }
 }

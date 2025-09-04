@@ -3,21 +3,21 @@ using ACS.VerticalHost.Services;
 namespace ACS.VerticalHost.Commands;
 
 // Authentication Commands
-public class LoginCommand : ACS.VerticalHost.Services.ICommand<AuthResult>
+public class LoginCommand : ICommand<AuthResult>
 {
     public string Email { get; set; } = string.Empty;
     public string Password { get; set; } = string.Empty;
     public string TenantId { get; set; } = string.Empty;
 }
 
-public class RefreshTokenCommand : ACS.VerticalHost.Services.ICommand<AuthResult>
+public class RefreshTokenCommand : ICommand<AuthResult>
 {
     public string UserId { get; set; } = string.Empty;
     public string TenantId { get; set; } = string.Empty;
     public List<string> Roles { get; set; } = new();
 }
 
-public class ChangePasswordCommand : ACS.VerticalHost.Services.ICommand<bool>
+public class ChangePasswordCommand : ICommand<bool>
 {
     public int UserId { get; set; }
     public string CurrentPassword { get; set; } = string.Empty;
@@ -25,29 +25,29 @@ public class ChangePasswordCommand : ACS.VerticalHost.Services.ICommand<bool>
 }
 
 // Dashboard Commands
-public class GetSystemOverviewQuery : ACS.VerticalHost.Services.IQuery<SystemOverview>
+public class GetSystemOverviewQuery : IQuery<SystemOverview>
 {
     public string TenantId { get; set; } = string.Empty;
 }
 
-public class GetHealthStatusQuery : ACS.VerticalHost.Services.IQuery<HealthStatus>
+public class GetHealthStatusQuery : IQuery<HealthStatus>
 {
     public string TenantId { get; set; } = string.Empty;
 }
 
 // Migration Commands  
-public class GetMigrationHistoryQuery : ACS.VerticalHost.Services.IQuery<List<MigrationInfo>>
+public class GetMigrationHistoryQuery : IQuery<List<MigrationInfo>>
 {
     public string TenantId { get; set; } = string.Empty;
 }
 
-public class ValidateMigrationsCommand : ACS.VerticalHost.Services.ICommand<MigrationValidationResult>
+public class ValidateMigrationsCommand : ICommand<MigrationValidationResult>
 {
     public string TenantId { get; set; } = string.Empty;
 }
 
 // Diagnostics Commands
-public class GetSystemInfoQuery : ACS.VerticalHost.Services.IQuery<SystemDiagnosticInfo>
+public class GetSystemInfoQuery : IQuery<SystemDiagnosticInfo>
 {
     public string TenantId { get; set; } = string.Empty;
 }

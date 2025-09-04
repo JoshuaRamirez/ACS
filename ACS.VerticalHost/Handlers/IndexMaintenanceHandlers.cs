@@ -2,6 +2,8 @@ using ACS.VerticalHost.Services;
 using ACS.VerticalHost.Commands;
 using ACS.Service.Data;
 using Microsoft.Extensions.Logging;
+using static ACS.VerticalHost.Services.HandlerErrorHandling;
+using static ACS.VerticalHost.Services.HandlerExtensions;
 using ServiceMissingIndex = ACS.Service.Data.MissingIndexRecommendation;
 using CommandMissingIndex = ACS.VerticalHost.Commands.MissingIndexRecommendation;
 
@@ -24,36 +26,37 @@ public class RebuildIndexCommandHandler : ICommandHandler<RebuildIndexCommand, b
 
     public async Task<bool> HandleAsync(RebuildIndexCommand command, CancellationToken cancellationToken)
     {
+        var correlationId = GetCorrelationId();
+        var context = GetContext(nameof(RebuildIndexCommandHandler), nameof(HandleAsync));
+        
+        LogOperationStart(_logger, context, 
+            new { TableName = command.TableName, IndexName = command.IndexName }, correlationId);
+
         try
         {
             if (string.IsNullOrEmpty(command.TableName) || string.IsNullOrEmpty(command.IndexName))
             {
                 throw new ArgumentException("TableName and IndexName are required");
             }
-
-            _logger.LogInformation("Processing index rebuild for {IndexName} on {TableName}", 
-                command.IndexName, command.TableName);
             
             var success = await _indexAnalyzer.RebuildIndexAsync(command.TableName, command.IndexName);
             
             if (success)
             {
-                _logger.LogInformation("Index {IndexName} on table {TableName} rebuilt successfully", 
-                    command.IndexName, command.TableName);
+                LogCommandSuccess(_logger, context, 
+                    new { TableName = command.TableName, IndexName = command.IndexName }, correlationId);
             }
             else
             {
-                _logger.LogWarning("Failed to rebuild index {IndexName} on table {TableName}", 
-                    command.IndexName, command.TableName);
+                _logger.LogWarning("Failed to rebuild index {IndexName} on table {TableName}. CorrelationId: {CorrelationId}", 
+                    command.IndexName, command.TableName, correlationId);
             }
 
             return success;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error rebuilding index {IndexName} on table {TableName}", 
-                command.IndexName, command.TableName);
-            throw;
+            return HandleCommandError<bool>(_logger, ex, context, correlationId);
         }
     }
 }
@@ -73,36 +76,37 @@ public class ReorganizeIndexCommandHandler : ICommandHandler<ReorganizeIndexComm
 
     public async Task<bool> HandleAsync(ReorganizeIndexCommand command, CancellationToken cancellationToken)
     {
+        var correlationId = GetCorrelationId();
+        var context = GetContext(nameof(ReorganizeIndexCommandHandler), nameof(HandleAsync));
+        
+        LogOperationStart(_logger, context, 
+            new { TableName = command.TableName, IndexName = command.IndexName }, correlationId);
+
         try
         {
             if (string.IsNullOrEmpty(command.TableName) || string.IsNullOrEmpty(command.IndexName))
             {
                 throw new ArgumentException("TableName and IndexName are required");
             }
-
-            _logger.LogInformation("Processing index reorganize for {IndexName} on {TableName}", 
-                command.IndexName, command.TableName);
             
             var success = await _indexAnalyzer.ReorganizeIndexAsync(command.TableName, command.IndexName);
             
             if (success)
             {
-                _logger.LogInformation("Index {IndexName} on table {TableName} reorganized successfully", 
-                    command.IndexName, command.TableName);
+                LogCommandSuccess(_logger, context, 
+                    new { TableName = command.TableName, IndexName = command.IndexName }, correlationId);
             }
             else
             {
-                _logger.LogWarning("Failed to reorganize index {IndexName} on table {TableName}", 
-                    command.IndexName, command.TableName);
+                _logger.LogWarning("Failed to reorganize index {IndexName} on table {TableName}. CorrelationId: {CorrelationId}", 
+                    command.IndexName, command.TableName, correlationId);
             }
 
             return success;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error reorganizing index {IndexName} on table {TableName}", 
-                command.IndexName, command.TableName);
-            throw;
+            return HandleCommandError<bool>(_logger, ex, context, correlationId);
         }
     }
 }
@@ -122,13 +126,16 @@ public class AnalyzeIndexesQueryHandler : IQueryHandler<AnalyzeIndexesQuery, Com
 
     public async Task<CommandIndexAnalysisReport> HandleAsync(AnalyzeIndexesQuery query, CancellationToken cancellationToken)
     {
+        var correlationId = GetCorrelationId();
+        var context = GetContext(nameof(AnalyzeIndexesQueryHandler), nameof(HandleAsync));
+        
+        LogOperationStart(_logger, context, new { }, correlationId);
+
         try
         {
-            _logger.LogInformation("Processing index analysis request");
-            
             var report = await _indexAnalyzer.AnalyzeIndexesAsync();
             
-            return new Commands.IndexAnalysisReport
+            var result = new Commands.IndexAnalysisReport
             {
                 AnalysisDate = report.AnalysisDate,
                 DatabaseName = report.DatabaseName,
@@ -190,11 +197,14 @@ public class AnalyzeIndexesQueryHandler : IQueryHandler<AnalyzeIndexesQuery, Com
                 }).ToList(),
                 Recommendations = report.Recommendations
             };
+
+            LogQuerySuccess(_logger, context, 
+                new { TotalIndexes = result.TotalIndexes, HealthScore = result.HealthScore, MissingCount = result.MissingIndexes.Count }, correlationId);
+            return result;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error performing index analysis");
-            throw;
+            return HandleQueryError<CommandIndexAnalysisReport>(_logger, ex, context, correlationId);
         }
     }
 }
@@ -214,11 +224,16 @@ public class GetMissingIndexRecommendationsQueryHandler : IQueryHandler<GetMissi
 
     public async Task<List<CommandMissingIndex>> HandleAsync(GetMissingIndexRecommendationsQuery query, CancellationToken cancellationToken)
     {
+        var correlationId = GetCorrelationId();
+        var context = GetContext(nameof(GetMissingIndexRecommendationsQueryHandler), nameof(HandleAsync));
+        
+        LogOperationStart(_logger, context, new { }, correlationId);
+
         try
         {
             var recommendations = await _indexAnalyzer.GetMissingIndexRecommendationsAsync();
             
-            return recommendations.Select(r => new CommandMissingIndex
+            var result = recommendations.Select(r => new CommandMissingIndex
             {
                 TableName = r.TableName,
                 ImprovementMeasure = r.ImprovementMeasure,
@@ -231,11 +246,13 @@ public class GetMissingIndexRecommendationsQueryHandler : IQueryHandler<GetMissi
                 LastUserSeek = r.LastUserSeek,
                 CreateStatement = r.CreateStatement
             }).ToList();
+
+            LogQuerySuccess(_logger, context, new { RecommendationCount = result.Count }, correlationId);
+            return result;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting missing index recommendations");
-            throw;
+            return HandleQueryError<List<CommandMissingIndex>>(_logger, ex, context, correlationId);
         }
     }
 }
@@ -255,11 +272,16 @@ public class GetUnusedIndexesQueryHandler : IQueryHandler<GetUnusedIndexesQuery,
 
     public async Task<List<UnusedIndexInfo>> HandleAsync(GetUnusedIndexesQuery query, CancellationToken cancellationToken)
     {
+        var correlationId = GetCorrelationId();
+        var context = GetContext(nameof(GetUnusedIndexesQueryHandler), nameof(HandleAsync));
+        
+        LogOperationStart(_logger, context, new { DaysSinceLastUse = query.DaysSinceLastUse }, correlationId);
+
         try
         {
             var unusedIndexes = await _indexAnalyzer.GetUnusedIndexesAsync(query.DaysSinceLastUse);
             
-            return unusedIndexes.Select(i => new Commands.UnusedIndexInfo
+            var result = unusedIndexes.Select(i => new Commands.UnusedIndexInfo
             {
                 SchemaName = i.SchemaName,
                 TableName = i.TableName,
@@ -272,11 +294,14 @@ public class GetUnusedIndexesQueryHandler : IQueryHandler<GetUnusedIndexesQuery,
                 UserLookups = i.UserLookups,
                 UserUpdates = i.UserUpdates
             }).ToList();
+
+            LogQuerySuccess(_logger, context, 
+                new { DaysSinceLastUse = query.DaysSinceLastUse, UnusedIndexCount = result.Count }, correlationId);
+            return result;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting unused indexes");
-            throw;
+            return HandleQueryError<List<UnusedIndexInfo>>(_logger, ex, context, correlationId);
         }
     }
 }
@@ -296,11 +321,16 @@ public class GetFragmentedIndexesQueryHandler : IQueryHandler<GetFragmentedIndex
 
     public async Task<List<FragmentedIndexInfo>> HandleAsync(GetFragmentedIndexesQuery query, CancellationToken cancellationToken)
     {
+        var correlationId = GetCorrelationId();
+        var context = GetContext(nameof(GetFragmentedIndexesQueryHandler), nameof(HandleAsync));
+        
+        LogOperationStart(_logger, context, new { FragmentationThreshold = query.FragmentationThreshold }, correlationId);
+
         try
         {
             var fragmentedIndexes = await _indexAnalyzer.GetFragmentedIndexesAsync(query.FragmentationThreshold);
             
-            return fragmentedIndexes.Select(i => new Commands.FragmentedIndexInfo
+            var result = fragmentedIndexes.Select(i => new Commands.FragmentedIndexInfo
             {
                 SchemaName = i.SchemaName,
                 TableName = i.TableName,
@@ -312,11 +342,14 @@ public class GetFragmentedIndexesQueryHandler : IQueryHandler<GetFragmentedIndex
                 FillFactor = i.FillFactor,
                 RecommendedAction = i.RecommendedAction
             }).ToList();
+
+            LogQuerySuccess(_logger, context, 
+                new { FragmentationThreshold = query.FragmentationThreshold, FragmentedIndexCount = result.Count }, correlationId);
+            return result;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting fragmented indexes");
-            throw;
+            return HandleQueryError<List<FragmentedIndexInfo>>(_logger, ex, context, correlationId);
         }
     }
 }

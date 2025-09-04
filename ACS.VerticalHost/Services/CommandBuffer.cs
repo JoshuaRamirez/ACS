@@ -365,7 +365,7 @@ public interface IQuery<TResponse> { }
 
 public interface ICommandHandler<in TCommand> where TCommand : ICommand
 {
-    Task<object?> HandleAsync(TCommand command, CancellationToken cancellationToken);
+    Task HandleAsync(TCommand command, CancellationToken cancellationToken);
 }
 
 public interface ICommandHandler<in TCommand, TResponse> where TCommand : ICommand<TResponse>

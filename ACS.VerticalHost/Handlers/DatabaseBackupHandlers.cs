@@ -3,6 +3,8 @@ using ACS.VerticalHost.Commands;
 using ACS.Service.Services;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using static ACS.VerticalHost.Services.HandlerErrorHandling;
+using static ACS.VerticalHost.Services.HandlerExtensions;
 using ServiceBackupResult = ACS.Service.Services.BackupResult;
 using ServiceBackupType = ACS.Service.Services.BackupType;
 using CommandBackupType = ACS.VerticalHost.Commands.BackupType;
@@ -29,10 +31,13 @@ public class CreateBackupCommandHandler : ICommandHandler<CreateBackupCommand, C
 
     public async Task<CommandBackupResult> HandleAsync(CreateBackupCommand command, CancellationToken cancellationToken)
     {
+        var correlationId = GetCorrelationId();
+        var context = GetContext(nameof(CreateBackupCommandHandler), nameof(HandleAsync));
+        
+        LogOperationStart(_logger, context, new { BackupType = command.BackupType, BackupPath = command.BackupPath }, correlationId);
+
         try
         {
-            _logger.LogInformation("Processing backup request. Type: {BackupType}", command.BackupType);
-
             var options = new BackupOptions
             {
                 BackupType = (ServiceBackupType)command.BackupType,
@@ -47,7 +52,7 @@ public class CreateBackupCommandHandler : ICommandHandler<CreateBackupCommand, C
 
             var result = await _backupService.CreateBackupAsync(options);
 
-            return new CommandBackupResult
+            var commandResult = new CommandBackupResult
             {
                 Success = result.Success,
                 Message = result.Message,
@@ -62,10 +67,19 @@ public class CreateBackupCommandHandler : ICommandHandler<CreateBackupCommand, C
                 StartTime = result.StartTime,
                 EndTime = result.EndTime
             };
+
+            LogCommandSuccess(_logger, context, 
+                new { Success = result.Success, BackupPath = result.BackupPath, FileSizeBytes = result.FileSizeBytes }, 
+                correlationId);
+                
+            return commandResult;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error creating backup");
+            // For backup operations, return error result instead of throwing
+            // to provide operational details to the caller
+            _logger.LogError(ex, "Error creating backup. CorrelationId: {CorrelationId}", correlationId);
+            LogCommandSuccess(_logger, context, new { Success = false, Error = "Backup creation failed" }, correlationId);
             return new CommandBackupResult
             {
                 Success = false,
@@ -91,6 +105,11 @@ public class RestoreBackupCommandHandler : ICommandHandler<RestoreBackupCommand,
 
     public async Task<CommandRestoreResult> HandleAsync(RestoreBackupCommand command, CancellationToken cancellationToken)
     {
+        var correlationId = GetCorrelationId();
+        var context = GetContext(nameof(RestoreBackupCommandHandler), nameof(HandleAsync));
+        
+        LogOperationStart(_logger, context, new { BackupPath = command.BackupPath, TargetDatabase = command.TargetDatabaseName }, correlationId);
+
         try
         {
             if (!command.ConfirmRestore)
@@ -120,6 +139,9 @@ public class RestoreBackupCommandHandler : ICommandHandler<RestoreBackupCommand,
 
             var result = await _backupService.RestoreBackupAsync(options);
 
+            LogCommandSuccess(_logger, context, 
+                new { Success = result.Success, Database = result.RestoredDatabaseName }, correlationId);
+
             return new CommandRestoreResult
             {
                 Success = result.Success,
@@ -133,7 +155,9 @@ public class RestoreBackupCommandHandler : ICommandHandler<RestoreBackupCommand,
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error restoring backup");
+            // For restore operations, return error result instead of throwing
+            // to provide operational details to the caller
+            _logger.LogError(ex, "Error restoring backup. CorrelationId: {CorrelationId}", correlationId);
             return new CommandRestoreResult
             {
                 Success = false,
@@ -159,6 +183,11 @@ public class VerifyBackupCommandHandler : ICommandHandler<VerifyBackupCommand, b
 
     public async Task<bool> HandleAsync(VerifyBackupCommand command, CancellationToken cancellationToken)
     {
+        var correlationId = GetCorrelationId();
+        var context = GetContext(nameof(VerifyBackupCommandHandler), nameof(HandleAsync));
+        
+        LogOperationStart(_logger, context, new { BackupPath = command.BackupPath }, correlationId);
+
         try
         {
             if (string.IsNullOrEmpty(command.BackupPath))
@@ -166,15 +195,14 @@ public class VerifyBackupCommandHandler : ICommandHandler<VerifyBackupCommand, b
                 throw new ArgumentException("BackupPath is required");
             }
 
-            _logger.LogInformation("Verifying backup: {BackupPath}", command.BackupPath);
-
             var isValid = await _backupService.VerifyBackupAsync(command.BackupPath);
+            
+            LogCommandSuccess(_logger, context, new { BackupPath = command.BackupPath, IsValid = isValid }, correlationId);
             return isValid;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error verifying backup");
-            throw;
+            return HandleCommandError<bool>(_logger, ex, context, correlationId);
         }
     }
 }
@@ -194,6 +222,11 @@ public class CleanupOldBackupsCommandHandler : ICommandHandler<CleanupOldBackups
 
     public async Task<CommandCleanupResult> HandleAsync(CleanupOldBackupsCommand command, CancellationToken cancellationToken)
     {
+        var correlationId = GetCorrelationId();
+        var context = GetContext(nameof(CleanupOldBackupsCommandHandler), nameof(HandleAsync));
+        
+        LogOperationStart(_logger, context, new { RetentionDays = command.RetentionDays }, correlationId);
+
         try
         {
             if (command.RetentionDays < 1)
@@ -204,6 +237,9 @@ public class CleanupOldBackupsCommandHandler : ICommandHandler<CleanupOldBackups
             _logger.LogInformation("Processing backup cleanup. Retention: {RetentionDays} days", command.RetentionDays);
 
             var result = await _backupService.CleanupOldBackupsAsync(command.RetentionDays);
+
+            LogCommandSuccess(_logger, context, 
+                new { Success = result.Success, FilesDeleted = result.FilesDeleted, BytesFreed = result.BytesFreed }, correlationId);
 
             return new CommandCleanupResult
             {
@@ -220,7 +256,9 @@ public class CleanupOldBackupsCommandHandler : ICommandHandler<CleanupOldBackups
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error cleaning up backups");
+            // For cleanup operations, return error result instead of throwing
+            // to provide operational details to the caller
+            _logger.LogError(ex, "Error cleaning up backups. CorrelationId: {CorrelationId}", correlationId);
             return new CommandCleanupResult
             {
                 Success = false,
@@ -265,8 +303,9 @@ public class GetBackupHistoryQueryHandler : IQueryHandler<GetBackupHistoryQuery,
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error retrieving backup history");
-            throw;
+            var correlationId = GetCorrelationId();
+            var context = GetContext(nameof(GetBackupHistoryQueryHandler), nameof(HandleAsync));
+            return HandleQueryError<List<BackupHistoryInfo>>(_logger, ex, context, correlationId);
         }
     }
 }

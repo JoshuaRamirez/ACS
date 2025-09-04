@@ -3,6 +3,8 @@ using ACS.VerticalHost.Commands;
 using ACS.Infrastructure.Authentication;
 using ACS.Service.Services;
 using Microsoft.Extensions.Logging;
+using static ACS.VerticalHost.Services.HandlerErrorHandling;
+using static ACS.VerticalHost.Services.HandlerExtensions;
 
 namespace ACS.VerticalHost.Handlers;
 
@@ -24,16 +26,20 @@ public class LoginCommandHandler : ICommandHandler<LoginCommand, AuthResult>
 
     public async Task<AuthResult> HandleAsync(LoginCommand command, CancellationToken cancellationToken)
     {
+        var correlationId = GetCorrelationId();
+        var context = GetContext(nameof(LoginCommandHandler), nameof(HandleAsync));
+        
+        LogOperationStart(_logger, context, new { Email = command.Email, TenantId = command.TenantId }, correlationId);
+
         try
         {
-            _logger.LogInformation("Processing login for user {Email} in tenant {TenantId}", command.Email, command.TenantId);
-
             // Authenticate using the real authentication service
             var authResult = await _authenticationService.AuthenticateAsync(command.Email, command.Password, command.TenantId);
             
             if (!authResult.IsSuccess)
             {
-                _logger.LogWarning("Authentication failed for user {Email}: {Error}", command.Email, authResult.ErrorMessage);
+                _logger.LogWarning("Authentication failed for user {Email} in tenant {TenantId}: {Error}. CorrelationId: {CorrelationId}", 
+                    command.Email, command.TenantId, authResult.ErrorMessage, correlationId);
                 return new AuthResult
                 {
                     IsSuccess = false,
@@ -53,9 +59,7 @@ public class LoginCommandHandler : ICommandHandler<LoginCommand, AuthResult>
                     ["login_time"] = DateTime.UtcNow.ToString("O")
                 });
 
-            _logger.LogInformation("Successful authentication for user {Email} in tenant {TenantId}", command.Email, command.TenantId);
-
-            return new AuthResult
+            var result = new AuthResult
             {
                 IsSuccess = true,
                 Token = token,
@@ -66,10 +70,16 @@ public class LoginCommandHandler : ICommandHandler<LoginCommand, AuthResult>
                 Roles = authResult.Roles.ToList(),
                 ExpiresIn = TimeSpan.FromHours(24).TotalSeconds
             };
+
+            LogCommandSuccess(_logger, context, new { Email = command.Email, TenantId = command.TenantId, UserId = authResult.UserId }, correlationId);
+            return result;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error during authentication for user {Email}", command.Email);
+            // For authentication errors, log appropriately but return controlled error response
+            // to avoid exposing system details to potential attackers
+            _logger.LogWarning(ex, "Authentication failed for user {Email} in tenant {TenantId}. CorrelationId: {CorrelationId}", 
+                command.Email, command.TenantId, correlationId);
             return new AuthResult
             {
                 IsSuccess = false,
@@ -94,6 +104,11 @@ public class RefreshTokenCommandHandler : ICommandHandler<RefreshTokenCommand, A
 
     public async Task<AuthResult> HandleAsync(RefreshTokenCommand command, CancellationToken cancellationToken)
     {
+        var correlationId = GetCorrelationId();
+        var context = GetContext(nameof(RefreshTokenCommandHandler), nameof(HandleAsync));
+        
+        LogOperationStart(_logger, context, new { UserId = command.UserId, TenantId = command.TenantId }, correlationId);
+
         try
         {
             await Task.CompletedTask; // For async signature
@@ -108,9 +123,7 @@ public class RefreshTokenCommandHandler : ICommandHandler<RefreshTokenCommand, A
                     ["refresh_time"] = DateTime.UtcNow.ToString("O")
                 });
 
-            _logger.LogInformation("Token refreshed for user {UserId} in tenant {TenantId}", command.UserId, command.TenantId);
-
-            return new AuthResult
+            var result = new AuthResult
             {
                 IsSuccess = true,
                 Token = token,
@@ -119,10 +132,16 @@ public class RefreshTokenCommandHandler : ICommandHandler<RefreshTokenCommand, A
                 Roles = command.Roles,
                 ExpiresIn = TimeSpan.FromHours(24).TotalSeconds
             };
+
+            LogCommandSuccess(_logger, context, new { UserId = command.UserId, TenantId = command.TenantId }, correlationId);
+            return result;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error during token refresh for user {UserId}", command.UserId);
+            // For token refresh errors, log appropriately but return controlled error response
+            // to avoid exposing system details to potential attackers
+            _logger.LogWarning(ex, "Token refresh failed for user {UserId} in tenant {TenantId}. CorrelationId: {CorrelationId}", 
+                command.UserId, command.TenantId, correlationId);
             return new AuthResult
             {
                 IsSuccess = false,
@@ -147,24 +166,33 @@ public class ChangePasswordCommandHandler : ICommandHandler<ChangePasswordComman
 
     public async Task<bool> HandleAsync(ChangePasswordCommand command, CancellationToken cancellationToken)
     {
+        var correlationId = GetCorrelationId();
+        var context = GetContext(nameof(ChangePasswordCommandHandler), nameof(HandleAsync));
+        
+        LogOperationStart(_logger, context, new { UserId = command.UserId }, correlationId);
+
         try
         {
             var success = await _authenticationService.ChangePasswordAsync(command.UserId, command.CurrentPassword, command.NewPassword);
             
             if (success)
             {
-                _logger.LogInformation("Password changed successfully for user {UserId}", command.UserId);
+                LogCommandSuccess(_logger, context, new { UserId = command.UserId }, correlationId);
             }
             else
             {
-                _logger.LogWarning("Password change failed for user {UserId}", command.UserId);
+                _logger.LogWarning("Password change failed for user {UserId}. CorrelationId: {CorrelationId}", 
+                    command.UserId, correlationId);
             }
 
             return success;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error changing password for user {UserId}", command.UserId);
+            // For password change errors, log appropriately but return controlled response
+            // to avoid exposing system details in security-sensitive operations
+            _logger.LogWarning(ex, "Password change failed for user {UserId}. CorrelationId: {CorrelationId}", 
+                command.UserId, correlationId);
             return false;
         }
     }

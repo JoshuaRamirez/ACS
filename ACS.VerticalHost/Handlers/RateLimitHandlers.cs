@@ -2,6 +2,8 @@ using ACS.VerticalHost.Services;
 using ACS.VerticalHost.Commands;
 using ACS.Infrastructure.RateLimiting;
 using Microsoft.Extensions.Logging;
+using static ACS.VerticalHost.Services.HandlerErrorHandling;
+using static ACS.VerticalHost.Services.HandlerExtensions;
 using InfrastructureRL = ACS.Infrastructure.RateLimiting;
 using Commands = ACS.VerticalHost.Commands;
 using CommandRateLimitStatus = ACS.VerticalHost.Commands.RateLimitStatus;
@@ -25,24 +27,30 @@ public class ResetRateLimitCommandHandler : ICommandHandler<ResetRateLimitComman
         _logger = logger;
     }
 
-    public async Task<object?> HandleAsync(ResetRateLimitCommand command, CancellationToken cancellationToken)
+    public async Task HandleAsync(ResetRateLimitCommand command, CancellationToken cancellationToken)
     {
+        var correlationId = GetCorrelationId();
+        var context = GetContext(nameof(ResetRateLimitCommandHandler), nameof(HandleAsync));
+        
+        LogOperationStart(_logger, context, 
+            new { TenantId = command.TenantId, Key = command.Key, Reason = command.Reason }, correlationId);
+
         try
         {
             await _rateLimitingService.ResetRateLimitAsync(command.TenantId, command.Key);
             
             _metricsService.RecordRateLimitReset(command.TenantId, command.Key, command.Reason);
             
-            _logger.LogInformation("Rate limit reset for tenant {TenantId}, key {Key}, reason: {Reason}",
-                command.TenantId, command.Key, command.Reason);
-            
-            return null; // ICommand returns object?
+            LogCommandSuccess(_logger, context, 
+                new { TenantId = command.TenantId, Key = command.Key, Reason = command.Reason }, correlationId);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error resetting rate limit for tenant {TenantId}, key {Key}",
-                command.TenantId, command.Key);
-            throw;
+            // Re-throw to maintain clean architecture - HandleCommandError always throws
+#pragma warning disable CS4014 // Fire and forget is intentional - method always throws
+            HandleCommandError<Task>(_logger, ex, context, correlationId);
+#pragma warning restore CS4014
+            throw; // This line never executes but satisfies compiler
         }
     }
 }
@@ -62,6 +70,12 @@ public class TestRateLimitCommandHandler : ICommandHandler<TestRateLimitCommand,
 
     public async Task<RateLimitTestResult> HandleAsync(TestRateLimitCommand command, CancellationToken cancellationToken)
     {
+        var correlationId = GetCorrelationId();
+        var context = GetContext(nameof(TestRateLimitCommandHandler), nameof(HandleAsync));
+        
+        LogOperationStart(_logger, context, 
+            new { TenantId = command.TenantId, RequestLimit = command.RequestLimit, NumberOfRequests = command.NumberOfRequests }, correlationId);
+
         try
         {
             var key = $"test_{command.TenantId}_{Guid.NewGuid():N}";
@@ -96,9 +110,7 @@ public class TestRateLimitCommandHandler : ICommandHandler<TestRateLimitCommand,
             // Clean up test data
             await _rateLimitingService.ResetRateLimitAsync(command.TenantId, key);
             
-            _logger.LogInformation("Rate limit test completed for tenant {TenantId}", command.TenantId);
-            
-            return new Commands.RateLimitTestResult
+            var testResult = new Commands.RateLimitTestResult
             {
                 TestConfiguration = new Commands.RateLimitTestConfiguration
                 {
@@ -108,11 +120,14 @@ public class TestRateLimitCommandHandler : ICommandHandler<TestRateLimitCommand,
                 },
                 Results = results
             };
+
+            LogCommandSuccess(_logger, context, 
+                new { TenantId = command.TenantId, TestRequests = command.NumberOfRequests, CompletedRequests = results.Count }, correlationId);
+            return testResult;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error testing rate limit for tenant {TenantId}", command.TenantId);
-            throw;
+            return HandleCommandError<RateLimitTestResult>(_logger, ex, context, correlationId);
         }
     }
 }
@@ -132,6 +147,11 @@ public class GetRateLimitStatusQueryHandler : IQueryHandler<GetRateLimitStatusQu
 
     public async Task<CommandRateLimitStatus> HandleAsync(GetRateLimitStatusQuery query, CancellationToken cancellationToken)
     {
+        var correlationId = GetCorrelationId();
+        var context = GetContext(nameof(GetRateLimitStatusQueryHandler), nameof(HandleAsync));
+        
+        LogOperationStart(_logger, context, new { TenantId = query.TenantId, Key = query.Key }, correlationId);
+
         try
         {
             var policy = new InfrastructureRL.RateLimitPolicy
@@ -143,7 +163,7 @@ public class GetRateLimitStatusQueryHandler : IQueryHandler<GetRateLimitStatusQu
             
             var status = await _rateLimitingService.GetRateLimitStatusAsync(query.TenantId, query.Key, policy);
             
-            return new Commands.RateLimitStatus
+            var result = new Commands.RateLimitStatus
             {
                 TenantId = status.TenantId,
                 RequestCount = status.RequestCount,
@@ -155,12 +175,14 @@ public class GetRateLimitStatusQueryHandler : IQueryHandler<GetRateLimitStatusQu
                 PolicyName = status.PolicyName,
                 IsNearLimit = status.IsNearLimit
             };
+
+            LogQuerySuccess(_logger, context, 
+                new { TenantId = query.TenantId, RequestCount = result.RequestCount, IsNearLimit = result.IsNearLimit }, correlationId);
+            return result;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting rate limit status for tenant {TenantId}, key {Key}",
-                query.TenantId, query.Key);
-            throw;
+            return HandleQueryError<CommandRateLimitStatus>(_logger, ex, context, correlationId);
         }
     }
 }
@@ -180,11 +202,16 @@ public class GetActiveLimitsQueryHandler : IQueryHandler<GetActiveLimitsQuery, L
 
     public async Task<List<ActiveRateLimit>> HandleAsync(GetActiveLimitsQuery query, CancellationToken cancellationToken)
     {
+        var correlationId = GetCorrelationId();
+        var context = GetContext(nameof(GetActiveLimitsQueryHandler), nameof(HandleAsync));
+        
+        LogOperationStart(_logger, context, new { TenantId = query.TenantId }, correlationId);
+
         try
         {
             var activeLimits = await _rateLimitingService.GetActiveLimitsAsync(query.TenantId);
             
-            return activeLimits.Select(limit => new Commands.ActiveRateLimit
+            var result = activeLimits.Select(limit => new Commands.ActiveRateLimit
             {
                 Key = limit.Key,
                 RequestCount = limit.RequestCount,
@@ -195,11 +222,14 @@ public class GetActiveLimitsQueryHandler : IQueryHandler<GetActiveLimitsQuery, L
                 Algorithm = (Commands.RateLimitAlgorithm)limit.Algorithm,
                 ClientInfo = limit.ClientInfo
             }).ToList();
+
+            LogQuerySuccess(_logger, context, 
+                new { TenantId = query.TenantId, ActiveLimitCount = result.Count }, correlationId);
+            return result;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting active rate limits for tenant {TenantId}", query.TenantId);
-            throw;
+            return HandleQueryError<List<ActiveRateLimit>>(_logger, ex, context, correlationId);
         }
     }
 }
@@ -220,12 +250,16 @@ public class GetRateLimitMetricsQueryHandler : IQueryHandler<GetRateLimitMetrics
     public async Task<RateLimitMetrics> HandleAsync(GetRateLimitMetricsQuery query, CancellationToken cancellationToken)
     {
         await Task.CompletedTask; // For async signature
+        var correlationId = GetCorrelationId();
+        var context = GetContext(nameof(GetRateLimitMetricsQueryHandler), nameof(HandleAsync));
+        
+        LogOperationStart(_logger, context, new { TenantId = query.TenantId }, correlationId);
 
         try
         {
             var tenantMetrics = _metricsService.GetTenantMetrics(query.TenantId);
             
-            return new Commands.RateLimitMetrics
+            var result = new Commands.RateLimitMetrics
             {
                 TenantId = tenantMetrics.TenantId,
                 TotalRequests = tenantMetrics.TotalRequests,
@@ -235,11 +269,14 @@ public class GetRateLimitMetricsQueryHandler : IQueryHandler<GetRateLimitMetrics
                 AverageRemainingRequests = tenantMetrics.AverageRemainingRequests,
                 LastActivity = tenantMetrics.LastActivity
             };
+
+            LogQuerySuccess(_logger, context, 
+                new { TenantId = query.TenantId, TotalRequests = result.TotalRequests, BlockRate = result.BlockRate }, correlationId);
+            return result;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting rate limit metrics for tenant {TenantId}", query.TenantId);
-            throw;
+            return HandleQueryError<RateLimitMetrics>(_logger, ex, context, correlationId);
         }
     }
 }
@@ -260,12 +297,16 @@ public class GetAggregatedRateLimitMetricsQueryHandler : IQueryHandler<GetAggreg
     public async Task<CommandAggregatedRateLimitMetrics> HandleAsync(GetAggregatedRateLimitMetricsQuery query, CancellationToken cancellationToken)
     {
         await Task.CompletedTask; // For async signature
+        var correlationId = GetCorrelationId();
+        var context = GetContext(nameof(GetAggregatedRateLimitMetricsQueryHandler), nameof(HandleAsync));
+        
+        LogOperationStart(_logger, context, new { }, correlationId);
 
         try
         {
             var metrics = _metricsService.GetAggregatedMetrics();
             
-            return new Commands.AggregatedRateLimitMetrics
+            var result = new Commands.AggregatedRateLimitMetrics
             {
                 TotalTenants = metrics.ActiveTenants,
                 TotalRequests = metrics.TotalRequests,
@@ -274,11 +315,14 @@ public class GetAggregatedRateLimitMetricsQueryHandler : IQueryHandler<GetAggreg
                 RequestsByTenant = new Dictionary<string, long>(),
                 BlockRatesByTenant = new Dictionary<string, double>()
             };
+
+            LogQuerySuccess(_logger, context, 
+                new { TotalTenants = result.TotalTenants, TotalRequests = result.TotalRequests, BlockRate = result.OverallBlockRate }, correlationId);
+            return result;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting aggregated rate limit metrics");
-            throw;
+            return HandleQueryError<CommandAggregatedRateLimitMetrics>(_logger, ex, context, correlationId);
         }
     }
 }
@@ -298,11 +342,16 @@ public class GetRateLimitHealthStatusQueryHandler : IQueryHandler<GetRateLimitHe
 
     public async Task<RateLimitHealthStatus> HandleAsync(GetRateLimitHealthStatusQuery query, CancellationToken cancellationToken)
     {
+        var correlationId = GetCorrelationId();
+        var context = GetContext(nameof(GetRateLimitHealthStatusQueryHandler), nameof(HandleAsync));
+        
+        LogOperationStart(_logger, context, new { }, correlationId);
+
         try
         {
             var health = await _monitoringService.GetHealthStatusAsync();
             
-            return new Commands.RateLimitHealthStatus
+            var result = new Commands.RateLimitHealthStatus
             {
                 IsHealthy = health.IsHealthy,
                 LastCheck = health.LastCheck,
@@ -313,11 +362,14 @@ public class GetRateLimitHealthStatusQueryHandler : IQueryHandler<GetRateLimitHe
                 ActiveTenants = health.ActiveTenants,
                 Issues = health.Issues.ToList()
             };
+
+            LogQuerySuccess(_logger, context, 
+                new { IsHealthy = result.IsHealthy, ActiveTenants = result.ActiveTenants, IssueCount = result.Issues.Count }, correlationId);
+            return result;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting rate limiting health status");
-            throw;
+            return HandleQueryError<RateLimitHealthStatus>(_logger, ex, context, correlationId);
         }
     }
 }
