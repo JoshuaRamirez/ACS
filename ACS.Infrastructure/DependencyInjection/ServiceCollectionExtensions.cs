@@ -14,6 +14,7 @@ using ACS.Infrastructure.Services;
 // ACS.Service references moved to avoid circular dependencies
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
@@ -222,8 +223,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<CommandTranslationService>();
         
         
-        // In-memory entity graph (singleton for true LMAX pattern)
-        services.AddSingleton<InMemoryEntityGraph>();
+        // In-memory entity graph (scoped to match DbContext scope)
+        services.AddScoped<InMemoryEntityGraph>();
         
         // Normalizer orchestration
         services.AddScoped<INormalizerOrchestrationService, NormalizerOrchestrationService>();
@@ -254,7 +255,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IGrpcStreamingService, GrpcStreamingService>();
         services.AddSingleton<IGrpcErrorHandler, GrpcErrorHandler>();
         
-        // TODO: Background service types not found - may be in ACS.Service or missing
+        // Background service types (commented out to avoid circular dependency)
         // services.AddSingleton<TenantRingBuffer>();
         // services.AddSingleton<EventPersistenceService>();
         // services.AddSingleton<DeadLetterQueueService>();
@@ -535,66 +536,98 @@ public static class ServiceRegistrationValidator
     }
 
     /// <summary>
-    /// Register comprehensive caching services
+    /// Register comprehensive production-ready caching services with multi-level architecture,
+    /// circuit breakers, invalidation, monitoring, and warming strategies
     /// </summary>
     public static IServiceCollection AddAcsCaching(
         this IServiceCollection services,
         IConfiguration configuration)
     {
-        // Cache strategy
+        // Core cache strategy
         services.AddSingleton<ICacheStrategy, DefaultCacheStrategy>();
         
-        // Multi-level cache
-        services.AddSingleton<IMultiLevelCache, MultiLevelCache>();
+        // Register distributed cache providers based on configuration
+        RegisterDistributedCacheProviders(services, configuration);
         
-        // Cache-aside service
+        // Three-level cache architecture (L1: Memory, L2: Redis, L3: SQL Server)
+        services.AddSingleton<IThreeLevelCache, ThreeLevelCache>();
+        services.AddSingleton<IMultiLevelCache>(provider => provider.GetRequiredService<IThreeLevelCache>());
+        
+        // Cache-aside service with advanced patterns
         services.AddScoped<ICacheAsideService, CacheAsideService>();
         
-        // TODO: CacheInvalidationService implementation not found in Infrastructure.Caching
-        // services.AddScoped<ICacheInvalidationService, Caching.CacheInvalidationService>();
+        // Cache invalidation service with cross-cache consistency
+        services.AddSingleton<ICacheInvalidationService, CacheInvalidationService>();
+        services.AddHostedService(provider => (CacheInvalidationService)provider.GetRequiredService<ICacheInvalidationService>());
         
-        // Add Redis distributed cache if configured
+        // Circuit breaker service for cache provider failover
+        services.AddSingleton<CacheCircuitBreakerService>();
+        
+        // Performance monitoring and health checks
+        services.AddSingleton<CachePerformanceMonitor>();
+        services.AddHostedService(provider => provider.GetRequiredService<CachePerformanceMonitor>());
+        
+        // Add cache health checks to existing health checks
+        try
+        {
+            services.AddHealthChecks()
+                .AddCheck<CachePerformanceMonitor>("cache_performance");
+        }
+        catch
+        {
+            // Health checks may not be configured, ignore
+        }
+        
+        // Cache warming service with predictive patterns
+        if (configuration.GetValue<bool>("CacheWarmup:Enabled", true))
+        {
+            services.AddHostedService<CacheWarmupService>();
+        }
+        
+        return services;
+    }
+    
+    /// <summary>
+    /// Register distributed cache providers (Redis and SQL Server) based on configuration
+    /// </summary>
+    private static void RegisterDistributedCacheProviders(IServiceCollection services, IConfiguration configuration)
+    {
+        var cacheStrategy = configuration.GetValue<string>("Caching:Strategy", "Auto");
         var redisConnectionString = configuration.GetConnectionString("Redis");
+        var sqlConnectionString = configuration.GetConnectionString("DefaultConnection");
+        
+        // Always add memory cache as L1
+        services.AddMemoryCache();
+        
+        // Register Redis cache (L2) if available
         if (!string.IsNullOrEmpty(redisConnectionString))
         {
-            // TODO: AddStackExchangeRedisCache requires Microsoft.Extensions.Caching.StackExchangeRedis package
-            services.AddDistributedMemoryCache(); // Fallback to in-memory cache
-            /*
-            services.AddStackExchangeRedisCache(options =>
+            services.AddSingleton<RedisCache>();
+            
+            // Register as primary distributed cache if strategy allows
+            if (cacheStrategy == "Auto" || cacheStrategy == "Redis")
             {
-                options.Configuration = redisConnectionString;
-                options.InstanceName = configuration.GetValue<string>("Redis:InstanceName", "ACS");
-            });
-            */
-        }
-        else
-        {
-            // Use SQL Server distributed cache as fallback
-            var sqlConnectionString = configuration.GetConnectionString("DefaultConnection");
-            if (!string.IsNullOrEmpty(sqlConnectionString))
-            {
-                // TODO: AddSqlServerCache requires Microsoft.Extensions.Caching.SqlServer package
-                services.AddDistributedMemoryCache(); // Fallback to in-memory cache
-                /*
-                services.AddSqlServerCache(options =>
-                {
-                    options.ConnectionString = sqlConnectionString;
-                    options.SchemaName = "dbo";
-                    options.TableName = "DataCache";
-                    options.DefaultSlidingExpiration = TimeSpan.FromMinutes(20);
-                });
-                */
+                services.AddSingleton<IDistributedCache>(provider => provider.GetRequiredService<RedisCache>());
             }
         }
         
-        // Cached service decorators (manually configure)
-        // Note: In production, consider using Scrutor package for automatic decoration
-        // For now, services will need to explicitly inject ICacheAsideService for caching
+        // Register SQL Server cache (L3) if available
+        if (!string.IsNullOrEmpty(sqlConnectionString))
+        {
+            services.AddSingleton<SqlServerCache>();
+            
+            // Register as fallback distributed cache if Redis is not available
+            if (string.IsNullOrEmpty(redisConnectionString) && (cacheStrategy == "Auto" || cacheStrategy == "SqlServer"))
+            {
+                services.AddSingleton<IDistributedCache>(provider => provider.GetRequiredService<SqlServerCache>());
+            }
+        }
         
-        // Legacy cache services for backward compatibility
-        // services.AddScoped<ACS.Service.Caching.IEntityCache, ACS.Service.Caching.MemoryEntityCache>(); // Moved to ACS.Service
-        
-        return services;
+        // Fallback to distributed memory cache if no external caches are configured
+        if (string.IsNullOrEmpty(redisConnectionString) && string.IsNullOrEmpty(sqlConnectionString))
+        {
+            services.AddDistributedMemoryCache();
+        }
     }
 
     /// <summary>

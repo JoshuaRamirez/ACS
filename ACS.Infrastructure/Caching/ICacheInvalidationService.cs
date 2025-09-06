@@ -44,4 +44,8 @@ public interface ICacheInvalidationService
     /// Publishes cache invalidation event to other processes/servers
     /// </summary>
     Task PublishInvalidationEventAsync(CacheInvalidationEvent invalidationEvent, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Gets cache invalidation statistics
+    /// </summary>
+    Task<Dictionary<string, long>> GetStatisticsAsync();
 }

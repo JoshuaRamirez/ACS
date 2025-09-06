@@ -39,11 +39,7 @@ WORKDIR /app
 COPY --from=publish /app/publish .
 
 # Create directories for logs
-RUN mkdir -p /app/logs
-
-# Set permissions
-RUN chown -R app:app /app
-USER app
+# Create non-root user for securityRUN addgroup --system --gid 1001 appgroup     && adduser --system --uid 1001 --gid 1001 --disabled-password --home /app --shell /sbin/nologin app# Create directories for logs and set permissionsRUN mkdir -p /app/logs     && chown -R app:appgroup /app# Switch to non-root userUSER app
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \

@@ -1,4 +1,5 @@
 using Microsoft.Data.SqlClient;
+using ACS.Service.Security;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
@@ -664,7 +665,9 @@ public class MigrationValidationService : IMigrationValidationService
         using var connection = new SqlConnection(masterBuilder.ConnectionString);
         connection.Open();
 
-        var sql = $"CREATE DATABASE [{dbName}]";
+        // SECURITY FIX: Validate database name to prevent SQL injection
+        var safeDatabaseName = SqlSecurityUtil.ValidateAndEscapeDatabaseName(dbName);
+        var sql = $"CREATE DATABASE {safeDatabaseName}";
         using var command = new SqlCommand(sql, connection);
         command.ExecuteNonQuery();
 
@@ -683,11 +686,14 @@ public class MigrationValidationService : IMigrationValidationService
             using var connection = new SqlConnection(builder.ConnectionString);
             connection.Open();
 
-            var sql = $@"
-                ALTER DATABASE [{dbName}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
-                DROP DATABASE [{dbName}];";
+            // SECURITY FIX: Validate database name to prevent SQL injection
+            var safeDatabaseName = SqlSecurityUtil.ValidateAndEscapeDatabaseName(dbName);
+            var sqlCommand = $@"
+                ALTER DATABASE {safeDatabaseName} SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
+                DROP DATABASE {safeDatabaseName};
+            ";
                 
-            using var command = new SqlCommand(sql, connection);
+            using var command = new SqlCommand(sqlCommand, connection);
             command.ExecuteNonQuery();
         }
         catch (Exception ex)

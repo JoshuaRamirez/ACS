@@ -1,0 +1,215 @@
+# ==============================================================================
+# Kubernetes Autoscaling Resources for ACS Application
+# ==============================================================================
+
+# Horizontal Pod Autoscaler for WebApi
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: acs-webapi-hpa
+  labels:
+    app: acs-webapi
+    component: autoscaling
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: acs-webapi
+  minReplicas: 3
+  maxReplicas: 20
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+  - type: Pods
+    pods:
+      metric:
+        name: http_requests_per_second
+      target:
+        type: AverageValue
+        averageValue: "100"
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 10
+        periodSeconds: 60
+      - type: Pods
+        value: 2
+        periodSeconds: 60
+      selectPolicy: Min
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+      - type: Percent
+        value: 50
+        periodSeconds: 60
+      - type: Pods
+        value: 4
+        periodSeconds: 60
+      selectPolicy: Max
+
+---
+# Horizontal Pod Autoscaler for VerticalHost Template
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: acs-verticalhost-hpa-TENANT_ID
+  labels:
+    app: acs-verticalhost
+    component: autoscaling
+    tenant: TENANT_ID
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: acs-verticalhost-TENANT_ID
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 75
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 85
+  - type: Pods
+    pods:
+      metric:
+        name: grpc_requests_per_second
+      target:
+        type: AverageValue
+        averageValue: "50"
+  - type: Pods
+    pods:
+      metric:
+        name: command_buffer_usage_percent
+      target:
+        type: AverageValue
+        averageValue: "70"
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 600  # Longer stabilization for VerticalHost
+      policies:
+      - type: Percent
+        value: 25
+        periodSeconds: 120
+      - type: Pods
+        value: 1
+        periodSeconds: 120
+      selectPolicy: Min
+    scaleUp:
+      stabilizationWindowSeconds: 120
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 120
+      - type: Pods
+        value: 2
+        periodSeconds: 120
+      selectPolicy: Max
+
+---
+# Vertical Pod Autoscaler for WebApi (if VPA is available)
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: acs-webapi-vpa
+  labels:
+    app: acs-webapi
+    component: autoscaling
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: acs-webapi
+  updatePolicy:
+    updateMode: "Auto"
+    minReplicas: 3
+  resourcePolicy:
+    containerPolicies:
+    - containerName: webapi
+      minAllowed:
+        cpu: 100m
+        memory: 256Mi
+      maxAllowed:
+        cpu: 2000m
+        memory: 2Gi
+      controlledResources: ["cpu", "memory"]
+
+---
+# Vertical Pod Autoscaler for VerticalHost Template
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: acs-verticalhost-vpa-TENANT_ID
+  labels:
+    app: acs-verticalhost
+    component: autoscaling
+    tenant: TENANT_ID
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: acs-verticalhost-TENANT_ID
+  updatePolicy:
+    updateMode: "Off"  # Start with recommendations only
+    minReplicas: 2
+  resourcePolicy:
+    containerPolicies:
+    - containerName: verticalhost
+      minAllowed:
+        cpu: 250m
+        memory: 512Mi
+      maxAllowed:
+        cpu: 3000m
+        memory: 4Gi
+      controlledResources: ["cpu", "memory"]
+
+---
+# Pod Disruption Budget for WebApi
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: acs-webapi-pdb
+  labels:
+    app: acs-webapi
+    component: availability
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: acs-webapi
+
+---
+# Pod Disruption Budget for VerticalHost Template
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: acs-verticalhost-pdb-TENANT_ID
+  labels:
+    app: acs-verticalhost
+    component: availability
+    tenant: TENANT_ID
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: acs-verticalhost
+      tenant: TENANT_ID

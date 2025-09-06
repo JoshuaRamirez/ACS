@@ -1,0 +1,140 @@
+# ==============================================================================
+# Kubernetes Services for ACS Application
+# ==============================================================================
+
+# WebApi Service - HTTP Load Balancer
+apiVersion: v1
+kind: Service
+metadata:
+  name: acs-webapi
+  labels:
+    app: acs-webapi
+    component: http-proxy
+    tier: presentation
+spec:
+  type: ClusterIP
+  selector:
+    app: acs-webapi
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080
+    protocol: TCP
+  - name: https
+    port: 443
+    targetPort: 8081
+    protocol: TCP
+  sessionAffinity: None
+
+---
+# WebApi Service - External LoadBalancer (for cloud providers)
+apiVersion: v1
+kind: Service
+metadata:
+  name: acs-webapi-external
+  labels:
+    app: acs-webapi
+    component: http-proxy
+    tier: presentation
+spec:
+  type: LoadBalancer
+  selector:
+    app: acs-webapi
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080
+    protocol: TCP
+  - name: https
+    port: 443
+    targetPort: 8081
+    protocol: TCP
+  sessionAffinity: None
+  loadBalancerSourceRanges:
+  - 0.0.0.0/0
+
+---
+# VerticalHost Service Template - gRPC Internal Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: acs-verticalhost-TENANT_ID
+  labels:
+    app: acs-verticalhost
+    component: business-logic
+    tier: business
+    tenant: TENANT_ID
+spec:
+  type: ClusterIP
+  selector:
+    app: acs-verticalhost
+    tenant: TENANT_ID
+  ports:
+  - name: grpc
+    port: 50051
+    targetPort: 50051
+    protocol: TCP
+  sessionAffinity: None
+
+---
+# Headless Service for VerticalHost StatefulSet (if needed for clustering)
+apiVersion: v1
+kind: Service
+metadata:
+  name: acs-verticalhost-headless-TENANT_ID
+  labels:
+    app: acs-verticalhost
+    component: business-logic
+    tier: business
+    tenant: TENANT_ID
+spec:
+  type: ClusterIP
+  clusterIP: None
+  selector:
+    app: acs-verticalhost
+    tenant: TENANT_ID
+  ports:
+  - name: grpc
+    port: 50051
+    targetPort: 50051
+    protocol: TCP
+  sessionAffinity: None
+
+---
+# Service Monitor for Prometheus (if using Prometheus Operator)
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: acs-webapi
+  labels:
+    app: acs-webapi
+    component: http-proxy
+spec:
+  selector:
+    matchLabels:
+      app: acs-webapi
+  endpoints:
+  - port: http
+    path: /metrics
+    interval: 30s
+    scrapeTimeout: 10s
+
+---
+# Service Monitor for VerticalHost Template
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: acs-verticalhost-TENANT_ID
+  labels:
+    app: acs-verticalhost
+    tenant: TENANT_ID
+spec:
+  selector:
+    matchLabels:
+      app: acs-verticalhost
+      tenant: TENANT_ID
+  endpoints:
+  - port: grpc
+    path: /metrics
+    interval: 30s
+    scrapeTimeout: 10s

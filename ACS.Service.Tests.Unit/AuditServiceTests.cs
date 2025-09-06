@@ -11,29 +11,29 @@ namespace ACS.Service.Tests.Unit;
 [TestClass]
 public class AuditServiceTests
 {
-    private Mock<ApplicationDbContext> _mockDbContext = null!;
+    private ApplicationDbContext _dbContext = null!;
     private Mock<ILogger<AuditService>> _mockLogger = null!;
     private AuditService _auditService = null!;
-    private Mock<DbSet<AuditLog>> _mockAuditLogDbSet = null!;
 
     [TestInitialize]
     public void Setup()
     {
-        // Arrange
+        // Arrange - Use real in-memory database instead of mocking non-virtual DbContext
         var options = new DbContextOptionsBuilder<ApplicationDbContext>()
             .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
             .Options;
         
-        _mockDbContext = new Mock<ApplicationDbContext>(options);
+        _dbContext = new ApplicationDbContext(options);
         _mockLogger = new Mock<ILogger<AuditService>>();
         
-        _mockAuditLogDbSet = new Mock<DbSet<AuditLog>>();
-        
-        _mockDbContext.Setup(x => x.AuditLogs).Returns(_mockAuditLogDbSet.Object);
-        
-        _auditService = new AuditService(
-            _mockDbContext.Object,
-            _mockLogger.Object);
+        // System under test
+        _auditService = new AuditService(_dbContext, _mockLogger.Object);
+    }
+
+    [TestCleanup]
+    public void Cleanup()
+    {
+        _dbContext?.Dispose();
     }
 
     #region LogAsync Tests

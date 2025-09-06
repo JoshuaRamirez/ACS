@@ -1,0 +1,213 @@
+# ==============================================================================
+# RBAC (Role-Based Access Control) for ACS Application
+# ==============================================================================
+
+# Cluster Role for ACS WebApi
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: acs-webapi-role
+  labels:
+    app: acs-webapi
+    component: security
+rules:
+# Allow reading ConfigMaps and Secrets
+- apiGroups: [""]
+  resources: ["configmaps", "secrets"]
+  verbs: ["get", "list"]
+# Allow reading Services for service discovery
+- apiGroups: [""]
+  resources: ["services", "endpoints"]
+  verbs: ["get", "list"]
+# Allow updating own status
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list"]
+  resourceNames: []
+
+---
+# Cluster Role for ACS VerticalHost
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: acs-verticalhost-role
+  labels:
+    app: acs-verticalhost
+    component: security
+rules:
+# Allow reading ConfigMaps and Secrets
+- apiGroups: [""]
+  resources: ["configmaps", "secrets"]
+  verbs: ["get", "list"]
+# Allow reading Services for service discovery
+- apiGroups: [""]
+  resources: ["services", "endpoints"]
+  verbs: ["get", "list"]
+# Allow reading own pod information
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list"]
+# Allow creating events for logging
+- apiGroups: [""]
+  resources: ["events"]
+  verbs: ["create"]
+
+---
+# Role for monitoring access
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: acs-prod
+  name: acs-monitoring-role
+  labels:
+    app: acs
+    component: monitoring
+rules:
+# Allow reading metrics endpoints
+- apiGroups: [""]
+  resources: ["pods", "services", "endpoints"]
+  verbs: ["get", "list", "watch"]
+# Allow reading ConfigMaps for configuration
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["get", "list"]
+
+---
+# Cluster Role Binding for WebApi
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: acs-webapi-binding
+  labels:
+    app: acs-webapi
+    component: security
+subjects:
+- kind: ServiceAccount
+  name: acs-webapi
+  namespace: acs-prod
+roleRef:
+  kind: ClusterRole
+  name: acs-webapi-role
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# Cluster Role Binding for VerticalHost
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: acs-verticalhost-binding
+  labels:
+    app: acs-verticalhost
+    component: security
+subjects:
+- kind: ServiceAccount
+  name: acs-verticalhost
+  namespace: acs-prod
+roleRef:
+  kind: ClusterRole
+  name: acs-verticalhost-role
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# Role Binding for monitoring
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: acs-monitoring-binding
+  namespace: acs-prod
+  labels:
+    app: acs
+    component: monitoring
+subjects:
+- kind: ServiceAccount
+  name: prometheus
+  namespace: monitoring
+- kind: ServiceAccount
+  name: grafana
+  namespace: monitoring
+roleRef:
+  kind: Role
+  name: acs-monitoring-role
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# Service Account for ACS WebApi (already defined in deployment, but here for completeness)
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: acs-webapi
+  namespace: acs-prod
+  labels:
+    app: acs-webapi
+    component: security
+automountServiceAccountToken: true
+
+---
+# Service Account for ACS VerticalHost (already defined in deployment, but here for completeness)
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: acs-verticalhost
+  namespace: acs-prod
+  labels:
+    app: acs-verticalhost
+    component: security
+automountServiceAccountToken: true
+
+---
+# Restricted Cluster Role for limited access
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: acs-restricted-role
+  labels:
+    app: acs
+    component: security
+rules:
+# Only allow reading own namespace resources
+- apiGroups: [""]
+  resources: ["configmaps", "secrets"]
+  verbs: ["get"]
+  resourceNames: ["acs-config", "acs-secrets"]
+- apiGroups: [""]
+  resources: ["services"]
+  verbs: ["get"]
+  resourceNames: ["acs-webapi", "acs-verticalhost-*"]
+
+---
+# Emergency break-glass role (for debugging only)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: acs-emergency-access
+  labels:
+    app: acs
+    component: security
+    usage: emergency-only
+rules:
+# Allow reading most resources for debugging
+- apiGroups: [""]
+  resources: ["pods", "services", "configmaps", "secrets", "events", "persistentvolumeclaims"]
+  verbs: ["get", "list", "describe"]
+- apiGroups: ["apps"]
+  resources: ["deployments", "replicasets"]
+  verbs: ["get", "list", "describe"]
+- apiGroups: ["networking.k8s.io"]
+  resources: ["networkpolicies", "ingresses"]
+  verbs: ["get", "list"]
+
+---
+# Emergency access binding (to be used only during incidents)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: acs-emergency-access-binding
+  labels:
+    app: acs
+    component: security
+    usage: emergency-only
+subjects: []  # Leave empty, bind manually during emergencies
+roleRef:
+  kind: ClusterRole
+  name: acs-emergency-access
+  apiGroup: rbac.authorization.k8s.io

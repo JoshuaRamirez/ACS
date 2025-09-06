@@ -1,0 +1,165 @@
+# ==============================================================================
+# Kubernetes Deployment for ACS WebApi (HTTP Proxy Layer)
+# ==============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: acs-webapi
+  labels:
+    app: acs-webapi
+    component: http-proxy
+    tier: presentation
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: acs-webapi
+  template:
+    metadata:
+      labels:
+        app: acs-webapi
+        component: http-proxy
+        tier: presentation
+    spec:
+      serviceAccountName: acs-webapi
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: webapi
+        image: ghcr.io/your-org/acs-webapi:latest
+        imagePullPolicy: Always
+        ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+        - name: https
+          containerPort: 8081
+          protocol: TCP
+        env:
+        - name: ASPNETCORE_ENVIRONMENT
+          valueFrom:
+            configMapKeyRef:
+              name: acs-config
+              key: environment
+        - name: ASPNETCORE_HTTP_PORTS
+          value: "8080"
+        - name: ASPNETCORE_HTTPS_PORTS
+          value: "8081"
+        - name: ASPNETCORE_FORWARDEDHEADERS_ENABLED
+          value: "true"
+        - name: ConnectionStrings__Redis
+          valueFrom:
+            secretKeyRef:
+              name: acs-secrets
+              key: redis-connection-string
+        - name: Authentication__Jwt__SecretKey
+          valueFrom:
+            secretKeyRef:
+              name: acs-secrets
+              key: jwt-secret-key
+        - name: OpenTelemetry__OtlpEndpoint
+          valueFrom:
+            configMapKeyRef:
+              name: acs-config
+              key: otel-endpoint
+        - name: OpenTelemetry__ServiceName
+          value: "ACS.WebApi"
+        envFrom:
+        - configMapRef:
+            name: acs-config
+        - secretRef:
+            name: acs-secrets
+        resources:
+          limits:
+            cpu: 1000m
+            memory: 1Gi
+          requests:
+            cpu: 250m
+            memory: 512Mi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 8080
+            scheme: HTTP
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          successThreshold: 1
+          failureThreshold: 3
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 8080
+            scheme: HTTP
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 30
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1001
+          runAsGroup: 1001
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: app-logs
+          mountPath: /app/logs
+        - name: app-keys
+          mountPath: /app/keys
+          readOnly: true
+      volumes:
+      - name: tmp
+        emptyDir:
+          sizeLimit: 1Gi
+      - name: app-logs
+        emptyDir:
+          sizeLimit: 10Gi
+      - name: app-keys
+        secret:
+          secretName: acs-app-keys
+          defaultMode: 0600
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30
+      dnsPolicy: ClusterFirst
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - acs-webapi
+              topologyKey: kubernetes.io/hostname
+---
+# Service Account for WebApi
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: acs-webapi
+  labels:
+    app: acs-webapi
+    component: http-proxy

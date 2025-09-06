@@ -1,0 +1,139 @@
+# ==============================================================================
+# Kubernetes Storage Resources for ACS Application
+# ==============================================================================
+
+# Storage Class for fast SSD storage
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: acs-fast-ssd
+  labels:
+    app: acs
+    component: storage
+provisioner: kubernetes.io/azure-disk  # Change based on cloud provider
+parameters:
+  storageaccounttype: Premium_LRS
+  kind: Managed
+allowVolumeExpansion: true
+reclaimPolicy: Retain
+volumeBindingMode: WaitForFirstConsumer
+
+---
+# Storage Class for standard storage
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: acs-standard
+  labels:
+    app: acs
+    component: storage
+provisioner: kubernetes.io/azure-disk  # Change based on cloud provider
+parameters:
+  storageaccounttype: StandardSSD_LRS
+  kind: Managed
+allowVolumeExpansion: true
+reclaimPolicy: Retain
+volumeBindingMode: WaitForFirstConsumer
+
+---
+# Persistent Volume Claim for logs (per tenant)
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: acs-logs-TENANT_ID
+  labels:
+    app: acs
+    component: storage
+    tenant: TENANT_ID
+    storage-type: logs
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi
+  storageClassName: acs-standard
+
+---
+# Persistent Volume Claim for tenant data
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: acs-tenant-data-TENANT_ID
+  labels:
+    app: acs
+    component: storage
+    tenant: TENANT_ID
+    storage-type: data
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 100Gi
+  storageClassName: acs-fast-ssd
+
+---
+# Persistent Volume Claim for database backups
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: acs-database-backups
+  labels:
+    app: acs
+    component: storage
+    storage-type: backups
+spec:
+  accessModes:
+  - ReadWriteMany
+  resources:
+    requests:
+      storage: 500Gi
+  storageClassName: acs-standard
+
+---
+# Persistent Volume Claim for archives
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: acs-archives
+  labels:
+    app: acs
+    component: storage
+    storage-type: archives
+spec:
+  accessModes:
+  - ReadWriteMany
+  resources:
+    requests:
+      storage: 1Ti
+  storageClassName: acs-standard
+
+---
+# Redis Persistent Volume Claim
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: redis-data
+  labels:
+    app: redis
+    component: cache
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 50Gi
+  storageClassName: acs-fast-ssd
+
+---
+# Volume Snapshot Class for backups
+apiVersion: snapshot.storage.k8s.io/v1
+kind: VolumeSnapshotClass
+metadata:
+  name: acs-snapshot-class
+  labels:
+    app: acs
+    component: backup
+driver: disk.csi.azure.com  # Change based on cloud provider
+deletionPolicy: Retain

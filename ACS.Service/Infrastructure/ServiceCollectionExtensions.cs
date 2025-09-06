@@ -90,6 +90,11 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IAuthenticationService, AuthenticationService>();
         services.AddScoped<IPasswordHashService, PasswordHashService>();
         
+        // Infrastructure database services
+        services.AddScoped<IDatabaseBackupService, DatabaseBackupService>();
+        services.AddScoped<IIndexAnalyzer, ACS.Service.Data.IndexAnalyzer>();
+        services.AddScoped<IMigrationValidationService, MigrationValidationService>();
+        
         return services;
     }
 
@@ -98,11 +103,29 @@ public static class ServiceCollectionExtensions
     /// </summary>
     public static IServiceCollection AddServiceInfrastructure(this IServiceCollection services)
     {
-        // In-memory entity graph (singleton for true LMAX pattern)
-        services.AddSingleton<InMemoryEntityGraph>();
+        // In-memory entity graph (scoped to match DbContext scope)
+        services.AddScoped<InMemoryEntityGraph>();
         
         // Command processing infrastructure
         services.AddScoped<ICommandProcessingService, CommandProcessingService>();
+        
+        // Unit of Work pattern
+        services.AddScoped<IUnitOfWork, UnitOfWork>();
+        
+        // Tenant configuration services
+        services.AddSingleton<ITenantConfigurationProvider, TenantConfigurationProvider>();
+        services.AddSingleton(provider => 
+        {
+            // Create default tenant configuration for testing
+            return new TenantConfiguration 
+            { 
+                TenantId = "default", 
+                DatabaseConnectionString = "Server=localhost;Database=ACS_Default;Trusted_Connection=true;",
+                DisplayName = "Default Tenant",
+                CreatedAt = DateTime.UtcNow,
+                IsActive = true 
+            };
+        });
         
         // Hosted services for background processing
         services.AddHostedService<TenantAccessControlHostedService>();

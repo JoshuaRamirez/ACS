@@ -1,0 +1,191 @@
+# ==============================================================================
+# Kustomization Production Overlay for ACS
+# ==============================================================================
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+metadata:
+  name: acs-production
+  annotations:
+    config.kubernetes.io/local-config: "true"
+
+# Reference to base configuration
+resources:
+  - ../../base
+  - tenant1-resources.yaml
+  - tenant2-resources.yaml
+  - monitoring.yaml
+  - network-policies.yaml
+
+# Production-specific labels
+commonLabels:
+  environment: production
+  tier: production
+
+# Production-specific annotations
+commonAnnotations:
+  deployment.kubernetes.io/revision: "1"
+  config.kubernetes.io/origin: |
+    path: Infrastructure/Kubernetes/overlays/production
+    repo: https://github.com/your-org/acs
+    environment: production
+
+# Namespace override for production
+namespace: acs-prod
+
+# Production images with specific tags
+images:
+  - name: ghcr.io/your-org/acs-webapi
+    newTag: v1.0.0
+  - name: ghcr.io/your-org/acs-verticalhost
+    newTag: v1.0.0
+
+# Production configuration
+configMapGenerator:
+  - name: acs-config
+    behavior: merge
+    literals:
+      - environment=Production
+      - cors-origins=https://app.company.com,https://admin.company.com
+      - jwt-expiration-hours=8
+      - otel-endpoint=http://otel-collector.monitoring.svc.cluster.local:4317
+      - backup-path=/mnt/backups/acs-prod
+      - archive-path=/mnt/archives/acs-prod
+      - compliance-email=compliance@company.com
+      - logging-loglevel-default=Warning
+      - logging-loglevel-acs=Information
+
+# Production-specific patches
+patches:
+  # Scale up WebApi for production load
+  - target:
+      kind: Deployment
+      name: acs-webapi
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 5
+
+  # Production resource limits for WebApi
+  - target:
+      kind: Deployment
+      name: acs-webapi
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/cpu
+        value: "2000m"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/memory
+        value: "2Gi"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/cpu
+        value: "500m"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/memory
+        value: "1Gi"
+
+  # Production HPA settings for WebApi
+  - target:
+      kind: HorizontalPodAutoscaler
+      name: acs-webapi-hpa
+    patch: |-
+      - op: replace
+        path: /spec/minReplicas
+        value: 5
+      - op: replace
+        path: /spec/maxReplicas
+        value: 50
+
+  # Add production-specific environment variables
+  - target:
+      kind: Deployment
+      name: acs-webapi
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          name: ASPNETCORE_ENVIRONMENT
+          value: "Production"
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          name: DOTNET_GCServer
+          value: "1"
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          name: DOTNET_gcConcurrent
+          value: "1"
+
+  # Add node affinity for production workloads
+  - target:
+      kind: Deployment
+      name: acs-webapi
+    patch: |-
+      - op: add
+        path: /spec/template/spec/affinity/nodeAffinity
+        value:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            preference:
+              matchExpressions:
+              - key: workload-type
+                operator: In
+                values:
+                - production
+              - key: node-type
+                operator: In
+                values:
+                - compute-optimized
+
+  # Production security context
+  - target:
+      kind: Deployment
+      name: acs-webapi
+    patch: |-
+      - op: add
+        path: /spec/template/spec/securityContext/seccompProfile
+        value:
+          type: RuntimeDefault
+      - op: add
+        path: /spec/template/spec/containers/0/securityContext/allowPrivilegeEscalation
+        value: false
+      - op: add
+        path: /spec/template/spec/containers/0/securityContext/readOnlyRootFilesystem
+        value: true
+
+# Replica transformations for production scaling
+replicas:
+  - name: acs-webapi
+    count: 5
+
+# Strategic merge patches for complex configurations
+patchesStrategicMerge:
+  - webapi-production-patch.yaml
+  - verticalhost-production-patch.yaml
+
+# JSON 6902 patches for precise modifications
+patchesJson6902:
+  - target:
+      version: v1
+      kind: Service
+      name: acs-webapi-external
+    patch: |-
+      - op: add
+        path: /metadata/annotations
+        value:
+          service.beta.kubernetes.io/azure-load-balancer-internal: "false"
+          service.beta.kubernetes.io/azure-load-balancer-health-probe-request-path: "/health"
+
+# Variable substitutions for production
+replacements:
+  - source:
+      kind: ConfigMap
+      name: acs-config
+      fieldPath: data.environment
+    targets:
+      - select:
+          kind: Deployment
+        fieldPaths:
+          - spec.template.spec.containers.[name=webapi].env.[name=ASPNETCORE_ENVIRONMENT].value
+          - spec.template.spec.containers.[name=verticalhost].env.[name=ASPNETCORE_ENVIRONMENT].value

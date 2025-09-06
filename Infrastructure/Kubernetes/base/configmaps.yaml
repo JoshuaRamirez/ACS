@@ -1,0 +1,203 @@
+# ==============================================================================
+# Kubernetes ConfigMaps for ACS Application
+# ==============================================================================
+
+# Base Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: acs-config
+  labels:
+    app: acs
+    component: configuration
+data:
+  environment: "production"
+  otel-endpoint: "http://otel-collector:4317"
+  cors-origins: "https://app.company.com"
+  jwt-issuer: "ACS.WebApi"
+  jwt-audience: "ACS.VerticalHost"
+  jwt-expiration-hours: "8"
+  redis-database: "0"
+  smtp-host: "smtp.company.com"
+  smtp-port: "587"
+  smtp-from: "noreply@company.com"
+  backup-path: "/mnt/backups/acs"
+  archive-path: "/mnt/archives/acs"
+  compliance-email: "compliance@company.com"
+  # Application settings
+  aspnetcore-forwardedheaders-enabled: "true"
+  logging-loglevel-default: "Warning"
+  logging-loglevel-acs: "Information"
+  # Performance settings
+  dotnet-gcserver: "1"
+  dotnet-gcconcurrent: "1"
+  dotnet-gcretainvm: "1"
+
+---
+# Tenant-specific Configuration Template
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: acs-config-TENANT_ID
+  labels:
+    app: acs
+    component: configuration
+    tenant: TENANT_ID
+data:
+  tenant-id: "TENANT_ID"
+  grpc-port: "50051"
+  # Tenant-specific performance settings
+  max-concurrent-commands: "50"
+  command-timeout-seconds: "60"
+  query-timeout-seconds: "30"
+  cache-size: "1000"
+  enable-preloading: "true"
+  # Tenant-specific rate limiting
+  commands-per-second: "100"
+  burst-size: "200"
+  queue-size: "1000"
+  # Tenant-specific encryption settings
+  key-rotation-interval-days: "90"
+  enable-field-level-encryption: "true"
+  enable-database-level-encryption: "true"
+  encryption-algorithm: "AES-256-GCM"
+
+---
+# Redis Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-config
+  labels:
+    app: redis
+    component: cache
+data:
+  redis.conf: |
+    # Redis Configuration for ACS
+    bind 0.0.0.0
+    port 6379
+    timeout 0
+    tcp-keepalive 300
+    
+    # Memory management
+    maxmemory 2gb
+    maxmemory-policy allkeys-lru
+    
+    # Persistence
+    save 900 1
+    save 300 10
+    save 60 10000
+    
+    # Security
+    protected-mode yes
+    requirepass changeme
+    
+    # Logging
+    loglevel notice
+    logfile ""
+    
+    # Client output buffer limits
+    client-output-buffer-limit normal 0 0 0
+    client-output-buffer-limit replica 256mb 64mb 60
+    client-output-buffer-limit pubsub 32mb 8mb 60
+    
+    # Slow log
+    slowlog-log-slower-than 10000
+    slowlog-max-len 128
+
+---
+# Nginx Configuration for Load Balancing
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-config
+  labels:
+    app: nginx
+    component: load-balancer
+data:
+  nginx.conf: |
+    user nginx;
+    worker_processes auto;
+    error_log /var/log/nginx/error.log warn;
+    pid /var/run/nginx.pid;
+    
+    events {
+        worker_connections 1024;
+        use epoll;
+        multi_accept on;
+    }
+    
+    http {
+        include /etc/nginx/mime.types;
+        default_type application/octet-stream;
+        
+        log_format main '$remote_addr - $remote_user [$time_local] "$request" '
+                        '$status $body_bytes_sent "$http_referer" '
+                        '"$http_user_agent" "$http_x_forwarded_for"';
+        
+        access_log /var/log/nginx/access.log main;
+        
+        sendfile on;
+        tcp_nopush on;
+        tcp_nodelay on;
+        keepalive_timeout 65;
+        types_hash_max_size 2048;
+        
+        # Gzip compression
+        gzip on;
+        gzip_vary on;
+        gzip_min_length 10240;
+        gzip_proxied expired no-cache no-store private must-revalidate;
+        gzip_types text/plain text/css text/xml text/javascript
+                   application/x-javascript application/xml+rss;
+        
+        # Rate limiting
+        limit_req_zone $binary_remote_addr zone=api:10m rate=10r/s;
+        limit_req_zone $binary_remote_addr zone=login:10m rate=1r/s;
+        
+        upstream acs_webapi {
+            least_conn;
+            server acs-webapi:80 max_fails=3 fail_timeout=30s;
+            keepalive 32;
+        }
+        
+        server {
+            listen 80;
+            server_name _;
+            
+            # Security headers
+            add_header X-Frame-Options DENY;
+            add_header X-Content-Type-Options nosniff;
+            add_header X-XSS-Protection "1; mode=block";
+            add_header Strict-Transport-Security "max-age=31536000; includeSubDomains";
+            
+            # Rate limiting
+            limit_req zone=api burst=20 nodelay;
+            
+            location /api/auth/login {
+                limit_req zone=login burst=5 nodelay;
+                proxy_pass http://acs_webapi;
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto $scheme;
+            }
+            
+            location / {
+                proxy_pass http://acs_webapi;
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto $scheme;
+                proxy_connect_timeout 30s;
+                proxy_send_timeout 30s;
+                proxy_read_timeout 30s;
+            }
+            
+            location /health {
+                access_log off;
+                proxy_pass http://acs_webapi;
+                proxy_set_header Host $host;
+            }
+        }
+    }

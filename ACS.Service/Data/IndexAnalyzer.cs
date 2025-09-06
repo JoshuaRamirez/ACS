@@ -4,6 +4,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using System.Data;
 using System.Text;
+using ACS.Service.Security;
 
 namespace ACS.Service.Data;
 
@@ -260,11 +261,16 @@ public class IndexAnalyzer : IIndexAnalyzer
     {
         try
         {
-            var sql = $"ALTER INDEX [{indexName}] ON [{tableName}] REBUILD WITH (ONLINE = ON, FILLFACTOR = 90)";
+            var sql = SqlSecurityUtil.CreateSecureAlterIndexCommand(indexName, tableName, "REBUILD", new Dictionary<string, object> { ["ONLINE"] = true, ["FILLFACTOR"] = 90 });
             await _dbContext.Database.ExecuteSqlRawAsync(sql, cancellationToken);
             
             _logger.LogInformation("Successfully rebuilt index {IndexName} on table {TableName}", indexName, tableName);
             return true;
+        }
+        catch (ArgumentException ex)
+        {
+            _logger.LogError(ex, "Invalid index or table name provided: {IndexName}, {TableName}", indexName, tableName);
+            return false;
         }
         catch (Exception ex)
         {
@@ -277,11 +283,16 @@ public class IndexAnalyzer : IIndexAnalyzer
     {
         try
         {
-            var sql = $"ALTER INDEX [{indexName}] ON [{tableName}] REORGANIZE";
+            var sql = SqlSecurityUtil.CreateSecureAlterIndexCommand(indexName, tableName, "REORGANIZE");
             await _dbContext.Database.ExecuteSqlRawAsync(sql, cancellationToken);
             
             _logger.LogInformation("Successfully reorganized index {IndexName} on table {TableName}", indexName, tableName);
             return true;
+        }
+        catch (ArgumentException ex)
+        {
+            _logger.LogError(ex, "Invalid index or table name provided: {IndexName}, {TableName}", indexName, tableName);
+            return false;
         }
         catch (Exception ex)
         {

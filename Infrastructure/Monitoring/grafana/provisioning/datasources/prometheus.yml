@@ -1,0 +1,107 @@
+# ==============================================================================
+# Grafana Datasource Configuration for ACS
+# ==============================================================================
+
+apiVersion: 1
+
+# List of datasources to insert/update depending on what's available in the database
+datasources:
+  # Prometheus datasource for metrics
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: true
+    jsonData:
+      timeInterval: 30s
+      queryTimeout: 60s
+      httpMethod: POST
+      manageAlerts: true
+      prometheusType: Prometheus
+      prometheusVersion: 2.45.0
+      cacheLevel: 'High'
+      incrementalQuerying: true
+      exemplarTraceIdDestinations:
+        - name: trace_id
+          datasourceUid: jaeger
+
+  # Jaeger datasource for traces
+  - name: Jaeger
+    type: jaeger
+    uid: jaeger
+    access: proxy
+    url: http://jaeger:16686
+    editable: true
+    jsonData:
+      tracesToLogs:
+        datasourceUid: loki
+        tags: ['job', 'instance', 'pod', 'namespace']
+        mappedTags:
+          - key: service.name
+            value: service
+        mapTagNamesEnabled: false
+        spanStartTimeShift: 1h
+        spanEndTimeShift: -1h
+        filterByTraceID: false
+        filterBySpanID: false
+      tracesToMetrics:
+        datasourceUid: prometheus
+        tags:
+          - key: service.name
+            value: service
+          - key: job
+        queries:
+          - name: 'Sample query'
+            query: 'sum(rate(traces_spanmetrics_latency_bucket{$$__tags}[5m]))'
+      nodeGraph:
+        enabled: true
+
+  # Loki datasource for logs (if available)
+  - name: Loki
+    type: loki
+    uid: loki
+    access: proxy
+    url: http://loki:3100
+    editable: true
+    jsonData:
+      maxLines: 1000
+      derivedFields:
+        - datasourceUid: jaeger
+          matcherRegex: 'trace_id=(\w+)'
+          name: TraceID
+          url: '$${__value.raw}'
+
+  # Azure Monitor datasource (if using Azure)
+  - name: Azure Monitor
+    type: grafana-azure-monitor-datasource
+    access: proxy
+    jsonData:
+      cloudName: azuremonitor
+      tenantId: '${AZURE_TENANT_ID}'
+      clientId: '${AZURE_CLIENT_ID}'
+      subscriptionId: '${AZURE_SUBSCRIPTION_ID}'
+      resourceGroup: '${AZURE_RESOURCE_GROUP}'
+      logAnalyticsWorkspaceId: '${AZURE_LOG_ANALYTICS_WORKSPACE_ID}'
+    secureJsonData:
+      clientSecret: '${AZURE_CLIENT_SECRET}'
+
+  # Application Insights datasource (if using Azure)
+  - name: Application Insights
+    type: grafana-azure-monitor-datasource
+    access: proxy
+    jsonData:
+      cloudName: azuremonitor
+      tenantId: '${AZURE_TENANT_ID}'
+      clientId: '${AZURE_CLIENT_ID}'
+      appInsightsAppId: '${APPLICATION_INSIGHTS_APP_ID}'
+    secureJsonData:
+      clientSecret: '${AZURE_CLIENT_SECRET}'
+      appInsightsApiKey: '${APPLICATION_INSIGHTS_API_KEY}'
+
+  # TestData datasource for development
+  - name: TestData
+    type: testdata
+    access: proxy
+    isDefault: false
+    editable: false

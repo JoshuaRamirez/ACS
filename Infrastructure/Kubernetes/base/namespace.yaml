@@ -1,0 +1,45 @@
+# ==============================================================================
+# Kubernetes Namespace for ACS Application
+# ==============================================================================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: acs-system
+  labels:
+    name: acs-system
+    component: access-control-system
+    environment: base
+    managed-by: kustomize
+---
+# Development namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: acs-dev
+  labels:
+    name: acs-dev
+    component: access-control-system
+    environment: development
+    managed-by: kustomize
+---
+# Staging namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: acs-staging
+  labels:
+    name: acs-staging
+    component: access-control-system
+    environment: staging
+    managed-by: kustomize
+---
+# Production namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: acs-prod
+  labels:
+    name: acs-prod
+    component: access-control-system
+    environment: production
+    managed-by: kustomize

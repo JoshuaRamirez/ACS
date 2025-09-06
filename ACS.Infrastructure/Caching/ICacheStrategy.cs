@@ -47,7 +47,8 @@ public enum CacheType
     AuditLog,
     Session,
     Configuration,
-    Metadata
+    Metadata,
+    All
 }
 
 /// <summary>

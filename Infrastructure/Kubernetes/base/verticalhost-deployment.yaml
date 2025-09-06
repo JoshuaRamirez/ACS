@@ -1,0 +1,204 @@
+# ==============================================================================
+# Kubernetes Deployment for ACS VerticalHost (Business Logic Layer)
+# Template for tenant-specific deployments
+# ==============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: acs-verticalhost-TENANT_ID
+  labels:
+    app: acs-verticalhost
+    component: business-logic
+    tier: business
+    tenant: TENANT_ID
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: acs-verticalhost
+      tenant: TENANT_ID
+  template:
+    metadata:
+      labels:
+        app: acs-verticalhost
+        component: business-logic
+        tier: business
+        tenant: TENANT_ID
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "50051"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: acs-verticalhost
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: verticalhost
+        image: ghcr.io/your-org/acs-verticalhost:latest
+        imagePullPolicy: Always
+        ports:
+        - name: grpc
+          containerPort: 50051
+          protocol: TCP
+        env:
+        - name: ASPNETCORE_ENVIRONMENT
+          valueFrom:
+            configMapKeyRef:
+              name: acs-config
+              key: environment
+        - name: TENANT_ID
+          value: "TENANT_ID"
+        - name: BASE_CONNECTION_STRING
+          valueFrom:
+            secretKeyRef:
+              name: acs-secrets-TENANT_ID
+              key: database-connection-string
+        - name: GRPC_PORT
+          value: "50051"
+        - name: OpenTelemetry__OtlpEndpoint
+          valueFrom:
+            configMapKeyRef:
+              name: acs-config
+              key: otel-endpoint
+        - name: OpenTelemetry__ServiceName
+          value: "ACS.VerticalHost.TENANT_ID"
+        - name: Authentication__Jwt__SecretKey
+          valueFrom:
+            secretKeyRef:
+              name: acs-secrets
+              key: jwt-secret-key
+        - name: Encryption__MasterKey
+          valueFrom:
+            secretKeyRef:
+              name: acs-secrets-TENANT_ID
+              key: encryption-master-key
+        - name: DOTNET_GCServer
+          value: "1"
+        - name: DOTNET_gcConcurrent
+          value: "1"
+        - name: DOTNET_GCRetainVM
+          value: "1"
+        envFrom:
+        - configMapRef:
+            name: acs-config
+        - configMapRef:
+            name: acs-config-TENANT_ID
+        - secretRef:
+            name: acs-secrets-TENANT_ID
+        resources:
+          limits:
+            cpu: 1500m
+            memory: 2Gi
+          requests:
+            cpu: 500m
+            memory: 1Gi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 50051
+            scheme: HTTP
+          initialDelaySeconds: 60
+          periodSeconds: 15
+          timeoutSeconds: 10
+          successThreshold: 1
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 50051
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 3
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 50051
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 15
+          timeoutSeconds: 10
+          successThreshold: 1
+          failureThreshold: 20
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1001
+          runAsGroup: 1001
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: app-logs
+          mountPath: /app/logs
+        - name: app-keys
+          mountPath: /app/keys
+          readOnly: true
+        - name: tenant-data
+          mountPath: /app/tenant-data
+        - name: app-temp
+          mountPath: /app/temp
+      volumes:
+      - name: tmp
+        emptyDir:
+          sizeLimit: 1Gi
+      - name: app-logs
+        persistentVolumeClaim:
+          claimName: acs-logs-TENANT_ID
+      - name: app-keys
+        secret:
+          secretName: acs-app-keys-TENANT_ID
+          defaultMode: 0600
+      - name: tenant-data
+        persistentVolumeClaim:
+          claimName: acs-tenant-data-TENANT_ID
+      - name: app-temp
+        emptyDir:
+          sizeLimit: 5Gi
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 60
+      dnsPolicy: ClusterFirst
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - acs-verticalhost
+                - key: tenant
+                  operator: In
+                  values:
+                  - TENANT_ID
+              topologyKey: kubernetes.io/hostname
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            preference:
+              matchExpressions:
+              - key: workload-type
+                operator: In
+                values:
+                - compute
+---
+# Service Account for VerticalHost
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: acs-verticalhost
+  labels:
+    app: acs-verticalhost
+    component: business-logic

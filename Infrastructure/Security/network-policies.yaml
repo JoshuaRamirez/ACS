@@ -1,0 +1,268 @@
+# ==============================================================================
+# Kubernetes Network Policies for ACS Application Security
+# ==============================================================================
+
+# Default deny all ingress traffic
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: acs-prod
+  labels:
+    app: acs
+    component: security
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+
+---
+# Default deny all egress traffic (except DNS)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-egress
+  namespace: acs-prod
+  labels:
+    app: acs
+    component: security
+spec:
+  podSelector: {}
+  policyTypes:
+  - Egress
+  egress:
+  # Allow DNS resolution
+  - to: []
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+
+---
+# Allow WebApi ingress from load balancer
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: webapi-ingress
+  namespace: acs-prod
+  labels:
+    app: acs-webapi
+    component: security
+spec:
+  podSelector:
+    matchLabels:
+      app: acs-webapi
+  policyTypes:
+  - Ingress
+  ingress:
+  # Allow ingress from load balancer
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 8080
+    - protocol: TCP
+      port: 8081
+  # Allow health checks from Kubernetes
+  - from: []
+    ports:
+    - protocol: TCP
+      port: 8080
+      
+---
+# Allow WebApi egress to VerticalHost
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: webapi-egress
+  namespace: acs-prod
+  labels:
+    app: acs-webapi
+    component: security
+spec:
+  podSelector:
+    matchLabels:
+      app: acs-webapi
+  policyTypes:
+  - Egress
+  egress:
+  # Allow DNS
+  - to: []
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+  # Allow communication to VerticalHost
+  - to:
+    - podSelector:
+        matchLabels:
+          app: acs-verticalhost
+    ports:
+    - protocol: TCP
+      port: 50051
+  # Allow communication to Redis
+  - to:
+    - podSelector:
+        matchLabels:
+          app: redis
+    ports:
+    - protocol: TCP
+      port: 6379
+  # Allow communication to monitoring
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring
+    ports:
+    - protocol: TCP
+      port: 4317
+    - protocol: TCP
+      port: 4318
+
+---
+# Allow VerticalHost ingress from WebApi only
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: verticalhost-ingress
+  namespace: acs-prod
+  labels:
+    app: acs-verticalhost
+    component: security
+spec:
+  podSelector:
+    matchLabels:
+      app: acs-verticalhost
+  policyTypes:
+  - Ingress
+  ingress:
+  # Allow gRPC from WebApi
+  - from:
+    - podSelector:
+        matchLabels:
+          app: acs-webapi
+    ports:
+    - protocol: TCP
+      port: 50051
+  # Allow health checks from Kubernetes
+  - from: []
+    ports:
+    - protocol: TCP
+      port: 50051
+
+---
+# Allow VerticalHost egress to database and external services
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: verticalhost-egress
+  namespace: acs-prod
+  labels:
+    app: acs-verticalhost
+    component: security
+spec:
+  podSelector:
+    matchLabels:
+      app: acs-verticalhost
+  policyTypes:
+  - Egress
+  egress:
+  # Allow DNS
+  - to: []
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+  # Allow communication to SQL Server
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 1433
+  # Allow communication to Redis
+  - to:
+    - podSelector:
+        matchLabels:
+          app: redis
+    ports:
+    - protocol: TCP
+      port: 6379
+  # Allow communication to monitoring
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring
+    ports:
+    - protocol: TCP
+      port: 4317
+    - protocol: TCP
+      port: 4318
+  # Allow HTTPS for external services (Key Vault, etc.)
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443
+
+---
+# Allow Redis ingress from ACS components
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: redis-ingress
+  namespace: acs-prod
+  labels:
+    app: redis
+    component: security
+spec:
+  podSelector:
+    matchLabels:
+      app: redis
+  policyTypes:
+  - Ingress
+  ingress:
+  # Allow from WebApi
+  - from:
+    - podSelector:
+        matchLabels:
+          app: acs-webapi
+    ports:
+    - protocol: TCP
+      port: 6379
+  # Allow from VerticalHost
+  - from:
+    - podSelector:
+        matchLabels:
+          app: acs-verticalhost
+    ports:
+    - protocol: TCP
+      port: 6379
+
+---
+# Allow monitoring ingress
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: monitoring-ingress
+  namespace: monitoring
+  labels:
+    app: monitoring
+    component: security
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  ingress:
+  # Allow from ACS namespace
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: acs-prod
+  # Allow from ingress
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
