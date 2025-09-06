@@ -199,11 +199,7 @@ public record GetPermissionUsageRequest
 /// <summary>
 /// Service request for bulk permission updates
 /// </summary>
-public record BulkPermissionUpdateRequest
-{
-    public ICollection<PermissionUpdate> Updates { get; init; } = new List<PermissionUpdate>();
-    public string RequestedBy { get; init; } = string.Empty;
-}
+public record BulkPermissionUpdateRequest{    public ICollection<BulkPermissionOperationRequest> Operations { get; init; } = new List<BulkPermissionOperationRequest>();    public bool ValidateBeforeExecution { get; init; } = true;    public bool StopOnFirstError { get; init; } = false;    public bool ExecuteInTransaction { get; init; } = true;    public string RequestedBy { get; init; } = string.Empty;    public string? Reason { get; init; };}
 
 /// <summary>
 /// Individual permission update in bulk operation

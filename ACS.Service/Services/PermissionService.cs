@@ -178,7 +178,7 @@ public class PermissionService : IPermissionService
         return Task.FromResult(new BulkPermissionUpdateResponse
         {
             Success = true,
-            ProcessedCount = request.Updates.Count,
+            ProcessedCount = request.Operations.Count,
             Errors = new List<string>()
         });
     }
