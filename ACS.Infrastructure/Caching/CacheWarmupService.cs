@@ -63,7 +63,7 @@ public class CacheWarmupService : BackgroundService
         
         // Start timers
         _refreshTimer = new Timer(async _ => await PerformWarmupAsync(), null, _warmupInterval, _warmupInterval);
-        _analyzeTimer = new Timer(async _ => await AnalyzeAccessPatternsAsync(), null, _analysisInterval, _analysisInterval);
+        _analyzeTimer = new Timer(_ => AnalyzeAccessPatternsAsync(), null, _analysisInterval, _analysisInterval);
         
         _logger.LogInformation("Initialized cache warmup service with {MaxConcurrentWarmups} concurrent warmups and {IntervalMinutes}min interval",
             _maxConcurrentWarmups, _warmupInterval.TotalMinutes);
@@ -79,7 +79,7 @@ public class CacheWarmupService : BackgroundService
             await PerformInitialWarmupAsync(stoppingToken);
             
             // Wait for shutdown
-            await Task.Delay(Timeout.Infinite, stoppingToken);
+            await Task.Delay(Timeout.Infinite, stoppingToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -102,12 +102,12 @@ public class CacheWarmupService : BackgroundService
             return;
         }
         
-        await _warmupSemaphore.WaitAsync(cancellationToken);
+        await _warmupSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             var stopwatch = Stopwatch.StartNew();
             
-            var keysToWarmup = await strategy.GetKeysToWarmupAsync(cancellationToken);
+            var keysToWarmup = await strategy.GetKeysToWarmupAsync(cancellationToken).ConfigureAwait(false);
             await WarmupKeysAsync(keysToWarmup, cacheType, cancellationToken);
             
             stopwatch.Stop();
@@ -132,7 +132,7 @@ public class CacheWarmupService : BackgroundService
         try
         {
             // Check if already cached
-            var existing = await _cache.GetAsync<T>(key, cancellationToken);
+            var existing = await _cache.GetAsync<T>(key, cancellationToken).ConfigureAwait(false);
             if (existing != null)
             {
                 activity?.SetTag("cache.already_cached", true);
@@ -144,7 +144,7 @@ public class CacheWarmupService : BackgroundService
             var value = await factory();
             if (value != null)
             {
-                await _cache.SetAsync(key, value, cacheType, cancellationToken);
+                await _cache.SetAsync(key, value, cacheType, cancellationToken).ConfigureAwait(false);
                 activity?.SetTag("cache.warmed", true);
                 RecordAccess(key, false);
                 _logger.LogTrace("Warmed up cache for key {Key}", key);
@@ -180,7 +180,7 @@ public class CacheWarmupService : BackgroundService
         
         if (refreshTasks.Count > 0)
         {
-            await Task.WhenAll(refreshTasks);
+            await Task.WhenAll(refreshTasks).ConfigureAwait(false);
             activity?.SetTag("cache.keys_refreshed", refreshTasks.Count);
             _logger.LogDebug("Refreshed {Count} expired cache keys", refreshTasks.Count);
         }
@@ -224,7 +224,7 @@ public class CacheWarmupService : BackgroundService
         {
             if (strategy is IWarmupStatistics statsProvider)
             {
-                stats[$"{cacheType.ToString().ToLower()}_strategy_stats"] = await statsProvider.GetStatisticsAsync();
+                stats[$"{cacheType.ToString().ToLower()}_strategy_stats"] = await statsProvider.GetStatisticsAsync().ConfigureAwait(false);
             }
         }
         
@@ -262,7 +262,7 @@ public class CacheWarmupService : BackgroundService
                 }
             });
             
-            await Task.WhenAll(warmupTasks);
+            await Task.WhenAll(warmupTasks).ConfigureAwait(false);
             _logger.LogInformation("Initial cache warmup completed");
         }
         catch (Exception ex)
@@ -309,10 +309,10 @@ public class CacheWarmupService : BackgroundService
             
             var warmupTasks = predictiveCandidates.Select(async pattern =>
             {
-                await _warmupSemaphore.WaitAsync();
+                await _warmupSemaphore.WaitAsync().ConfigureAwait(false);
                 try
                 {
-                    await RefreshKeyAsync(pattern.Key, pattern.CacheType, CancellationToken.None);
+                    await RefreshKeyAsync(pattern.Key, pattern.CacheType, CancellationToken.None).ConfigureAwait(false);
                 }
                 finally
                 {
@@ -320,7 +320,7 @@ public class CacheWarmupService : BackgroundService
                 }
             });
             
-            await Task.WhenAll(warmupTasks);
+            await Task.WhenAll(warmupTasks).ConfigureAwait(false);
         }
     }
 
@@ -341,10 +341,10 @@ public class CacheWarmupService : BackgroundService
             
             var warmupTasks = intelligentCandidates.Select(async pattern =>
             {
-                await _warmupSemaphore.WaitAsync();
+                await _warmupSemaphore.WaitAsync().ConfigureAwait(false);
                 try
                 {
-                    await RefreshKeyAsync(pattern.Key, pattern.CacheType, CancellationToken.None);
+                    await RefreshKeyAsync(pattern.Key, pattern.CacheType, CancellationToken.None).ConfigureAwait(false);
                 }
                 finally
                 {
@@ -352,11 +352,11 @@ public class CacheWarmupService : BackgroundService
                 }
             });
             
-            await Task.WhenAll(warmupTasks);
+            await Task.WhenAll(warmupTasks).ConfigureAwait(false);
         }
     }
 
-    private async Task AnalyzeAccessPatternsAsync()
+    private void AnalyzeAccessPatternsAsync()
     {
         try
         {
@@ -398,13 +398,13 @@ public class CacheWarmupService : BackgroundService
         
         var warmupTasks = keys.Select(async key =>
         {
-            await semaphore.WaitAsync(cancellationToken);
+            await semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
                 // Use appropriate warmup strategy
                 if (_warmupStrategies.TryGetValue(cacheType, out var strategy))
                 {
-                    await strategy.WarmupKeyAsync(key, cancellationToken);
+                    await strategy.WarmupKeyAsync(key, cancellationToken).ConfigureAwait(false);
                     _lastWarmupTimes[key] = DateTime.UtcNow;
                 }
             }
@@ -414,7 +414,7 @@ public class CacheWarmupService : BackgroundService
             }
         });
         
-        await Task.WhenAll(warmupTasks);
+        await Task.WhenAll(warmupTasks).ConfigureAwait(false);
     }
 
     private async Task RefreshKeyAsync(string key, CacheType cacheType, CancellationToken cancellationToken)
@@ -555,15 +555,15 @@ public class UserWarmupStrategy : BaseWarmupStrategy
     public UserWarmupStrategy(IServiceProvider serviceProvider, ILogger logger) 
         : base(serviceProvider, logger) { }
     
-    public override async Task<string[]> GetKeysToWarmupAsync(CancellationToken cancellationToken = default)
+    public override Task<string[]> GetKeysToWarmupAsync(CancellationToken cancellationToken = default)
     {
         // This would typically query the database for active users
         // For now, return a placeholder implementation
         IncrementMetric("keys_requested");
-        return Array.Empty<string>();
+        return Task.FromResult(Array.Empty<string>());
     }
     
-    public override async Task WarmupKeyAsync(string key, CancellationToken cancellationToken = default)
+    public override Task WarmupKeyAsync(string key, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -578,11 +578,13 @@ public class UserWarmupStrategy : BaseWarmupStrategy
             Logger.LogWarning(ex, "Error warming up user key {Key}", key);
             IncrementMetric("warmup_errors");
         }
+        
+        return Task.CompletedTask;
     }
     
     public override async Task RefreshKeyAsync(string key, CancellationToken cancellationToken = default)
     {
-        await WarmupKeyAsync(key, cancellationToken); // Same logic for now
+        await WarmupKeyAsync(key, cancellationToken).ConfigureAwait(false); // Same logic for now
         IncrementMetric("refresh_attempts");
     }
 }
@@ -595,13 +597,13 @@ public class GroupWarmupStrategy : BaseWarmupStrategy
     public GroupWarmupStrategy(IServiceProvider serviceProvider, ILogger logger) 
         : base(serviceProvider, logger) { }
     
-    public override async Task<string[]> GetKeysToWarmupAsync(CancellationToken cancellationToken = default)
+    public override Task<string[]> GetKeysToWarmupAsync(CancellationToken cancellationToken = default)
     {
         IncrementMetric("keys_requested");
-        return Array.Empty<string>();
+        return Task.FromResult(Array.Empty<string>());
     }
     
-    public override async Task WarmupKeyAsync(string key, CancellationToken cancellationToken = default)
+    public override Task WarmupKeyAsync(string key, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -614,11 +616,13 @@ public class GroupWarmupStrategy : BaseWarmupStrategy
             Logger.LogWarning(ex, "Error warming up group key {Key}", key);
             IncrementMetric("warmup_errors");
         }
+        
+        return Task.CompletedTask;
     }
     
     public override async Task RefreshKeyAsync(string key, CancellationToken cancellationToken = default)
     {
-        await WarmupKeyAsync(key, cancellationToken);
+        await WarmupKeyAsync(key, cancellationToken).ConfigureAwait(false);
         IncrementMetric("refresh_attempts");
     }
 }
@@ -631,13 +635,13 @@ public class RoleWarmupStrategy : BaseWarmupStrategy
     public RoleWarmupStrategy(IServiceProvider serviceProvider, ILogger logger) 
         : base(serviceProvider, logger) { }
     
-    public override async Task<string[]> GetKeysToWarmupAsync(CancellationToken cancellationToken = default)
+    public override Task<string[]> GetKeysToWarmupAsync(CancellationToken cancellationToken = default)
     {
         IncrementMetric("keys_requested");
-        return Array.Empty<string>();
+        return Task.FromResult(Array.Empty<string>());
     }
     
-    public override async Task WarmupKeyAsync(string key, CancellationToken cancellationToken = default)
+    public override Task WarmupKeyAsync(string key, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -650,11 +654,13 @@ public class RoleWarmupStrategy : BaseWarmupStrategy
             Logger.LogWarning(ex, "Error warming up role key {Key}", key);
             IncrementMetric("warmup_errors");
         }
+        
+        return Task.CompletedTask;
     }
     
     public override async Task RefreshKeyAsync(string key, CancellationToken cancellationToken = default)
     {
-        await WarmupKeyAsync(key, cancellationToken);
+        await WarmupKeyAsync(key, cancellationToken).ConfigureAwait(false);
         IncrementMetric("refresh_attempts");
     }
 }
@@ -667,13 +673,13 @@ public class PermissionWarmupStrategy : BaseWarmupStrategy
     public PermissionWarmupStrategy(IServiceProvider serviceProvider, ILogger logger) 
         : base(serviceProvider, logger) { }
     
-    public override async Task<string[]> GetKeysToWarmupAsync(CancellationToken cancellationToken = default)
+    public override Task<string[]> GetKeysToWarmupAsync(CancellationToken cancellationToken = default)
     {
         IncrementMetric("keys_requested");
-        return Array.Empty<string>();
+        return Task.FromResult(Array.Empty<string>());
     }
     
-    public override async Task WarmupKeyAsync(string key, CancellationToken cancellationToken = default)
+    public override Task WarmupKeyAsync(string key, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -686,11 +692,13 @@ public class PermissionWarmupStrategy : BaseWarmupStrategy
             Logger.LogWarning(ex, "Error warming up permission key {Key}", key);
             IncrementMetric("warmup_errors");
         }
+        
+        return Task.CompletedTask;
     }
     
     public override async Task RefreshKeyAsync(string key, CancellationToken cancellationToken = default)
     {
-        await WarmupKeyAsync(key, cancellationToken);
+        await WarmupKeyAsync(key, cancellationToken).ConfigureAwait(false);
         IncrementMetric("refresh_attempts");
     }
 }
@@ -703,14 +711,14 @@ public class ConfigurationWarmupStrategy : BaseWarmupStrategy
     public ConfigurationWarmupStrategy(IServiceProvider serviceProvider, ILogger logger) 
         : base(serviceProvider, logger) { }
     
-    public override async Task<string[]> GetKeysToWarmupAsync(CancellationToken cancellationToken = default)
+    public override Task<string[]> GetKeysToWarmupAsync(CancellationToken cancellationToken = default)
     {
         IncrementMetric("keys_requested");
         // Configuration keys are typically well-known
-        return new[] { "config:app_settings", "config:feature_flags", "config:environment" };
+        return Task.FromResult(new[] { "config:app_settings", "config:feature_flags", "config:environment" });
     }
     
-    public override async Task WarmupKeyAsync(string key, CancellationToken cancellationToken = default)
+    public override Task WarmupKeyAsync(string key, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -723,11 +731,13 @@ public class ConfigurationWarmupStrategy : BaseWarmupStrategy
             Logger.LogWarning(ex, "Error warming up configuration key {Key}", key);
             IncrementMetric("warmup_errors");
         }
+        
+        return Task.CompletedTask;
     }
     
     public override async Task RefreshKeyAsync(string key, CancellationToken cancellationToken = default)
     {
-        await WarmupKeyAsync(key, cancellationToken);
+        await WarmupKeyAsync(key, cancellationToken).ConfigureAwait(false);
         IncrementMetric("refresh_attempts");
     }
 }

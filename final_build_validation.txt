@@ -1,0 +1,44 @@
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  ACS.Core -> C:\Source\ACS\ACS.Core\bin\Debug\net9.0\ACS.Core.dll
+  ACS.Database -> C:\Source\ACS\ACS.Database\bin\Debug\net9.0\ACS.Database.dll
+  ACS.Alerting -> C:\Source\ACS\ACS.Alerting\bin\Debug\net9.0\ACS.Alerting.dll
+  ACS.Infrastructure -> C:\Source\ACS\ACS.Infrastructure\bin\Debug\net9.0\ACS.Infrastructure.dll
+  ACS.Infrastructure.Tests -> C:\Source\ACS\ACS.Infrastructure.Tests\bin\Debug\net9.0\ACS.Infrastructure.Tests.dll
+C:\Source\ACS\ACS.Service\Services\PermissionService.cs(14,34): error CS0246: The type or namespace name 'IPermissionService' could not be found (are you missing a using directive or an assembly reference?) [C:\Source\ACS\ACS.Service\ACS.Service.csproj]
+C:\Source\ACS\ACS.Service\Services\PermissionService.cs(30,17): error CS0246: The type or namespace name 'PermissionCheckResult' could not be found (are you missing a using directive or an assembly reference?) [C:\Source\ACS\ACS.Service\ACS.Service.csproj]
+C:\Source\ACS\ACS.Service\Services\PermissionService.cs(89,17): error CS0246: The type or namespace name 'PermissionRevokeResponse' could not be found (are you missing a using directive or an assembly reference?) [C:\Source\ACS\ACS.Service\ACS.Service.csproj]
+C:\Source\ACS\ACS.Service\Services\PermissionService.cs(116,17): error CS0246: The type or namespace name 'PermissionCheckWithDetailsResponse' could not be found (are you missing a using directive or an assembly reference?) [C:\Source\ACS\ACS.Service\ACS.Service.csproj]
+C:\Source\ACS\ACS.Service\Services\PermissionService.cs(147,17): error CS0246: The type or namespace name 'ValidatePermissionStructureResponse' could not be found (are you missing a using directive or an assembly reference?) [C:\Source\ACS\ACS.Service\ACS.Service.csproj]
+C:\Source\ACS\ACS.Service\Services\PermissionService.cs(157,17): error CS0246: The type or namespace name 'GetEntityPermissionsResponse' could not be found (are you missing a using directive or an assembly reference?) [C:\Source\ACS\ACS.Service\ACS.Service.csproj]
+C:\Source\ACS\ACS.Service\Services\PermissionService.cs(166,17): error CS0246: The type or namespace name 'GetPermissionUsageResponse' could not be found (are you missing a using directive or an assembly reference?) [C:\Source\ACS\ACS.Service\ACS.Service.csproj]
+C:\Source\ACS\ACS.Service\Services\PermissionService.cs(176,74): error CS0246: The type or namespace name 'BulkPermissionUpdateRequest' could not be found (are you missing a using directive or an assembly reference?) [C:\Source\ACS\ACS.Service\ACS.Service.csproj]
+C:\Source\ACS\ACS.Service\Services\PermissionService.cs(176,17): error CS0246: The type or namespace name 'BulkPermissionUpdateResponse' could not be found (are you missing a using directive or an assembly reference?) [C:\Source\ACS\ACS.Service\ACS.Service.csproj]
+C:\Source\ACS\ACS.Service\Services\PermissionService.cs(186,17): error CS0246: The type or namespace name 'EvaluateComplexPermissionResponse' could not be found (are you missing a using directive or an assembly reference?) [C:\Source\ACS\ACS.Service\ACS.Service.csproj]
+C:\Source\ACS\ACS.Service\Services\PermissionService.cs(196,17): error CS0246: The type or namespace name 'GetEffectivePermissionsResponse' could not be found (are you missing a using directive or an assembly reference?) [C:\Source\ACS\ACS.Service\ACS.Service.csproj]
+C:\Source\ACS\ACS.Service\Services\PermissionService.cs(205,80): error CS0246: The type or namespace name 'PermissionImpactAnalysisRequest' could not be found (are you missing a using directive or an assembly reference?) [C:\Source\ACS\ACS.Service\ACS.Service.csproj]
+C:\Source\ACS\ACS.Service\Services\PermissionService.cs(205,17): error CS0246: The type or namespace name 'PermissionImpactAnalysisResponse' could not be found (are you missing a using directive or an assembly reference?) [C:\Source\ACS\ACS.Service\ACS.Service.csproj]
+C:\Source\ACS\ACS.Service\Services\PermissionService.cs(215,17): error CS0246: The type or namespace name 'GetResourcePermissionsResponse' could not be found (are you missing a using directive or an assembly reference?) [C:\Source\ACS\ACS.Service\ACS.Service.csproj]
+
+Build FAILED.
+
+C:\Source\ACS\ACS.Service\Services\PermissionService.cs(14,34): error CS0246: The type or namespace name 'IPermissionService' could not be found (are you missing a using directive or an assembly reference?) [C:\Source\ACS\ACS.Service\ACS.Service.csproj]
+C:\Source\ACS\ACS.Service\Services\PermissionService.cs(30,17): error CS0246: The type or namespace name 'PermissionCheckResult' could not be found (are you missing a using directive or an assembly reference?) [C:\Source\ACS\ACS.Service\ACS.Service.csproj]
+C:\Source\ACS\ACS.Service\Services\PermissionService.cs(89,17): error CS0246: The type or namespace name 'PermissionRevokeResponse' could not be found (are you missing a using directive or an assembly reference?) [C:\Source\ACS\ACS.Service\ACS.Service.csproj]
+C:\Source\ACS\ACS.Service\Services\PermissionService.cs(116,17): error CS0246: The type or namespace name 'PermissionCheckWithDetailsResponse' could not be found (are you missing a using directive or an assembly reference?) [C:\Source\ACS\ACS.Service\ACS.Service.csproj]
+C:\Source\ACS\ACS.Service\Services\PermissionService.cs(147,17): error CS0246: The type or namespace name 'ValidatePermissionStructureResponse' could not be found (are you missing a using directive or an assembly reference?) [C:\Source\ACS\ACS.Service\ACS.Service.csproj]
+C:\Source\ACS\ACS.Service\Services\PermissionService.cs(157,17): error CS0246: The type or namespace name 'GetEntityPermissionsResponse' could not be found (are you missing a using directive or an assembly reference?) [C:\Source\ACS\ACS.Service\ACS.Service.csproj]
+C:\Source\ACS\ACS.Service\Services\PermissionService.cs(166,17): error CS0246: The type or namespace name 'GetPermissionUsageResponse' could not be found (are you missing a using directive or an assembly reference?) [C:\Source\ACS\ACS.Service\ACS.Service.csproj]
+C:\Source\ACS\ACS.Service\Services\PermissionService.cs(176,74): error CS0246: The type or namespace name 'BulkPermissionUpdateRequest' could not be found (are you missing a using directive or an assembly reference?) [C:\Source\ACS\ACS.Service\ACS.Service.csproj]
+C:\Source\ACS\ACS.Service\Services\PermissionService.cs(176,17): error CS0246: The type or namespace name 'BulkPermissionUpdateResponse' could not be found (are you missing a using directive or an assembly reference?) [C:\Source\ACS\ACS.Service\ACS.Service.csproj]
+C:\Source\ACS\ACS.Service\Services\PermissionService.cs(186,17): error CS0246: The type or namespace name 'EvaluateComplexPermissionResponse' could not be found (are you missing a using directive or an assembly reference?) [C:\Source\ACS\ACS.Service\ACS.Service.csproj]
+C:\Source\ACS\ACS.Service\Services\PermissionService.cs(196,17): error CS0246: The type or namespace name 'GetEffectivePermissionsResponse' could not be found (are you missing a using directive or an assembly reference?) [C:\Source\ACS\ACS.Service\ACS.Service.csproj]
+C:\Source\ACS\ACS.Service\Services\PermissionService.cs(205,80): error CS0246: The type or namespace name 'PermissionImpactAnalysisRequest' could not be found (are you missing a using directive or an assembly reference?) [C:\Source\ACS\ACS.Service\ACS.Service.csproj]
+C:\Source\ACS\ACS.Service\Services\PermissionService.cs(205,17): error CS0246: The type or namespace name 'PermissionImpactAnalysisResponse' could not be found (are you missing a using directive or an assembly reference?) [C:\Source\ACS\ACS.Service\ACS.Service.csproj]
+C:\Source\ACS\ACS.Service\Services\PermissionService.cs(215,17): error CS0246: The type or namespace name 'GetResourcePermissionsResponse' could not be found (are you missing a using directive or an assembly reference?) [C:\Source\ACS\ACS.Service\ACS.Service.csproj]
+    0 Warning(s)
+    14 Error(s)
+
+Time Elapsed 00:00:01.25
+
+Workload updates are available. Run `dotnet workload list` for more information.

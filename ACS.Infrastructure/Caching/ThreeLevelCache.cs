@@ -125,7 +125,7 @@ public class ThreeLevelCache : IThreeLevelCache
         // Try L2 cache (Redis)
         if (_enableL2Fallback)
         {
-            var l2Value = await TryGetFromL2Async<T>(key, cancellationToken);
+            var l2Value = await TryGetFromL2Async<T>(key, cancellationToken).ConfigureAwait(false);
             if (l2Value != null)
             {
                 Interlocked.Increment(ref _l2Hits);
@@ -135,7 +135,7 @@ public class ThreeLevelCache : IThreeLevelCache
                 // Promote to L1 cache asynchronously to avoid blocking
                 _ = Task.Run(async () =>
                 {
-                    await Task.Delay(_promotionDelay, cancellationToken);
+                    await Task.Delay(_promotionDelay, cancellationToken).ConfigureAwait(false);
                     var cacheType = InferCacheType(key);
                     var options = CreateMemoryCacheOptions(cacheType);
                     _l1Cache.Set(key, l2Value, options);
@@ -150,7 +150,7 @@ public class ThreeLevelCache : IThreeLevelCache
         // Try L3 cache (SQL Server)
         if (_enableL3Fallback)
         {
-            var l3Value = await TryGetFromL3Async<T>(key, cancellationToken);
+            var l3Value = await TryGetFromL3Async<T>(key, cancellationToken).ConfigureAwait(false);
             if (l3Value != null)
             {
                 Interlocked.Increment(ref _l3Hits);
@@ -160,13 +160,13 @@ public class ThreeLevelCache : IThreeLevelCache
                 // Promote to L2 and L1 caches asynchronously
                 _ = Task.Run(async () =>
                 {
-                    await Task.Delay(_promotionDelay, cancellationToken);
+                    await Task.Delay(_promotionDelay, cancellationToken).ConfigureAwait(false);
                     var cacheType = InferCacheType(key);
                     
                     // Promote to L2
                     if (_enableL2Fallback)
                     {
-                        await TrySetInL2Async(key, l3Value, cacheType, cancellationToken);
+                        await TrySetInL2Async(key, l3Value, cacheType, cancellationToken).ConfigureAwait(false);
                     }
                     
                     // Promote to L1
@@ -223,7 +223,7 @@ public class ThreeLevelCache : IThreeLevelCache
                 {
                     try
                     {
-                        await task;
+                        await task.ConfigureAwait(false);
                     }
                     catch (Exception ex)
                     {
@@ -242,7 +242,7 @@ public class ThreeLevelCache : IThreeLevelCache
             var dependencies = _cacheStrategy.GetInvalidationKeys(cacheType, value, key);
             foreach (var dependentKey in dependencies)
             {
-                await RemoveAsync(dependentKey, cancellationToken);
+                await RemoveAsync(dependentKey, cancellationToken).ConfigureAwait(false);
             }
         }
         catch (Exception ex)
@@ -284,7 +284,7 @@ public class ThreeLevelCache : IThreeLevelCache
                 {
                     try
                     {
-                        await task;
+                        await task.ConfigureAwait(false);
                     }
                     catch (Exception ex)
                     {
@@ -346,7 +346,7 @@ public class ThreeLevelCache : IThreeLevelCache
                 {
                     try
                     {
-                        await task;
+                        await task.ConfigureAwait(false);
                     }
                     catch (Exception ex)
                     {
@@ -375,7 +375,7 @@ public class ThreeLevelCache : IThreeLevelCache
         try
         {
             // Remove the primary key
-            await RemoveAsync(invalidationEvent.Key, cancellationToken);
+            await RemoveAsync(invalidationEvent.Key, cancellationToken).ConfigureAwait(false);
             
             // Remove dependent keys
             foreach (var dependentKey in invalidationEvent.DependentKeys)
@@ -389,7 +389,7 @@ public class ThreeLevelCache : IThreeLevelCache
                 else
                 {
                     // Exact key removal
-                    await RemoveAsync(dependentKey, cancellationToken);
+                    await RemoveAsync(dependentKey, cancellationToken).ConfigureAwait(false);
                 }
             }
             
@@ -449,7 +449,7 @@ public class ThreeLevelCache : IThreeLevelCache
                     // Check L3 first and promote upward
                     if (_enableL3Fallback)
                     {
-                        var l3Data = await _l3Cache.GetAsync(key, cancellationToken);
+                        var l3Data = await _l3Cache.GetAsync(key, cancellationToken).ConfigureAwait(false);
                         if (l3Data != null)
                         {
                             exists = true;
@@ -460,7 +460,7 @@ public class ThreeLevelCache : IThreeLevelCache
                                 await _l2Cache.SetAsync(key, l3Data, new DistributedCacheEntryOptions
                                 {
                                     AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(30)
-                                }, cancellationToken);
+                                }, cancellationToken).ConfigureAwait(false);
                             }
                         }
                     }
@@ -468,7 +468,7 @@ public class ThreeLevelCache : IThreeLevelCache
                     // Check L2 and promote to L1
                     if (!exists && _enableL2Fallback)
                     {
-                        var l2Data = await _l2Cache.GetAsync(key, cancellationToken);
+                        var l2Data = await _l2Cache.GetAsync(key, cancellationToken).ConfigureAwait(false);
                         if (l2Data != null)
                         {
                             exists = true;
@@ -486,7 +486,7 @@ public class ThreeLevelCache : IThreeLevelCache
                 }
             });
             
-            await Task.WhenAll(tasks);
+            await Task.WhenAll(tasks).ConfigureAwait(false);
             
             activity?.SetTag("cache.warmed_up_count", warmedUp);
             _logger.LogInformation("Cache warmup completed: {WarmedUp}/{Total} keys", warmedUp, keys.Length);
@@ -502,7 +502,7 @@ public class ThreeLevelCache : IThreeLevelCache
     {
         var semaphore = _refreshSemaphores.GetOrAdd(key, _ => new SemaphoreSlim(1, 1));
         
-        if (!await semaphore.WaitAsync(0, cancellationToken))
+        if (!await semaphore.WaitAsync(0, cancellationToken).ConfigureAwait(false))
         {
             // Another refresh is in progress
             _logger.LogTrace("Refresh already in progress for key {Key}", key);
@@ -576,7 +576,7 @@ public class ThreeLevelCache : IThreeLevelCache
     public async Task PromoteAsync(string key, CancellationToken cancellationToken = default)
     {
         // Try to get from L3 and promote to L2 and L1
-        var l3Data = await _l3Cache.GetAsync(key, cancellationToken);
+        var l3Data = await _l3Cache.GetAsync(key, cancellationToken).ConfigureAwait(false);
         if (l3Data != null)
         {
             if (_enableL2Fallback)
@@ -635,7 +635,7 @@ public class ThreeLevelCache : IThreeLevelCache
         {
             try
             {
-                healthInfo["L2_Redis"] = await redisCache.GetHealthInfoAsync();
+                healthInfo["L2_Redis"] = await redisCache.GetHealthInfoAsync().ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -661,7 +661,7 @@ public class ThreeLevelCache : IThreeLevelCache
         {
             try
             {
-                healthInfo["L3_SqlServer"] = await sqlServerCache.GetHealthInfoAsync();
+                healthInfo["L3_SqlServer"] = await sqlServerCache.GetHealthInfoAsync().ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -693,9 +693,9 @@ public class ThreeLevelCache : IThreeLevelCache
         {
             return await _l2CircuitBreaker.ExecuteAsync(async () =>
             {
-                var data = await _l2Cache.GetAsync(key, cancellationToken);
+                var data = await _l2Cache.GetAsync(key, cancellationToken).ConfigureAwait(false);
                 return data != null ? DeserializeValue<T>(data) : default;
-            });
+            }).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -710,9 +710,9 @@ public class ThreeLevelCache : IThreeLevelCache
         {
             return await _l3CircuitBreaker.ExecuteAsync(async () =>
             {
-                var data = await _l3Cache.GetAsync(key, cancellationToken);
+                var data = await _l3Cache.GetAsync(key, cancellationToken).ConfigureAwait(false);
                 return data != null ? DeserializeValue<T>(data) : default;
-            });
+            }).ConfigureAwait(false);
         }
         catch (Exception ex)
         {

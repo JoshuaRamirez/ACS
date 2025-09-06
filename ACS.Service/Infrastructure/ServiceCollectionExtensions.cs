@@ -86,6 +86,12 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IUserService, UserService>();
         services.AddScoped<ISystemMetricsService, SystemMetricsService>();
         
+        // Permission and access control services
+        // TODO: Add concrete implementations for these services
+        // services.AddScoped<IPermissionService, PermissionService>();
+        // services.AddScoped<ISecurityService, SecurityService>();
+        // services.AddScoped<IComplianceService, ComplianceService>();
+        
         // Authentication services
         services.AddScoped<IAuthenticationService, AuthenticationService>();
         services.AddScoped<IPasswordHashService, PasswordHashService>();

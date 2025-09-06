@@ -5,6 +5,7 @@ using ACS.Service.Compliance;
 using ACS.Service.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Moq;
 
 namespace ACS.Service.Tests.Unit;
 
@@ -18,7 +19,7 @@ public class AuditServiceTests
     [TestInitialize]
     public void Setup()
     {
-        // Arrange - Use real in-memory database instead of mocking non-virtual DbContext
+        // Arrange - Use real in-memory database for integration-style testing
         var options = new DbContextOptionsBuilder<ApplicationDbContext>()
             .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
             .Options;
@@ -34,6 +35,7 @@ public class AuditServiceTests
     public void Cleanup()
     {
         _dbContext?.Dispose();
+        _mockLogger?.Reset();
     }
 
     #region LogAsync Tests
@@ -48,20 +50,17 @@ public class AuditServiceTests
         var performedBy = "TestUser";
         var details = "Created new user";
 
-        _mockDbContext.Setup(x => x.SaveChangesAsync(default))
-            .ReturnsAsync(1);
-
         // Act
         await _auditService.LogAsync(action, entityType, entityId, performedBy, details);
 
         // Assert
-        _mockAuditLogDbSet.Verify(x => x.Add(It.Is<AuditLog>(al => 
-            al.ChangeType == action &&
-            al.EntityType == entityType &&
-            al.EntityId == entityId &&
-            al.ChangedBy == performedBy &&
-            al.ChangeDetails == details)), Times.Once);
-        _mockDbContext.Verify(x => x.SaveChangesAsync(default), Times.Once);
+        var auditLog = await _dbContext.AuditLogs.FirstOrDefaultAsync();
+        Assert.IsNotNull(auditLog);
+        Assert.AreEqual(action, auditLog.ChangeType);
+        Assert.AreEqual(entityType, auditLog.EntityType);
+        Assert.AreEqual(entityId, auditLog.EntityId);
+        Assert.AreEqual(performedBy, auditLog.ChangedBy);
+        Assert.AreEqual(details, auditLog.ChangeDetails);
     }
 
     [TestMethod]
@@ -73,8 +72,6 @@ public class AuditServiceTests
         var entityId = 1;
         var performedBy = "TestUser";
         var details = "Created new user";
-
-        _mockDbContext.Setup(x => x.SaveChangesAsync(default)).ReturnsAsync(1);
 
         // Act
         await _auditService.LogAsync(action, entityType, entityId, performedBy, details);
@@ -104,16 +101,15 @@ public class AuditServiceTests
         var details = "Failed login attempt";
         var userId = "user123";
 
-        _mockDbContext.Setup(x => x.SaveChangesAsync(default)).ReturnsAsync(1);
-
         // Act
         await _auditService.LogSecurityEventAsync(eventType, severity, source, details, userId);
 
         // Assert
-        _mockAuditLogDbSet.Verify(x => x.Add(It.Is<AuditLog>(al => 
-            al.ChangeType == $"SECURITY:{eventType}" &&
-            al.EntityType == "SecurityEvent" &&
-            al.ChangedBy == userId)), Times.Once);
+        var auditLog = await _dbContext.AuditLogs.FirstOrDefaultAsync();
+        Assert.IsNotNull(auditLog);
+        Assert.AreEqual($"SECURITY:{eventType}", auditLog.ChangeType);
+        Assert.AreEqual("SecurityEvent", auditLog.EntityType);
+        Assert.AreEqual(userId, auditLog.ChangedBy);
     }
 
     [TestMethod]
@@ -124,8 +120,6 @@ public class AuditServiceTests
         var severity = "Medium";
         var source = "API";
         var details = "Multiple failed requests";
-
-        _mockDbContext.Setup(x => x.SaveChangesAsync(default)).ReturnsAsync(1);
 
         // Act
         await _auditService.LogSecurityEventAsync(eventType, severity, source, details);
@@ -154,16 +148,15 @@ public class AuditServiceTests
         var userId = "user123";
         var success = true;
 
-        _mockDbContext.Setup(x => x.SaveChangesAsync(default)).ReturnsAsync(1);
-
         // Act
         await _auditService.LogAccessAttemptAsync(resource, action, userId, success);
 
         // Assert
-        _mockAuditLogDbSet.Verify(x => x.Add(It.Is<AuditLog>(al => 
-            al.ChangeType == "ACCESS_GRANTED" &&
-            al.EntityType == "AccessAttempt" &&
-            al.ChangedBy == userId)), Times.Once);
+        var auditLog = await _dbContext.AuditLogs.FirstOrDefaultAsync();
+        Assert.IsNotNull(auditLog);
+        Assert.AreEqual("ACCESS_GRANTED", auditLog.ChangeType);
+        Assert.AreEqual("AccessAttempt", auditLog.EntityType);
+        Assert.AreEqual(userId, auditLog.ChangedBy);
     }
 
     [TestMethod]
@@ -176,16 +169,15 @@ public class AuditServiceTests
         var success = false;
         var reason = "Insufficient permissions";
 
-        _mockDbContext.Setup(x => x.SaveChangesAsync(default)).ReturnsAsync(1);
-
         // Act
         await _auditService.LogAccessAttemptAsync(resource, action, userId, success, reason);
 
         // Assert
-        _mockAuditLogDbSet.Verify(x => x.Add(It.Is<AuditLog>(al => 
-            al.ChangeType == "ACCESS_DENIED" &&
-            al.EntityType == "AccessAttempt" &&
-            al.ChangedBy == userId)), Times.Once);
+        var auditLog = await _dbContext.AuditLogs.FirstOrDefaultAsync();
+        Assert.IsNotNull(auditLog);
+        Assert.AreEqual("ACCESS_DENIED", auditLog.ChangeType);
+        Assert.AreEqual("AccessAttempt", auditLog.EntityType);
+        Assert.AreEqual(userId, auditLog.ChangedBy);
     }
 
     #endregion
@@ -203,16 +195,15 @@ public class AuditServiceTests
         var newValue = "Jane Doe";
         var changedBy = "admin";
 
-        _mockDbContext.Setup(x => x.SaveChangesAsync(default)).ReturnsAsync(1);
-
         // Act
         await _auditService.LogDataChangeAsync(tableName, operation, recordId, oldValue, newValue, changedBy);
 
         // Assert
-        _mockAuditLogDbSet.Verify(x => x.Add(It.Is<AuditLog>(al => 
-            al.ChangeType == $"DATA_{operation}" &&
-            al.EntityType == tableName &&
-            al.ChangedBy == changedBy)), Times.Once);
+        var auditLog = await _dbContext.AuditLogs.FirstOrDefaultAsync();
+        Assert.IsNotNull(auditLog);
+        Assert.AreEqual($"DATA_{operation}", auditLog.ChangeType);
+        Assert.AreEqual(tableName, auditLog.EntityType);
+        Assert.AreEqual(changedBy, auditLog.ChangedBy);
     }
 
     #endregion
@@ -228,16 +219,15 @@ public class AuditServiceTests
         var details = "Application started successfully";
         var correlationId = Guid.NewGuid().ToString();
 
-        _mockDbContext.Setup(x => x.SaveChangesAsync(default)).ReturnsAsync(1);
-
         // Act
         await _auditService.LogSystemEventAsync(eventType, component, details, correlationId);
 
         // Assert
-        _mockAuditLogDbSet.Verify(x => x.Add(It.Is<AuditLog>(al => 
-            al.ChangeType == $"SYSTEM:{eventType}" &&
-            al.EntityType == "System" &&
-            al.ChangedBy == "SYSTEM")), Times.Once);
+        var auditLog = await _dbContext.AuditLogs.FirstOrDefaultAsync();
+        Assert.IsNotNull(auditLog);
+        Assert.AreEqual($"SYSTEM:{eventType}", auditLog.ChangeType);
+        Assert.AreEqual("System", auditLog.EntityType);
+        Assert.AreEqual("SYSTEM", auditLog.ChangedBy);
     }
 
     #endregion
@@ -248,17 +238,11 @@ public class AuditServiceTests
     public async Task AuditService_GetAuditLogsAsync_ReturnsAllLogs()
     {
         // Arrange
-        var auditLogs = new List<AuditLog>
-        {
-            new() { Id = 1, ChangeType = "CREATE", EntityType = "User", ChangeDate = DateTime.UtcNow.AddDays(-1) },
-            new() { Id = 2, ChangeType = "UPDATE", EntityType = "User", ChangeDate = DateTime.UtcNow }
-        };
-
-        var mockQueryable = auditLogs.AsQueryable();
-        _mockAuditLogDbSet.As<IQueryable<AuditLog>>().Setup(m => m.Provider).Returns(mockQueryable.Provider);
-        _mockAuditLogDbSet.As<IQueryable<AuditLog>>().Setup(m => m.Expression).Returns(mockQueryable.Expression);
-        _mockAuditLogDbSet.As<IQueryable<AuditLog>>().Setup(m => m.ElementType).Returns(mockQueryable.ElementType);
-        _mockAuditLogDbSet.As<IQueryable<AuditLog>>().Setup(m => m.GetEnumerator()).Returns(mockQueryable.GetEnumerator());
+        var auditLog1 = new AuditLog { ChangeType = "CREATE", EntityType = "User", EntityId = 1, ChangedBy = "user1", ChangeDate = DateTime.UtcNow.AddDays(-1), ChangeDetails = "Created user" };
+        var auditLog2 = new AuditLog { ChangeType = "UPDATE", EntityType = "User", EntityId = 2, ChangedBy = "user2", ChangeDate = DateTime.UtcNow, ChangeDetails = "Updated user" };
+        
+        _dbContext.AuditLogs.AddRange(auditLog1, auditLog2);
+        await _dbContext.SaveChangesAsync();
 
         // Act
         var result = await _auditService.GetAuditLogsAsync();
@@ -273,25 +257,20 @@ public class AuditServiceTests
         // Arrange
         var startDate = DateTime.UtcNow.AddDays(-2);
         var endDate = DateTime.UtcNow.AddDays(-1);
-        var auditLogs = new List<AuditLog>
-        {
-            new() { Id = 1, ChangeType = "CREATE", EntityType = "User", ChangeDate = DateTime.UtcNow.AddDays(-3) },
-            new() { Id = 2, ChangeType = "UPDATE", EntityType = "User", ChangeDate = DateTime.UtcNow.AddDays(-1.5) },
-            new() { Id = 3, ChangeType = "DELETE", EntityType = "User", ChangeDate = DateTime.UtcNow }
-        };
-
-        var mockQueryable = auditLogs.AsQueryable();
-        _mockAuditLogDbSet.As<IQueryable<AuditLog>>().Setup(m => m.Provider).Returns(mockQueryable.Provider);
-        _mockAuditLogDbSet.As<IQueryable<AuditLog>>().Setup(m => m.Expression).Returns(mockQueryable.Expression);
-        _mockAuditLogDbSet.As<IQueryable<AuditLog>>().Setup(m => m.ElementType).Returns(mockQueryable.ElementType);
-        _mockAuditLogDbSet.As<IQueryable<AuditLog>>().Setup(m => m.GetEnumerator()).Returns(mockQueryable.GetEnumerator());
+        
+        var auditLog1 = new AuditLog { ChangeType = "CREATE", EntityType = "User", EntityId = 1, ChangedBy = "user1", ChangeDate = DateTime.UtcNow.AddDays(-3), ChangeDetails = "Created user" };
+        var auditLog2 = new AuditLog { ChangeType = "UPDATE", EntityType = "User", EntityId = 2, ChangedBy = "user2", ChangeDate = DateTime.UtcNow.AddDays(-1.5), ChangeDetails = "Updated user" };
+        var auditLog3 = new AuditLog { ChangeType = "DELETE", EntityType = "User", EntityId = 3, ChangedBy = "user3", ChangeDate = DateTime.UtcNow, ChangeDetails = "Deleted user" };
+        
+        _dbContext.AuditLogs.AddRange(auditLog1, auditLog2, auditLog3);
+        await _dbContext.SaveChangesAsync();
 
         // Act
         var result = await _auditService.GetAuditLogsAsync(startDate, endDate);
 
         // Assert
         Assert.AreEqual(1, result.Count());
-        Assert.AreEqual(2, result.First().Id);
+        Assert.AreEqual("UPDATE", result.First().ChangeType);
     }
 
     #endregion
@@ -304,25 +283,22 @@ public class AuditServiceTests
         // Arrange
         var entityType = "User";
         var entityId = 1;
-        var auditLogs = new List<AuditLog>
-        {
-            new() { Id = 1, ChangeType = "CREATE", EntityType = "User", EntityId = 1 },
-            new() { Id = 2, ChangeType = "UPDATE", EntityType = "User", EntityId = 2 },
-            new() { Id = 3, ChangeType = "DELETE", EntityType = "Group", EntityId = 1 }
-        };
-
-        var mockQueryable = auditLogs.AsQueryable();
-        _mockAuditLogDbSet.As<IQueryable<AuditLog>>().Setup(m => m.Provider).Returns(mockQueryable.Provider);
-        _mockAuditLogDbSet.As<IQueryable<AuditLog>>().Setup(m => m.Expression).Returns(mockQueryable.Expression);
-        _mockAuditLogDbSet.As<IQueryable<AuditLog>>().Setup(m => m.ElementType).Returns(mockQueryable.ElementType);
-        _mockAuditLogDbSet.As<IQueryable<AuditLog>>().Setup(m => m.GetEnumerator()).Returns(mockQueryable.GetEnumerator());
+        
+        var auditLog1 = new AuditLog { ChangeType = "CREATE", EntityType = "User", EntityId = 1, ChangedBy = "user1", ChangeDate = DateTime.UtcNow, ChangeDetails = "Created user" };
+        var auditLog2 = new AuditLog { ChangeType = "UPDATE", EntityType = "User", EntityId = 2, ChangedBy = "user2", ChangeDate = DateTime.UtcNow, ChangeDetails = "Updated user" };
+        var auditLog3 = new AuditLog { ChangeType = "DELETE", EntityType = "Group", EntityId = 1, ChangedBy = "user3", ChangeDate = DateTime.UtcNow, ChangeDetails = "Deleted group" };
+        
+        _dbContext.AuditLogs.AddRange(auditLog1, auditLog2, auditLog3);
+        await _dbContext.SaveChangesAsync();
 
         // Act
         var result = await _auditService.GetAuditLogsByEntityAsync(entityType, entityId);
 
         // Assert
         Assert.AreEqual(1, result.Count());
-        Assert.AreEqual(1, result.First().Id);
+        Assert.AreEqual("CREATE", result.First().ChangeType);
+        Assert.AreEqual(entityType, result.First().EntityType);
+        Assert.AreEqual(entityId, result.First().EntityId);
     }
 
     #endregion
@@ -333,11 +309,11 @@ public class AuditServiceTests
     public async Task AuditService_GetAuditLogByIdAsync_ReturnsLogWhenExists()
     {
         // Arrange
-        var auditLogId = 1;
-        var auditLog = new AuditLog { Id = auditLogId, ChangeType = "CREATE" };
-
-        _mockAuditLogDbSet.Setup(x => x.FindAsync(auditLogId))
-            .ReturnsAsync(auditLog);
+        var auditLog = new AuditLog { ChangeType = "CREATE", EntityType = "User", EntityId = 1, ChangedBy = "user1", ChangeDate = DateTime.UtcNow, ChangeDetails = "Created user" };
+        _dbContext.AuditLogs.Add(auditLog);
+        await _dbContext.SaveChangesAsync();
+        
+        var auditLogId = auditLog.Id;
 
         // Act
         var result = await _auditService.GetAuditLogByIdAsync(auditLogId);
@@ -345,6 +321,7 @@ public class AuditServiceTests
         // Assert
         Assert.IsNotNull(result);
         Assert.AreEqual(auditLogId, result.Id);
+        Assert.AreEqual("CREATE", result.ChangeType);
     }
 
     [TestMethod]
@@ -352,9 +329,6 @@ public class AuditServiceTests
     {
         // Arrange
         var auditLogId = 999;
-
-        _mockAuditLogDbSet.Setup(x => x.FindAsync(auditLogId))
-            .ReturnsAsync((AuditLog?)null);
 
         // Act
         var result = await _auditService.GetAuditLogByIdAsync(auditLogId);
@@ -373,20 +347,13 @@ public class AuditServiceTests
         // Arrange
         var userId = "user123";
         var timeWindowMinutes = 30;
-        var startTime = DateTime.UtcNow.AddMinutes(-timeWindowMinutes);
         
-        var auditLogs = new List<AuditLog>
-        {
-            new() { Id = 1, ChangedBy = userId, ChangeType = "ACCESS_DENIED", ChangeDate = DateTime.UtcNow.AddMinutes(-10) },
-            new() { Id = 2, ChangedBy = userId, ChangeType = "ACCESS_DENIED", ChangeDate = DateTime.UtcNow.AddMinutes(-15) },
-            new() { Id = 3, ChangedBy = userId, ChangeType = "ACCESS_DENIED", ChangeDate = DateTime.UtcNow.AddMinutes(-20) }
-        };
-
-        var mockQueryable = auditLogs.AsQueryable();
-        _mockAuditLogDbSet.As<IQueryable<AuditLog>>().Setup(m => m.Provider).Returns(mockQueryable.Provider);
-        _mockAuditLogDbSet.As<IQueryable<AuditLog>>().Setup(m => m.Expression).Returns(mockQueryable.Expression);
-        _mockAuditLogDbSet.As<IQueryable<AuditLog>>().Setup(m => m.ElementType).Returns(mockQueryable.ElementType);
-        _mockAuditLogDbSet.As<IQueryable<AuditLog>>().Setup(m => m.GetEnumerator()).Returns(mockQueryable.GetEnumerator());
+        var auditLog1 = new AuditLog { ChangedBy = userId, ChangeType = "ACCESS_DENIED", EntityType = "AccessAttempt", EntityId = 1, ChangeDate = DateTime.UtcNow.AddMinutes(-10), ChangeDetails = "Failed attempt 1" };
+        var auditLog2 = new AuditLog { ChangedBy = userId, ChangeType = "ACCESS_DENIED", EntityType = "AccessAttempt", EntityId = 2, ChangeDate = DateTime.UtcNow.AddMinutes(-15), ChangeDetails = "Failed attempt 2" };
+        var auditLog3 = new AuditLog { ChangedBy = userId, ChangeType = "ACCESS_DENIED", EntityType = "AccessAttempt", EntityId = 3, ChangeDate = DateTime.UtcNow.AddMinutes(-20), ChangeDetails = "Failed attempt 3" };
+        
+        _dbContext.AuditLogs.AddRange(auditLog1, auditLog2, auditLog3);
+        await _dbContext.SaveChangesAsync();
 
         // Act
         var result = await _auditService.HasSuspiciousActivityAsync(userId, timeWindowMinutes);
@@ -402,17 +369,11 @@ public class AuditServiceTests
         var userId = "user123";
         var timeWindowMinutes = 30;
         
-        var auditLogs = new List<AuditLog>
-        {
-            new() { Id = 1, ChangedBy = userId, ChangeType = "ACCESS_GRANTED", ChangeDate = DateTime.UtcNow.AddMinutes(-10) },
-            new() { Id = 2, ChangedBy = userId, ChangeType = "UPDATE", ChangeDate = DateTime.UtcNow.AddMinutes(-15) }
-        };
-
-        var mockQueryable = auditLogs.AsQueryable();
-        _mockAuditLogDbSet.As<IQueryable<AuditLog>>().Setup(m => m.Provider).Returns(mockQueryable.Provider);
-        _mockAuditLogDbSet.As<IQueryable<AuditLog>>().Setup(m => m.Expression).Returns(mockQueryable.Expression);
-        _mockAuditLogDbSet.As<IQueryable<AuditLog>>().Setup(m => m.ElementType).Returns(mockQueryable.ElementType);
-        _mockAuditLogDbSet.As<IQueryable<AuditLog>>().Setup(m => m.GetEnumerator()).Returns(mockQueryable.GetEnumerator());
+        var auditLog1 = new AuditLog { ChangedBy = userId, ChangeType = "ACCESS_GRANTED", EntityType = "AccessAttempt", EntityId = 1, ChangeDate = DateTime.UtcNow.AddMinutes(-10), ChangeDetails = "Successful access" };
+        var auditLog2 = new AuditLog { ChangedBy = userId, ChangeType = "UPDATE", EntityType = "User", EntityId = 1, ChangeDate = DateTime.UtcNow.AddMinutes(-15), ChangeDetails = "Updated profile" };
+        
+        _dbContext.AuditLogs.AddRange(auditLog1, auditLog2);
+        await _dbContext.SaveChangesAsync();
 
         // Act
         var result = await _auditService.HasSuspiciousActivityAsync(userId, timeWindowMinutes);
@@ -430,27 +391,26 @@ public class AuditServiceTests
     {
         // Arrange
         var retentionDays = 30;
-        var cutoffDate = DateTime.UtcNow.AddDays(-retentionDays);
         
-        var oldLog = new AuditLog { Id = 1, ChangeDate = DateTime.UtcNow.AddDays(-40) };
-        var recentLog = new AuditLog { Id = 2, ChangeDate = DateTime.UtcNow.AddDays(-10) };
-        var auditLogs = new List<AuditLog> { oldLog, recentLog };
-
-        var mockQueryable = auditLogs.AsQueryable();
-        _mockAuditLogDbSet.As<IQueryable<AuditLog>>().Setup(m => m.Provider).Returns(mockQueryable.Provider);
-        _mockAuditLogDbSet.As<IQueryable<AuditLog>>().Setup(m => m.Expression).Returns(mockQueryable.Expression);
-        _mockAuditLogDbSet.As<IQueryable<AuditLog>>().Setup(m => m.ElementType).Returns(mockQueryable.ElementType);
-        _mockAuditLogDbSet.As<IQueryable<AuditLog>>().Setup(m => m.GetEnumerator()).Returns(mockQueryable.GetEnumerator());
-
-        _mockDbContext.Setup(x => x.SaveChangesAsync(default)).ReturnsAsync(1);
+        var oldLog = new AuditLog { ChangeType = "CREATE", EntityType = "User", EntityId = 1, ChangedBy = "user1", ChangeDate = DateTime.UtcNow.AddDays(-40), ChangeDetails = "Old log" };
+        var recentLog = new AuditLog { ChangeType = "UPDATE", EntityType = "User", EntityId = 2, ChangedBy = "user2", ChangeDate = DateTime.UtcNow.AddDays(-10), ChangeDetails = "Recent log" };
+        
+        _dbContext.AuditLogs.AddRange(oldLog, recentLog);
+        await _dbContext.SaveChangesAsync();
+        
+        var initialCount = await _dbContext.AuditLogs.CountAsync();
+        Assert.AreEqual(2, initialCount);
 
         // Act
         var result = await _auditService.PurgeOldAuditLogsAsync(retentionDays);
 
         // Assert
         Assert.AreEqual(1, result);
-        _mockAuditLogDbSet.Verify(x => x.RemoveRange(It.Is<IEnumerable<AuditLog>>(logs => logs.Count() == 1)), Times.Once);
-        _mockDbContext.Verify(x => x.SaveChangesAsync(default), Times.Once);
+        var remainingCount = await _dbContext.AuditLogs.CountAsync();
+        Assert.AreEqual(1, remainingCount);
+        
+        var remainingLog = await _dbContext.AuditLogs.FirstAsync();
+        Assert.AreEqual("UPDATE", remainingLog.ChangeType);
     }
 
     #endregion
@@ -461,18 +421,12 @@ public class AuditServiceTests
     public async Task AuditService_GetAuditStatisticsAsync_ReturnsCorrectStatistics()
     {
         // Arrange
-        var auditLogs = new List<AuditLog>
-        {
-            new() { Id = 1, ChangedBy = "user1", EntityType = "User", ChangeType = "SECURITY:LOGIN" },
-            new() { Id = 2, ChangedBy = "user2", EntityType = "Group", ChangeType = "DATA_UPDATE" },
-            new() { Id = 3, ChangedBy = "user1", EntityType = "User", ChangeType = "CREATE" }
-        };
-
-        var mockQueryable = auditLogs.AsQueryable();
-        _mockAuditLogDbSet.As<IQueryable<AuditLog>>().Setup(m => m.Provider).Returns(mockQueryable.Provider);
-        _mockAuditLogDbSet.As<IQueryable<AuditLog>>().Setup(m => m.Expression).Returns(mockQueryable.Expression);
-        _mockAuditLogDbSet.As<IQueryable<AuditLog>>().Setup(m => m.ElementType).Returns(mockQueryable.ElementType);
-        _mockAuditLogDbSet.As<IQueryable<AuditLog>>().Setup(m => m.GetEnumerator()).Returns(mockQueryable.GetEnumerator());
+        var auditLog1 = new AuditLog { ChangedBy = "user1", EntityType = "User", ChangeType = "SECURITY:LOGIN", EntityId = 1, ChangeDate = DateTime.UtcNow, ChangeDetails = "Security login" };
+        var auditLog2 = new AuditLog { ChangedBy = "user2", EntityType = "Group", ChangeType = "DATA_UPDATE", EntityId = 1, ChangeDate = DateTime.UtcNow, ChangeDetails = "Data update" };
+        var auditLog3 = new AuditLog { ChangedBy = "user1", EntityType = "User", ChangeType = "CREATE", EntityId = 2, ChangeDate = DateTime.UtcNow, ChangeDetails = "Create user" };
+        
+        _dbContext.AuditLogs.AddRange(auditLog1, auditLog2, auditLog3);
+        await _dbContext.SaveChangesAsync();
 
         // Act
         var result = await _auditService.GetAuditStatisticsAsync();
@@ -493,10 +447,8 @@ public class AuditServiceTests
     public async Task AuditService_CalculateAuditHashAsync_ReturnsHashForExistingLog()
     {
         // Arrange
-        var auditLogId = 1;
         var auditLog = new AuditLog 
         { 
-            Id = auditLogId, 
             EntityType = "User", 
             EntityId = 1, 
             ChangeType = "CREATE",
@@ -504,9 +456,11 @@ public class AuditServiceTests
             ChangeDate = DateTime.UtcNow,
             ChangeDetails = "Created user"
         };
-
-        _mockAuditLogDbSet.Setup(x => x.FindAsync(auditLogId))
-            .ReturnsAsync(auditLog);
+        
+        _dbContext.AuditLogs.Add(auditLog);
+        await _dbContext.SaveChangesAsync();
+        
+        var auditLogId = auditLog.Id;
 
         // Act
         var result = await _auditService.CalculateAuditHashAsync(auditLogId);
@@ -520,9 +474,6 @@ public class AuditServiceTests
     {
         // Arrange
         var auditLogId = 999;
-
-        _mockAuditLogDbSet.Setup(x => x.FindAsync(auditLogId))
-            .ReturnsAsync((AuditLog?)null);
 
         // Act
         var result = await _auditService.CalculateAuditHashAsync(auditLogId);
@@ -539,10 +490,8 @@ public class AuditServiceTests
     public async Task AuditService_ValidateAuditHashAsync_ReturnsTrueForMatchingHash()
     {
         // Arrange
-        var auditLogId = 1;
         var auditLog = new AuditLog 
         { 
-            Id = auditLogId, 
             EntityType = "User", 
             EntityId = 1, 
             ChangeType = "CREATE",
@@ -550,9 +499,11 @@ public class AuditServiceTests
             ChangeDate = DateTime.UtcNow,
             ChangeDetails = "Created user"
         };
-
-        _mockAuditLogDbSet.Setup(x => x.FindAsync(auditLogId))
-            .ReturnsAsync(auditLog);
+        
+        _dbContext.AuditLogs.Add(auditLog);
+        await _dbContext.SaveChangesAsync();
+        
+        var auditLogId = auditLog.Id;
 
         // Calculate expected hash
         var expectedHash = await _auditService.CalculateAuditHashAsync(auditLogId);
@@ -568,10 +519,8 @@ public class AuditServiceTests
     public async Task AuditService_ValidateAuditHashAsync_ReturnsFalseForMismatchedHash()
     {
         // Arrange
-        var auditLogId = 1;
         var auditLog = new AuditLog 
         { 
-            Id = auditLogId, 
             EntityType = "User", 
             EntityId = 1, 
             ChangeType = "CREATE",
@@ -579,10 +528,11 @@ public class AuditServiceTests
             ChangeDate = DateTime.UtcNow,
             ChangeDetails = "Created user"
         };
-
-        _mockAuditLogDbSet.Setup(x => x.FindAsync(auditLogId))
-            .ReturnsAsync(auditLog);
-
+        
+        _dbContext.AuditLogs.Add(auditLog);
+        await _dbContext.SaveChangesAsync();
+        
+        var auditLogId = auditLog.Id;
         var wrongHash = "wrong_hash";
 
         // Act
@@ -601,8 +551,6 @@ public class AuditServiceTests
     {
         // Arrange
         var userId = "user123";
-
-        _mockDbContext.Setup(x => x.SaveChangesAsync(default)).ReturnsAsync(1);
 
         // Act
         var result = await _auditService.EnableRealTimeMonitoringAsync(userId);
@@ -631,8 +579,6 @@ public class AuditServiceTests
 
         // First enable monitoring
         await _auditService.EnableRealTimeMonitoringAsync(userId);
-
-        _mockDbContext.Setup(x => x.SaveChangesAsync(default)).ReturnsAsync(1);
 
         // Act
         var result = await _auditService.DisableRealTimeMonitoringAsync(userId);
@@ -707,15 +653,15 @@ public class AuditServiceTests
         var condition = "severity == 'Critical'";
         var action = "NOTIFY:security-team";
 
-        _mockDbContext.Setup(x => x.SaveChangesAsync(default)).ReturnsAsync(1);
-
         // Act
         var result = await _auditService.CreateAlertRuleAsync(ruleName, condition, action);
 
         // Assert
         Assert.IsTrue(result > 0);
-        _mockAuditLogDbSet.Verify(x => x.Add(It.Is<AuditLog>(al => 
-            al.ChangeType == "CREATE_ALERT_RULE")), Times.Once);
+        
+        var auditLog = await _dbContext.AuditLogs.FirstOrDefaultAsync(al => al.ChangeType == "CREATE_ALERT_RULE");
+        Assert.IsNotNull(auditLog);
+        Assert.AreEqual("CREATE_ALERT_RULE", auditLog.ChangeType);
     }
 
     #endregion
@@ -732,11 +678,11 @@ public class AuditServiceTests
         var performedBy = "TestUser";
         var details = "Created new user";
 
-        _mockDbContext.Setup(x => x.SaveChangesAsync(default))
-            .ThrowsAsync(new InvalidOperationException("Database error"));
+        // Dispose the context to simulate database error
+        _dbContext.Dispose();
 
         // Act & Assert
-        await Assert.ThrowsExceptionAsync<InvalidOperationException>(
+        await Assert.ThrowsExceptionAsync<ObjectDisposedException>(
             () => _auditService.LogAsync(action, entityType, entityId, performedBy, details));
     }
 
@@ -751,13 +697,6 @@ public class AuditServiceTests
         var userId = "user123";
         var startDate = DateTime.UtcNow.AddDays(-30);
         var endDate = DateTime.UtcNow;
-
-        var auditLogs = new List<AuditLog>();
-        var mockQueryable = auditLogs.AsQueryable();
-        _mockAuditLogDbSet.As<IQueryable<AuditLog>>().Setup(m => m.Provider).Returns(mockQueryable.Provider);
-        _mockAuditLogDbSet.As<IQueryable<AuditLog>>().Setup(m => m.Expression).Returns(mockQueryable.Expression);
-        _mockAuditLogDbSet.As<IQueryable<AuditLog>>().Setup(m => m.ElementType).Returns(mockQueryable.ElementType);
-        _mockAuditLogDbSet.As<IQueryable<AuditLog>>().Setup(m => m.GetEnumerator()).Returns(mockQueryable.GetEnumerator());
 
         // Act
         var result = await _auditService.GenerateGDPRReportAsync(userId, startDate, endDate);
@@ -775,13 +714,6 @@ public class AuditServiceTests
         // Arrange
         var startDate = DateTime.UtcNow.AddDays(-30);
         var endDate = DateTime.UtcNow;
-
-        var auditLogs = new List<AuditLog>();
-        var mockQueryable = auditLogs.AsQueryable();
-        _mockAuditLogDbSet.As<IQueryable<AuditLog>>().Setup(m => m.Provider).Returns(mockQueryable.Provider);
-        _mockAuditLogDbSet.As<IQueryable<AuditLog>>().Setup(m => m.Expression).Returns(mockQueryable.Expression);
-        _mockAuditLogDbSet.As<IQueryable<AuditLog>>().Setup(m => m.ElementType).Returns(mockQueryable.ElementType);
-        _mockAuditLogDbSet.As<IQueryable<AuditLog>>().Setup(m => m.GetEnumerator()).Returns(mockQueryable.GetEnumerator());
 
         // Act
         var result = await _auditService.GenerateSOC2ReportAsync(startDate, endDate);
@@ -802,18 +734,10 @@ public class AuditServiceTests
     {
         // Arrange
         var format = "json";
-        var auditLogs = new List<AuditLog>
-        {
-            new() { Id = 1, ChangeType = "CREATE", EntityType = "User" }
-        };
-
-        var mockQueryable = auditLogs.AsQueryable();
-        _mockAuditLogDbSet.As<IQueryable<AuditLog>>().Setup(m => m.Provider).Returns(mockQueryable.Provider);
-        _mockAuditLogDbSet.As<IQueryable<AuditLog>>().Setup(m => m.Expression).Returns(mockQueryable.Expression);
-        _mockAuditLogDbSet.As<IQueryable<AuditLog>>().Setup(m => m.ElementType).Returns(mockQueryable.ElementType);
-        _mockAuditLogDbSet.As<IQueryable<AuditLog>>().Setup(m => m.GetEnumerator()).Returns(mockQueryable.GetEnumerator());
-
-        _mockDbContext.Setup(x => x.SaveChangesAsync(default)).ReturnsAsync(1);
+        var auditLog = new AuditLog { ChangeType = "CREATE", EntityType = "User", EntityId = 1, ChangedBy = "user1", ChangeDate = DateTime.UtcNow, ChangeDetails = "Created user" };
+        
+        _dbContext.AuditLogs.Add(auditLog);
+        await _dbContext.SaveChangesAsync();
 
         // Act
         var result = await _auditService.ExportAuditLogsAsync(format);
@@ -828,18 +752,10 @@ public class AuditServiceTests
     {
         // Arrange
         var format = "csv";
-        var auditLogs = new List<AuditLog>
-        {
-            new() { Id = 1, ChangeType = "CREATE", EntityType = "User", EntityId = 1, ChangedBy = "admin", ChangeDate = DateTime.UtcNow, ChangeDetails = "test" }
-        };
-
-        var mockQueryable = auditLogs.AsQueryable();
-        _mockAuditLogDbSet.As<IQueryable<AuditLog>>().Setup(m => m.Provider).Returns(mockQueryable.Provider);
-        _mockAuditLogDbSet.As<IQueryable<AuditLog>>().Setup(m => m.Expression).Returns(mockQueryable.Expression);
-        _mockAuditLogDbSet.As<IQueryable<AuditLog>>().Setup(m => m.ElementType).Returns(mockQueryable.ElementType);
-        _mockAuditLogDbSet.As<IQueryable<AuditLog>>().Setup(m => m.GetEnumerator()).Returns(mockQueryable.GetEnumerator());
-
-        _mockDbContext.Setup(x => x.SaveChangesAsync(default)).ReturnsAsync(1);
+        var auditLog = new AuditLog { ChangeType = "CREATE", EntityType = "User", EntityId = 1, ChangedBy = "admin", ChangeDate = DateTime.UtcNow, ChangeDetails = "test" };
+        
+        _dbContext.AuditLogs.Add(auditLog);
+        await _dbContext.SaveChangesAsync();
 
         // Act
         var result = await _auditService.ExportAuditLogsAsync(format);

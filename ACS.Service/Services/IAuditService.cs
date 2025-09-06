@@ -95,7 +95,9 @@ public interface IAuditService
     Task<IEnumerable<ACS.Service.Domain.ComplianceViolation>> GetComplianceViolationsAsync(string? regulation = null, DateTime? startDate = null, DateTime? endDate = null);
     Task<bool> RemediateViolationAsync(int violationId, string remediationAction, string performedBy);
     Task<ComplianceStatus> GetComplianceStatusAsync(string regulation);
+    // Handler compatibility methods    Task<ACS.Service.Responses.RecordAuditEventResponse> RecordEventAsync(ACS.Service.Requests.RecordAuditEventRequest request);    Task<ACS.Service.Responses.PurgeAuditDataResponse> PurgeOldDataAsync(ACS.Service.Requests.PurgeAuditDataRequest request);    Task<ACS.Service.Responses.GetAuditLogResponse> GetAuditLogAsync(ACS.Service.Requests.GetAuditLogEnhancedRequest request);    Task<ACS.Service.Responses.GetUserAuditTrailResponse> GetUserAuditTrailAsync(ACS.Service.Requests.GetUserAuditTrailRequest request);    Task<ACS.Service.Responses.ValidateAuditIntegrityResponse> ValidateIntegrityAsync(ACS.Service.Requests.ValidateAuditIntegrityRequest request);
     Task<bool> ScheduleComplianceAuditAsync(string regulation, DateTime scheduledDate);
+    // Additional methods for handler compatibility    Task<ACS.Service.Responses.RecordAuditEventResponse> RecordEventAsync(ACS.Service.Requests.RecordAuditEventRequest request);    Task<ACS.Service.Responses.PurgeAuditDataResponse> PurgeOldDataAsync(ACS.Service.Requests.PurgeAuditDataRequest request);    Task<ACS.Service.Responses.GetAuditLogResponse> GetAuditLogAsync(ACS.Service.Requests.GetAuditLogEnhancedRequest request);    Task<ACS.Service.Responses.GetUserAuditTrailResponse> GetUserAuditTrailAsync(ACS.Service.Requests.GetUserAuditTrailRequest request);    Task<ACS.Service.Responses.ValidateAuditIntegrityResponse> ValidateIntegrityAsync(ACS.Service.Requests.ValidateAuditIntegrityRequest request);
 }
 
 // Supporting types

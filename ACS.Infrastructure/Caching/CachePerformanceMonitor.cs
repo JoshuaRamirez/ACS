@@ -70,13 +70,15 @@ public class CachePerformanceMonitor : IHostedService, IHealthCheck
         return Task.CompletedTask;
     }
 
-    public async Task StopAsync(CancellationToken cancellationToken)
+    public Task StopAsync(CancellationToken cancellationToken)
     {
         _monitoringTimer?.Dispose();
         _healthCheckTimer?.Dispose();
         _activitySource?.Dispose();
         
         _logger.LogInformation("Stopped cache performance monitor");
+        
+        return Task.CompletedTask;
     }
 
     public async Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken = default)
@@ -242,7 +244,7 @@ public class CachePerformanceMonitor : IHostedService, IHealthCheck
             }
             
             // Check for threshold violations and alert
-            await CheckThresholdsAndAlert(stats, healthInfo);
+            CheckThresholdsAndAlert(stats, healthInfo);
             
             _logger.LogTrace("Collected cache performance metrics");
         }
@@ -265,7 +267,7 @@ public class CachePerformanceMonitor : IHostedService, IHealthCheck
         }
     }
 
-    private async Task CheckThresholdsAndAlert(ThreeLevelCacheStatistics stats, Dictionary<string, Dictionary<string, string>> healthInfo)
+    private void CheckThresholdsAndAlert(ThreeLevelCacheStatistics stats, Dictionary<string, Dictionary<string, string>> healthInfo)
     {
         var alerts = new List<string>();
         

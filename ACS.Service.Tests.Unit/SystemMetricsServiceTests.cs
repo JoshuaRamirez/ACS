@@ -302,7 +302,7 @@ public class SystemMetricsServiceTests
     }
 
     [TestMethod]
-    public async Task SystemMetricsService_Constructor_WithValidDependencies_CreatesInstance()
+    public void SystemMetricsService_Constructor_WithValidDependencies_CreatesInstance()
     {
         // Arrange
         var mockEntityGraph = new Mock<InMemoryEntityGraph>();

@@ -60,7 +60,7 @@ public record RoleAnalysisReportResponse
 public record SecurityDashboardResponse
 {
     public SecurityMetrics SecurityMetrics { get; init; } = new();
-    public ICollection<SecurityAlert> Alerts { get; init; } = new List<SecurityAlert>();
+    public ICollection<SecurityAlertInfo> Alerts { get; init; } = new List<SecurityAlertInfo>();
     public bool Success { get; init; } = true;
     public string? Message { get; init; }
     public ICollection<string> Errors { get; init; } = new List<string>();
@@ -185,7 +185,7 @@ public record SecurityMetrics
     public int SecurityAlerts { get; init; }
 }
 
-public record SecurityAlert
+public record SecurityAlertInfo
 {
     public string AlertType { get; init; } = string.Empty;
     public string Message { get; init; } = string.Empty;

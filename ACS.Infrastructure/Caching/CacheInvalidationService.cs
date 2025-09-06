@@ -106,7 +106,7 @@ public class CacheInvalidationService : ICacheInvalidationService, IHostedServic
         try
         {
             // Add to processing channel
-            await _writer.WriteAsync(invalidationEvent, cancellationToken);
+            await _writer.WriteAsync(invalidationEvent, cancellationToken).ConfigureAwait(false);
             
             IncrementMetric("invalidation_queued");
             _logger.LogTrace("Queued cache invalidation for key {Key}", invalidationEvent.Key);
@@ -135,7 +135,7 @@ public class CacheInvalidationService : ICacheInvalidationService, IHostedServic
             {
                 try
                 {
-                    await _writer.WriteAsync(evt, cancellationToken);
+                    await _writer.WriteAsync(evt, cancellationToken).ConfigureAwait(false);
                     IncrementMetric("invalidation_queued");
                 }
                 catch (Exception ex)
@@ -146,7 +146,7 @@ public class CacheInvalidationService : ICacheInvalidationService, IHostedServic
                 }
             });
 
-            await Task.WhenAll(tasks);
+            await Task.WhenAll(tasks).ConfigureAwait(false);
             _logger.LogTrace("Queued {Count} cache invalidations", eventList.Count);
         }
         catch (Exception ex)
@@ -238,7 +238,7 @@ public class CacheInvalidationService : ICacheInvalidationService, IHostedServic
         {
             try
             {
-                await _writer.WriteAsync(invalidationEvent, cancellationToken);
+                await _writer.WriteAsync(invalidationEvent, cancellationToken).ConfigureAwait(false);
                 processed++;
                 IncrementMetric("dead_letter_recovered");
             }
@@ -300,7 +300,7 @@ public class CacheInvalidationService : ICacheInvalidationService, IHostedServic
                 
                 var tasks = batch.Select(async invalidationEvent =>
                 {
-                    await semaphore.WaitAsync(cancellationToken);
+                    await semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
                     try
                     {
                         await ProcessSingleInvalidationAsync(invalidationEvent, cancellationToken);
@@ -312,7 +312,7 @@ public class CacheInvalidationService : ICacheInvalidationService, IHostedServic
                     }
                 });
                 
-                await Task.WhenAll(tasks);
+                await Task.WhenAll(tasks).ConfigureAwait(false);
                 
                 stopwatch.Stop();
                 activity?.SetTag("cache.processing_time_ms", stopwatch.ElapsedMilliseconds);
@@ -383,7 +383,7 @@ public class CacheInvalidationService : ICacheInvalidationService, IHostedServic
                 var expandedEvent = ExpandDependencies(invalidationEvent);
                 
                 // Perform the actual cache invalidation
-                await _cache.InvalidateAsync(expandedEvent, cancellationToken);
+                await _cache.InvalidateAsync(expandedEvent, cancellationToken).ConfigureAwait(false);
                 
                 _logger.LogTrace("Successfully invalidated cache for key {Key} (attempt {Attempt})",
                     invalidationEvent.Key, retryCount + 1);
@@ -417,7 +417,7 @@ public class CacheInvalidationService : ICacheInvalidationService, IHostedServic
                 
                 // Exponential backoff
                 var delay = TimeSpan.FromMilliseconds(_retryDelay.TotalMilliseconds * Math.Pow(2, retryCount - 1));
-                await Task.Delay(delay, cancellationToken);
+                await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
             }
         }
     }
@@ -551,7 +551,7 @@ public class CacheInvalidationService : ICacheInvalidationService, IHostedServic
         var sourceId = ExtractEntityId(sourceEntity);
         var targetId = ExtractEntityId(targetEntity);
         
-        await InvalidateAsync($"{tenantId}:relationship:{relationshipType}:{sourceId}:{targetId}", CacheType.Permission, tenantId, cancellationToken);
+        await InvalidateAsync($"{tenantId}:relationship:{relationshipType}:{sourceId}:{targetId}", CacheType.Permission, tenantId, cancellationToken).ConfigureAwait(false);
         await InvalidateAsync($"{tenantId}:relationships:created", CacheType.Permission, tenantId, cancellationToken);
         
         _logger.LogDebug("Processed relationship creation cache invalidation for {RelationshipType} between {SourceId} and {TargetId} in tenant {TenantId}", 
@@ -563,7 +563,7 @@ public class CacheInvalidationService : ICacheInvalidationService, IHostedServic
         var sourceId = ExtractEntityId(sourceEntity);
         var targetId = ExtractEntityId(targetEntity);
         
-        await InvalidateAsync($"{tenantId}:relationship:{relationshipType}:{sourceId}:{targetId}", CacheType.Permission, tenantId, cancellationToken);
+        await InvalidateAsync($"{tenantId}:relationship:{relationshipType}:{sourceId}:{targetId}", CacheType.Permission, tenantId, cancellationToken).ConfigureAwait(false);
         await InvalidateAsync($"{tenantId}:relationships:removed", CacheType.Permission, tenantId, cancellationToken);
         
         _logger.LogDebug("Processed relationship removal cache invalidation for {RelationshipType} between {SourceId} and {TargetId} in tenant {TenantId}", 
