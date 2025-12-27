@@ -267,7 +267,7 @@ public class CommandBufferTests
         mockHandler.Setup(x => x.HandleAsync(It.IsAny<TestCommandWithResponse>(), It.IsAny<CancellationToken>()))
                   .ReturnsAsync(expectedResponse);
 
-        _mockServiceProvider.Setup(x => x.GetService(typeof(ICommandHandler<TestCommandWithResponse>)))
+        _mockServiceProvider.Setup(x => x.GetService(typeof(ICommandHandler<TestCommandWithResponse, TestCommandResponse>)))
                            .Returns(mockHandler.Object);
 
         await _commandBuffer.StartAsync();

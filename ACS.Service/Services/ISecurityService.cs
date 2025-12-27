@@ -6,7 +6,7 @@ namespace ACS.Service.Services;
 public interface ISecurityService
 {
     // Methods that handlers are calling
-    Task<DateTime> BlockUserAsync(int userId, string reason, string blockedBy);
+    Task<DateTime> BlockUserAsync(int userId, string severity, string violationId);
     Task QuarantineUserAsync(int userId, string reason, string quarantinedBy);
     Task GenerateSecurityAlertAsync(string alertType, string message, Dictionary<string, object> metadata, string createdBy);
 }

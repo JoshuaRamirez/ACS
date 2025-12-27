@@ -84,3 +84,68 @@ public record UriProtectionStatusResponse
     public string? Message { get; init; }
     public DateTime Timestamp { get; init; } = DateTime.UtcNow;
 }
+
+/// <summary>
+/// Service response for resource creation operation
+/// </summary>
+public record CreateResourceResponse
+{
+    public Resource? Resource { get; init; }
+    public bool Success { get; init; } = true;
+    public string? Message { get; init; }
+    public ICollection<string> Errors { get; init; } = new List<string>();
+    public DateTime Timestamp { get; init; } = DateTime.UtcNow;
+}
+
+/// <summary>
+/// Service response for resource update operation
+/// </summary>
+public record UpdateResourceResponse
+{
+    public Resource? Resource { get; init; }
+    public bool Success { get; init; } = true;
+    public string? Message { get; init; }
+    public ICollection<string> Errors { get; init; } = new List<string>();
+    public DateTime Timestamp { get; init; } = DateTime.UtcNow;
+}
+
+/// <summary>
+/// Service response for single resource retrieval operation
+/// </summary>
+public record GetResourceResponse
+{
+    public Resource? Resource { get; init; }
+    public bool Success { get; init; } = true;
+    public string? Message { get; init; }
+    public ICollection<string> Errors { get; init; } = new List<string>();
+    public DateTime Timestamp { get; init; } = DateTime.UtcNow;
+}
+
+/// <summary>
+/// Service response for multiple resources retrieval operation with pagination
+/// </summary>
+public record GetResourcesResponse
+{
+    public ICollection<Resource> Resources { get; init; } = new List<Resource>();
+    public int TotalCount { get; init; }
+    public int Page { get; init; }
+    public int PageSize { get; init; }
+    public bool HasNextPage => Page * PageSize < TotalCount;
+    public bool HasPreviousPage => Page > 1;
+    public int TotalPages => (int)Math.Ceiling((double)TotalCount / PageSize);
+    public bool Success { get; init; } = true;
+    public string? Message { get; init; }
+    public ICollection<string> Errors { get; init; } = new List<string>();
+    public DateTime Timestamp { get; init; } = DateTime.UtcNow;
+}
+
+/// <summary>
+/// Service response for resource deletion operation
+/// </summary>
+public record DeleteResourceResponse
+{
+    public bool Success { get; init; } = true;
+    public string? Message { get; init; }
+    public ICollection<string> Errors { get; init; } = new List<string>();
+    public DateTime Timestamp { get; init; } = DateTime.UtcNow;
+}

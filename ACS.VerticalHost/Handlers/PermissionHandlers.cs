@@ -369,7 +369,7 @@ public class GetEntityPermissionsQueryHandler : IQueryHandler<GetEntityPermissio
             
             var response = await _permissionService.GetEntityPermissionsAsync(request);
             
-            var result = response.Permissions.Select(p => new EntityPermissionInfo
+            var result = response.DirectPermissions.Concat(response.InheritedPermissions).Select(p => new EntityPermissionInfo
             {
                 PermissionId = p.PermissionId,
                 PermissionName = p.PermissionName,

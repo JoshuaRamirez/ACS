@@ -83,4 +83,12 @@ public interface IResourceService
     Task<IEnumerable<Resource>> FindOrphanedResourcesAsync();
     Task CleanupUnusedResourcesAsync(string cleanedBy);
     Task RebuildResourceIndexAsync();
+
+    // Handler-compatible methods using request/response patterns
+    Task<ACS.Service.Responses.CreateResourceResponse> CreateAsync(ACS.Service.Requests.CreateResourceRequest request);
+    Task<ACS.Service.Responses.UpdateResourceResponse> UpdateAsync(ACS.Service.Requests.UpdateResourceRequest request);
+    Task<ACS.Service.Responses.GetResourceResponse> GetByIdAsync(ACS.Service.Requests.GetResourceRequest request);
+    Task<ACS.Service.Responses.GetResourcesResponse> GetAllAsync(ACS.Service.Requests.GetResourcesRequest request);
+    Task<ACS.Service.Responses.DeleteResourceResponse> DeleteAsync(ACS.Service.Requests.DeleteResourceRequest request);
+    Task<ACS.Service.Domain.DependencyCheckResult> CheckDependenciesAsync(int resourceId);
 }

@@ -193,13 +193,6 @@ public record SecurityAlertInfo
     public string Severity { get; init; } = string.Empty;
 }
 
-public record RiskFactor
-{
-    public string FactorType { get; init; } = string.Empty;
-    public RiskLevel Level { get; init; }
-    public string Description { get; init; } = string.Empty;
-    public double Impact { get; init; }
-}
 
 public record ComplianceCheck
 {

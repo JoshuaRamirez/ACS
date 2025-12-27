@@ -4,12 +4,12 @@ namespace ACS.Service.Infrastructure;
 
 public class TenantConfiguration
 {
-    public string TenantId { get; set; } = string.Empty;
-    public string DatabaseConnectionString { get; set; } = string.Empty;
-    public string DisplayName { get; set; } = string.Empty;
-    public DateTime CreatedAt { get; set; }
-    public bool IsActive { get; set; } = true;
-    public Dictionary<string, string> Settings { get; set; } = new();
+    public virtual string TenantId { get; set; } = string.Empty;
+    public virtual string DatabaseConnectionString { get; set; } = string.Empty;
+    public virtual string DisplayName { get; set; } = string.Empty;
+    public virtual DateTime CreatedAt { get; set; }
+    public virtual bool IsActive { get; set; } = true;
+    public virtual Dictionary<string, string> Settings { get; set; } = new();
 }
 
 public interface ITenantConfigurationProvider

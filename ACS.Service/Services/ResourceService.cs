@@ -1329,22 +1329,22 @@ public class ResourceService : IResourceService
     {
         var results = new List<object>();
         int matchCount = 0;
-        
+
         foreach (var testUri in testUris)
         {
             try
             {
                 // Simple pattern matching - can be enhanced with regex or advanced patterns
-                bool matches = testUri.Contains(pattern.Replace("*", "")) || 
+                bool matches = testUri.Contains(pattern.Replace("*", "")) ||
                               Regex.IsMatch(testUri, pattern.Replace("*", ".*"));
-                
+
                 results.Add(new
                 {
                     Uri = testUri,
                     Matches = matches,
                     Pattern = pattern
                 });
-                
+
                 if (matches) matchCount++;
             }
             catch (Exception ex)
@@ -1359,7 +1359,7 @@ public class ResourceService : IResourceService
                 });
             }
         }
-        
+
         var result = new
         {
             Pattern = pattern,
@@ -1367,7 +1367,478 @@ public class ResourceService : IResourceService
             MatchCount = matchCount,
             TotalTests = testUris.Count
         };
-        
+
         return Task.FromResult<object>(result);
     }
+
+    #region Handler-Compatible Request/Response Methods
+
+    public async Task<Responses.CreateResourceResponse> CreateAsync(Requests.CreateResourceRequest request)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(request.UriPattern))
+            {
+                return new Responses.CreateResourceResponse
+                {
+                    Success = false,
+                    Message = "URI pattern is required",
+                    Errors = new[] { "URI pattern cannot be empty" }
+                };
+            }
+
+            if (string.IsNullOrWhiteSpace(request.Name))
+            {
+                return new Responses.CreateResourceResponse
+                {
+                    Success = false,
+                    Message = "Resource name is required",
+                    Errors = new[] { "Resource name cannot be empty" }
+                };
+            }
+
+            // Create the resource using the existing domain method
+            var resource = await CreateResourceAsync(
+                uri: request.UriPattern,
+                description: request.Description ?? string.Empty,
+                resourceType: request.Name,
+                createdBy: request.CreatedBy
+            );
+
+            _logger.LogInformation("Created resource {ResourceId} via request/response pattern by {CreatedBy}",
+                resource.Id, request.CreatedBy);
+
+            return new Responses.CreateResourceResponse
+            {
+                Resource = resource,
+                Success = true,
+                Message = "Resource created successfully"
+            };
+        }
+        catch (ArgumentException ex)
+        {
+            _logger.LogError(ex, "Validation error creating resource via request/response pattern");
+            return new Responses.CreateResourceResponse
+            {
+                Success = false,
+                Message = "Validation error",
+                Errors = new[] { ex.Message }
+            };
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogError(ex, "Operation error creating resource via request/response pattern");
+            return new Responses.CreateResourceResponse
+            {
+                Success = false,
+                Message = "Operation error",
+                Errors = new[] { ex.Message }
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error creating resource via request/response pattern");
+            return new Responses.CreateResourceResponse
+            {
+                Success = false,
+                Message = "Error creating resource",
+                Errors = new[] { ex.Message }
+            };
+        }
+    }
+
+    public async Task<Responses.UpdateResourceResponse> UpdateAsync(Requests.UpdateResourceRequest request)
+    {
+        try
+        {
+            if (request.ResourceId <= 0)
+            {
+                return new Responses.UpdateResourceResponse
+                {
+                    Success = false,
+                    Message = "Invalid resource ID",
+                    Errors = new[] { "Resource ID must be a positive integer" }
+                };
+            }
+
+            if (string.IsNullOrWhiteSpace(request.UriPattern))
+            {
+                return new Responses.UpdateResourceResponse
+                {
+                    Success = false,
+                    Message = "URI pattern is required",
+                    Errors = new[] { "URI pattern cannot be empty" }
+                };
+            }
+
+            if (string.IsNullOrWhiteSpace(request.Name))
+            {
+                return new Responses.UpdateResourceResponse
+                {
+                    Success = false,
+                    Message = "Resource name is required",
+                    Errors = new[] { "Resource name cannot be empty" }
+                };
+            }
+
+            // Update the resource using the existing domain method
+            var resource = await UpdateResourceAsync(
+                resourceId: request.ResourceId,
+                uri: request.UriPattern,
+                description: request.Description ?? string.Empty,
+                resourceType: request.Name,
+                updatedBy: request.UpdatedBy
+            );
+
+            _logger.LogInformation("Updated resource {ResourceId} via request/response pattern by {UpdatedBy}",
+                request.ResourceId, request.UpdatedBy);
+
+            return new Responses.UpdateResourceResponse
+            {
+                Resource = resource,
+                Success = true,
+                Message = "Resource updated successfully"
+            };
+        }
+        catch (ArgumentException ex)
+        {
+            _logger.LogError(ex, "Validation error updating resource {ResourceId} via request/response pattern",
+                request.ResourceId);
+            return new Responses.UpdateResourceResponse
+            {
+                Success = false,
+                Message = "Validation error",
+                Errors = new[] { ex.Message }
+            };
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogError(ex, "Operation error updating resource {ResourceId} via request/response pattern",
+                request.ResourceId);
+            return new Responses.UpdateResourceResponse
+            {
+                Success = false,
+                Message = "Operation error",
+                Errors = new[] { ex.Message }
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error updating resource {ResourceId} via request/response pattern",
+                request.ResourceId);
+            return new Responses.UpdateResourceResponse
+            {
+                Success = false,
+                Message = "Error updating resource",
+                Errors = new[] { ex.Message }
+            };
+        }
+    }
+
+    public async Task<Responses.GetResourceResponse> GetByIdAsync(Requests.GetResourceRequest request)
+    {
+        try
+        {
+            if (request.ResourceId <= 0)
+            {
+                return new Responses.GetResourceResponse
+                {
+                    Success = false,
+                    Message = "Invalid resource ID",
+                    Errors = new[] { "Resource ID must be a positive integer" }
+                };
+            }
+
+            // Get the resource using the existing domain method
+            var resource = await GetResourceByIdAsync(request.ResourceId);
+
+            if (resource == null)
+            {
+                return new Responses.GetResourceResponse
+                {
+                    Success = false,
+                    Message = "Resource not found",
+                    Errors = new[] { $"Resource {request.ResourceId} not found" }
+                };
+            }
+
+            _logger.LogInformation("Retrieved resource {ResourceId} via request/response pattern by {RequestedBy}",
+                request.ResourceId, request.RequestedBy);
+
+            return new Responses.GetResourceResponse
+            {
+                Resource = resource,
+                Success = true,
+                Message = "Resource retrieved successfully"
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving resource {ResourceId} via request/response pattern",
+                request.ResourceId);
+            return new Responses.GetResourceResponse
+            {
+                Success = false,
+                Message = "Error retrieving resource",
+                Errors = new[] { ex.Message }
+            };
+        }
+    }
+
+    public async Task<Responses.GetResourcesResponse> GetAllAsync(Requests.GetResourcesRequest request)
+    {
+        try
+        {
+            IEnumerable<Domain.Resource> resources;
+
+            // Apply filters based on the request
+            if (!string.IsNullOrWhiteSpace(request.Search))
+            {
+                resources = await SearchResourcesAsync(request.Search);
+            }
+            else if (!string.IsNullOrWhiteSpace(request.ResourceType))
+            {
+                resources = await GetResourcesByTypeAsync(request.ResourceType);
+            }
+            else if (!string.IsNullOrWhiteSpace(request.UriPatternFilter))
+            {
+                resources = await GetResourcesByPatternAsync(request.UriPatternFilter);
+            }
+            else
+            {
+                resources = await GetAllResourcesAsync();
+            }
+
+            // Filter by active status if requested
+            if (request.ActiveOnly.HasValue && request.ActiveOnly.Value)
+            {
+                resources = resources.Where(r => r.IsActive);
+            }
+
+            // Get total count before pagination
+            var totalCount = resources.Count();
+
+            // Apply sorting
+            if (!string.IsNullOrWhiteSpace(request.SortBy))
+            {
+                resources = request.SortBy.ToLower() switch
+                {
+                    "uri" => request.SortDescending
+                        ? resources.OrderByDescending(r => r.Uri)
+                        : resources.OrderBy(r => r.Uri),
+                    "type" => request.SortDescending
+                        ? resources.OrderByDescending(r => r.ResourceType)
+                        : resources.OrderBy(r => r.ResourceType),
+                    "created" => request.SortDescending
+                        ? resources.OrderByDescending(r => r.CreatedAt)
+                        : resources.OrderBy(r => r.CreatedAt),
+                    "updated" => request.SortDescending
+                        ? resources.OrderByDescending(r => r.UpdatedAt)
+                        : resources.OrderBy(r => r.UpdatedAt),
+                    _ => resources.OrderBy(r => r.Uri)
+                };
+            }
+
+            // Apply pagination
+            var paginatedResources = resources
+                .Skip((request.Page - 1) * request.PageSize)
+                .Take(request.PageSize)
+                .ToList();
+
+            _logger.LogInformation("Retrieved {Count} resources (page {Page} of {PageSize}) via request/response pattern by {RequestedBy}",
+                paginatedResources.Count, request.Page, request.PageSize, request.RequestedBy);
+
+            return new Responses.GetResourcesResponse
+            {
+                Resources = paginatedResources,
+                TotalCount = totalCount,
+                Page = request.Page,
+                PageSize = request.PageSize,
+                Success = true,
+                Message = "Resources retrieved successfully"
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving resources via request/response pattern");
+            return new Responses.GetResourcesResponse
+            {
+                Success = false,
+                Message = "Error retrieving resources",
+                Errors = new[] { ex.Message }
+            };
+        }
+    }
+
+    public async Task<Responses.DeleteResourceResponse> DeleteAsync(Requests.DeleteResourceRequest request)
+    {
+        try
+        {
+            if (request.ResourceId <= 0)
+            {
+                return new Responses.DeleteResourceResponse
+                {
+                    Success = false,
+                    Message = "Invalid resource ID",
+                    Errors = new[] { "Resource ID must be a positive integer" }
+                };
+            }
+
+            // Check dependencies unless force delete is requested
+            if (!request.ForceDelete)
+            {
+                var dependencyCheck = await CheckDependenciesAsync(request.ResourceId);
+                if (!dependencyCheck.CanDelete)
+                {
+                    var errorMessages = new List<string> { "Cannot delete resource due to dependencies" };
+                    errorMessages.AddRange(dependencyCheck.Dependencies.Select(d =>
+                        $"{d.DependencyType}: {d.EntityName} ({d.EntityType})"));
+
+                    return new Responses.DeleteResourceResponse
+                    {
+                        Success = false,
+                        Message = "Resource has active dependencies",
+                        Errors = errorMessages
+                    };
+                }
+            }
+
+            // Delete the resource using the existing domain method
+            await DeleteResourceAsync(request.ResourceId, request.DeletedBy);
+
+            _logger.LogInformation("Deleted resource {ResourceId} via request/response pattern by {DeletedBy}",
+                request.ResourceId, request.DeletedBy);
+
+            return new Responses.DeleteResourceResponse
+            {
+                Success = true,
+                Message = "Resource deleted successfully"
+            };
+        }
+        catch (ArgumentException ex)
+        {
+            _logger.LogError(ex, "Validation error deleting resource {ResourceId} via request/response pattern",
+                request.ResourceId);
+            return new Responses.DeleteResourceResponse
+            {
+                Success = false,
+                Message = "Validation error",
+                Errors = new[] { ex.Message }
+            };
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogError(ex, "Operation error deleting resource {ResourceId} via request/response pattern",
+                request.ResourceId);
+            return new Responses.DeleteResourceResponse
+            {
+                Success = false,
+                Message = "Operation error",
+                Errors = new[] { ex.Message }
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error deleting resource {ResourceId} via request/response pattern",
+                request.ResourceId);
+            return new Responses.DeleteResourceResponse
+            {
+                Success = false,
+                Message = "Error deleting resource",
+                Errors = new[] { ex.Message }
+            };
+        }
+    }
+
+    public async Task<Domain.DependencyCheckResult> CheckDependenciesAsync(int resourceId)
+    {
+        try
+        {
+            var result = new Domain.DependencyCheckResult
+            {
+                CanDelete = true,
+                Dependencies = new List<Domain.Dependency>(),
+                Warnings = new List<string>(),
+                Messages = new List<string>()
+            };
+
+            // Check if resource exists
+            var resource = await _dbContext.Resources.FindAsync(resourceId);
+            if (resource == null)
+            {
+                result.CanDelete = false;
+                result.Messages.Add($"Resource {resourceId} not found");
+                return result;
+            }
+
+            // Check for URI access permissions (dependencies)
+            var uriAccesses = await _dbContext.UriAccesses
+                .Include(ua => ua.PermissionScheme)
+                    .ThenInclude(ps => ps.Entity)
+                .Where(ua => ua.ResourceId == resourceId)
+                .ToListAsync();
+
+            if (uriAccesses.Any())
+            {
+                result.CanDelete = false;
+                result.Messages.Add($"Resource '{resource.Uri}' has {uriAccesses.Count} active permission(s)");
+
+                foreach (var uriAccess in uriAccesses)
+                {
+                    var entity = uriAccess.PermissionScheme.Entity;
+                    result.Dependencies.Add(new Domain.Dependency
+                    {
+                        EntityId = entity.Id,
+                        EntityName = entity.EntityType,
+                        EntityType = entity.EntityType,
+                        DependencyType = "URI Access Permission",
+                        Description = $"Permission scheme {uriAccess.PermissionSchemeId} references this resource"
+                    });
+                }
+            }
+
+            // Check for child resources
+            var childResources = await _dbContext.Resources
+                .Where(r => r.ParentResourceId == resourceId)
+                .ToListAsync();
+
+            if (childResources.Any())
+            {
+                result.Warnings.Add($"Resource has {childResources.Count} child resource(s) that may be affected");
+                foreach (var child in childResources)
+                {
+                    result.Dependencies.Add(new Domain.Dependency
+                    {
+                        EntityId = child.Id,
+                        EntityName = child.Uri,
+                        EntityType = "Resource",
+                        DependencyType = "Child Resource",
+                        Description = $"Child resource with URI '{child.Uri}'"
+                    });
+                }
+            }
+
+            // If no blocking dependencies found
+            if (result.CanDelete)
+            {
+                result.Messages.Add($"Resource '{resource.Uri}' can be safely deleted");
+            }
+
+            _logger.LogInformation("Dependency check for resource {ResourceId}: CanDelete={CanDelete}, Dependencies={DependencyCount}",
+                resourceId, result.CanDelete, result.Dependencies.Count);
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error checking dependencies for resource {ResourceId}", resourceId);
+            return new Domain.DependencyCheckResult
+            {
+                CanDelete = false,
+                Messages = new List<string> { $"Error checking dependencies: {ex.Message}" }
+            };
+        }
+    }
+
+    #endregion
 }

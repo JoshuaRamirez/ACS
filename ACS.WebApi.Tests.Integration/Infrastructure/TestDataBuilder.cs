@@ -353,8 +353,8 @@ public class CreateGroupRequestBuilder
 public class CheckPermissionRequestBuilder
 {
     private int _entityId = 1;
-    private string _uri = "/api/test";
-    private string _httpVerb = "GET";
+    private int _permissionId = 1;
+    private int? _resourceId = null;
 
     public CheckPermissionRequestBuilder ForEntity(int entityId)
     {
@@ -362,29 +362,24 @@ public class CheckPermissionRequestBuilder
         return this;
     }
 
-    public CheckPermissionRequestBuilder ForUri(string uri)
+    public CheckPermissionRequestBuilder WithPermission(int permissionId)
     {
-        _uri = uri;
+        _permissionId = permissionId;
         return this;
     }
 
-    public CheckPermissionRequestBuilder WithVerb(string verb)
+    public CheckPermissionRequestBuilder ForResource(int? resourceId)
     {
-        _httpVerb = verb;
+        _resourceId = resourceId;
         return this;
     }
-
-    public CheckPermissionRequestBuilder ForGet() => WithVerb("GET");
-    public CheckPermissionRequestBuilder ForPost() => WithVerb("POST");
-    public CheckPermissionRequestBuilder ForPut() => WithVerb("PUT");
-    public CheckPermissionRequestBuilder ForDelete() => WithVerb("DELETE");
 
     public ACS.Service.Requests.CheckPermissionRequest Build() => new()
     {
         EntityId = _entityId,
         EntityType = "User", // Default for tests
-        Resource = _uri,
-        Action = _httpVerb,
+        PermissionId = _permissionId,
+        ResourceId = _resourceId,
         RequestedBy = "test-user"
     };
 }

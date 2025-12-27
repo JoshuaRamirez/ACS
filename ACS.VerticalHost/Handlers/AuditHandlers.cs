@@ -193,7 +193,7 @@ public class GetAuditLogQueryHandler : IQueryHandler<GetAuditLogQuery, List<Audi
         
         try
         {
-            var request = new ACS.Service.Requests.GetAuditLogRequest
+            var request = new ACS.Service.Requests.GetAuditLogEnhancedRequest
             {
                 Page = query.Page,
                 PageSize = query.PageSize,
@@ -360,7 +360,7 @@ public class GetComplianceReportQueryHandler : IQueryHandler<GetComplianceReport
             if (query.StartDate >= query.EndDate)
                 throw new ArgumentException("Start date must be before end date");
 
-            var request = new ACS.Service.Requests.GenerateComplianceReportRequest
+            var request = new ACS.Service.Services.GenerateComplianceReportRequest
             {
                 ReportType = query.ReportType,
                 StartDate = query.StartDate,
@@ -395,7 +395,7 @@ public class GetComplianceReportQueryHandler : IQueryHandler<GetComplianceReport
                     AnomalyCount = response.Summary.AnomalyCount,
                     OverallRiskLevel = response.Summary.OverallRiskLevel
                 },
-                Violations = response.Violations.Select(v => new ComplianceViolation
+                Violations = response.Violations.Select(v => new ACS.VerticalHost.Commands.ComplianceViolation
                 {
                     ViolationType = v.ViolationType,
                     Description = v.Description,
@@ -423,17 +423,19 @@ public class GetComplianceReportQueryHandler : IQueryHandler<GetComplianceReport
                 {
                     OverallRiskLevel = response.RiskAssessment.OverallRiskLevel,
                     RiskScore = response.RiskAssessment.RiskScore,
-                    RiskFactors = response.RiskAssessment.RiskFactors.Select(rf => new RiskFactor
+                    RiskFactors = response.RiskAssessment.RiskFactors.Select(rf => new ACS.VerticalHost.Commands.RiskFactor
                     {
                         Category = rf.Category,
                         Description = rf.Description,
-                        Impact = rf.Impact,
-                        Probability = rf.Probability,
-                        Mitigation = rf.Mitigation
+                        Impact = ParseDoubleWithDefault(rf.Impact, 0.5),
+                        Probability = ParseDoubleWithDefault(rf.Probability, 0.5),
+                        Mitigation = rf.Mitigation ?? string.Empty
                     }).ToList(),
                     Recommendations = response.RiskAssessment.Recommendations.ToList()
                 } : null,
-                ReportData = response.ReportData
+                ReportData = response.ReportData != null
+                    ? new Dictionary<string, object> { { "reportBytes", response.ReportData } }
+                    : new Dictionary<string, object>()
             };
             
             LogQuerySuccess(_logger, context, new 
@@ -449,6 +451,15 @@ public class GetComplianceReportQueryHandler : IQueryHandler<GetComplianceReport
         {
             return HandleQueryError<ComplianceReportResult>(_logger, ex, context, correlationId);
         }
+    }
+
+    private static double ParseDoubleWithDefault(string value, double defaultValue)
+    {
+        if (double.TryParse(value, out var result))
+        {
+            return result;
+        }
+        return defaultValue;
     }
 }
 

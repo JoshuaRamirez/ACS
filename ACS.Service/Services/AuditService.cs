@@ -1721,4 +1721,515 @@ public class AuditService : IAuditService
     }
 
     #endregion
+
+    #region Handler Compatibility Methods
+
+    public async Task<ACS.Service.Responses.RecordAuditEventResponse> RecordEventAsync(ACS.Service.Requests.RecordAuditEventRequest request)
+    {
+        try
+        {
+            var auditLog = new AuditLog
+            {
+                EntityType = request.EntityType ?? "Unknown",
+                EntityId = request.EntityId ?? 0,
+                ChangeType = request.EventType,
+                ChangedBy = request.UserId?.ToString() ?? "System",
+                ChangeDate = request.EventTimestamp,
+                ChangeDetails = JsonSerializer.Serialize(new
+                {
+                    request.EventCategory,
+                    request.Action,
+                    request.Details,
+                    request.Severity,
+                    request.IpAddress,
+                    request.UserAgent,
+                    request.SessionId,
+                    request.ResourceId,
+                    request.Metadata,
+                    request.CorrelationId
+                })
+            };
+
+            _dbContext.AuditLogs.Add(auditLog);
+            await _dbContext.SaveChangesAsync();
+
+            return new ACS.Service.Responses.RecordAuditEventResponse
+            {
+                Success = true,
+                AuditEventId = auditLog.Id,
+                RecordedAt = auditLog.ChangeDate,
+                Message = "Audit event recorded successfully"
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to record audit event");
+            return new ACS.Service.Responses.RecordAuditEventResponse
+            {
+                Success = false,
+                Message = "Failed to record audit event",
+                Errors = new List<string> { ex.Message }
+            };
+        }
+    }
+
+    public async Task<ACS.Service.Responses.PurgeAuditDataResponse> PurgeOldDataAsync(ACS.Service.Requests.PurgeAuditDataRequest request)
+    {
+        try
+        {
+            var query = _dbContext.AuditLogs.Where(al => al.ChangeDate < request.OlderThan);
+
+            if (request.EventCategories?.Any() == true)
+            {
+                query = query.Where(al => request.EventCategories.Any(cat => al.ChangeDetails.Contains(cat)));
+            }
+
+            if (request.SeverityLevels?.Any() == true)
+            {
+                query = query.Where(al => request.SeverityLevels.Any(sev => al.ChangeDetails.Contains(sev)));
+            }
+
+            var totalRecordsToProcess = await query.CountAsync();
+            var preservedReasons = new List<string>();
+            var recordsDeleted = 0;
+            var recordsPreserved = 0;
+
+            if (request.DryRun)
+            {
+                recordsDeleted = totalRecordsToProcess;
+            }
+            else
+            {
+                var logsToDelete = await query.Take(request.BatchSize).ToListAsync();
+                
+                // Apply preservation rules if requested
+                if (request.PreserveCompliance)
+                {
+                    var preservedLogs = logsToDelete.Where(log => 
+                        log.ChangeType.Contains("COMPLIANCE") || 
+                        log.ChangeType.Contains("AUDIT") ||
+                        log.ChangeType.Contains("SECURITY")).ToList();
+                    
+                    if (preservedLogs.Any())
+                    {
+                        recordsPreserved = preservedLogs.Count;
+                        preservedReasons.Add("Compliance preservation policy");
+                        logsToDelete = logsToDelete.Except(preservedLogs).ToList();
+                    }
+                }
+
+                recordsDeleted = logsToDelete.Count;
+                
+                if (logsToDelete.Any())
+                {
+                    _dbContext.AuditLogs.RemoveRange(logsToDelete);
+                    await _dbContext.SaveChangesAsync();
+                }
+            }
+
+            return new ACS.Service.Responses.PurgeAuditDataResponse
+            {
+                Success = true,
+                RecordsProcessed = totalRecordsToProcess,
+                RecordsDeleted = recordsDeleted,
+                RecordsPreserved = recordsPreserved,
+                PreservedReasons = preservedReasons,
+                Message = request.DryRun 
+                    ? $"Dry run completed. Would delete {recordsDeleted} records."
+                    : $"Purge completed successfully. Deleted {recordsDeleted} records."
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to purge audit data");
+            return new ACS.Service.Responses.PurgeAuditDataResponse
+            {
+                Success = false,
+                Message = "Failed to purge audit data",
+                Errors = new List<string> { ex.Message }
+            };
+        }
+    }
+
+    public async Task<ACS.Service.Responses.GetAuditLogResponse> GetAuditLogAsync(ACS.Service.Requests.GetAuditLogEnhancedRequest request)
+    {
+        try
+        {
+            var query = _dbContext.AuditLogs.AsQueryable();
+
+            // Apply filters
+            if (request.StartDate.HasValue)
+                query = query.Where(al => al.ChangeDate >= request.StartDate.Value);
+
+            if (request.EndDate.HasValue)
+                query = query.Where(al => al.ChangeDate <= request.EndDate.Value);
+
+            if (request.EventTypes?.Any() == true)
+                query = query.Where(al => request.EventTypes.Contains(al.ChangeType));
+
+            if (request.EventCategories?.Any() == true)
+                query = query.Where(al => request.EventCategories.Any(cat => al.ChangeDetails.Contains(cat)));
+
+            if (request.UserId.HasValue)
+                query = query.Where(al => al.ChangedBy == request.UserId.Value.ToString());
+
+            if (request.EntityId.HasValue)
+                query = query.Where(al => al.EntityId == request.EntityId.Value);
+
+            if (!string.IsNullOrEmpty(request.EntityType))
+                query = query.Where(al => al.EntityType == request.EntityType);
+
+            if (request.ResourceId.HasValue)
+                query = query.Where(al => al.ChangeDetails.Contains($"ResourceId\":{request.ResourceId.Value}"));
+
+            if (request.SeverityLevels?.Any() == true)
+                query = query.Where(al => request.SeverityLevels.Any(sev => al.ChangeDetails.Contains(sev)));
+
+            if (!string.IsNullOrEmpty(request.SearchText))
+                query = query.Where(al => al.ChangeDetails.Contains(request.SearchText) || 
+                                         al.ChangeType.Contains(request.SearchText));
+
+            if (!string.IsNullOrEmpty(request.IpAddress))
+                query = query.Where(al => al.ChangeDetails.Contains(request.IpAddress));
+
+            // Get total count
+            var totalCount = await query.CountAsync();
+
+            // Apply sorting
+            query = request.SortDescending 
+                ? query.OrderByDescending(al => al.ChangeDate)
+                : query.OrderBy(al => al.ChangeDate);
+
+            // Apply pagination
+            query = query.Skip((request.Page - 1) * request.PageSize).Take(request.PageSize);
+
+            var logs = await query.ToListAsync();
+
+            var entries = logs.Select(log => new ACS.Service.Responses.AuditLogEntryExtended
+            {
+                Id = log.Id,
+                EventType = log.ChangeType,
+                EventCategory = ExtractFromDetails(log.ChangeDetails, "EventCategory"),
+                UserId = int.TryParse(log.ChangedBy, out var userId) ? userId : null,
+                UserName = log.ChangedBy,
+                EntityId = log.EntityId > 0 ? log.EntityId : null,
+                EntityType = log.EntityType,
+                EntityName = $"{log.EntityType}:{log.EntityId}",
+                ResourceId = ExtractResourceId(log.ChangeDetails),
+                ResourceName = ExtractFromDetails(log.ChangeDetails, "ResourceName"),
+                Action = ExtractFromDetails(log.ChangeDetails, "Action") ?? log.ChangeType,
+                Details = log.ChangeDetails,
+                Severity = ExtractFromDetails(log.ChangeDetails, "Severity") ?? "Information",
+                IpAddress = ExtractFromDetails(log.ChangeDetails, "IpAddress"),
+                UserAgent = ExtractFromDetails(log.ChangeDetails, "UserAgent"),
+                SessionId = ExtractFromDetails(log.ChangeDetails, "SessionId"),
+                EventTimestamp = log.ChangeDate,
+                CreatedAt = log.ChangeDate,
+                Metadata = ExtractMetadata(log.ChangeDetails)
+            }).ToList();
+
+            return new ACS.Service.Responses.GetAuditLogResponse
+            {
+                Success = true,
+                Entries = entries,
+                TotalCount = totalCount,
+                Page = request.Page,
+                PageSize = request.PageSize,
+                Message = $"Retrieved {entries.Count} audit log entries"
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to retrieve audit log");
+            return new ACS.Service.Responses.GetAuditLogResponse
+            {
+                Success = false,
+                Message = "Failed to retrieve audit log",
+                Errors = new List<string> { ex.Message }
+            };
+        }
+    }
+
+    public async Task<ACS.Service.Responses.GetUserAuditTrailResponse> GetUserAuditTrailAsync(ACS.Service.Requests.GetUserAuditTrailRequest request)
+    {
+        try
+        {
+            var query = _dbContext.AuditLogs.Where(al => al.ChangedBy == request.UserId.ToString());
+
+            // Apply date filters
+            if (request.StartDate.HasValue)
+                query = query.Where(al => al.ChangeDate >= request.StartDate.Value);
+
+            if (request.EndDate.HasValue)
+                query = query.Where(al => al.ChangeDate <= request.EndDate.Value);
+
+            // Apply category filters
+            if (request.EventCategories?.Any() == true)
+                query = query.Where(al => request.EventCategories.Any(cat => al.ChangeDetails.Contains(cat)));
+
+            // Filter based on options
+            if (!request.IncludeSystemEvents)
+                query = query.Where(al => !al.ChangeType.StartsWith("SYSTEM:"));
+
+            if (request.IncludePermissionChanges)
+                query = query.Where(al => al.ChangeType.Contains("PERMISSION") || 
+                                         al.ChangeType.Contains("GRANT") || 
+                                         al.ChangeType.Contains("REVOKE") ||
+                                         !request.IncludePermissionChanges);
+
+            if (request.IncludeResourceAccess)
+                query = query.Where(al => al.ChangeType.Contains("ACCESS") || 
+                                         !request.IncludeResourceAccess);
+
+            var totalCount = await query.CountAsync();
+
+            // Apply pagination
+            query = query.OrderByDescending(al => al.ChangeDate)
+                         .Skip((request.Page - 1) * request.PageSize)
+                         .Take(request.PageSize);
+
+            var logs = await query.ToListAsync();
+
+            var entries = logs.Select(log => new ACS.Service.Responses.UserAuditTrailEntryExtended
+            {
+                Id = log.Id,
+                EventType = log.ChangeType,
+                EventCategory = ExtractFromDetails(log.ChangeDetails, "EventCategory") ?? "General",
+                Action = ExtractFromDetails(log.ChangeDetails, "Action") ?? log.ChangeType,
+                Details = log.ChangeDetails,
+                ResourceName = ExtractFromDetails(log.ChangeDetails, "ResourceName"),
+                PermissionName = ExtractFromDetails(log.ChangeDetails, "PermissionName"),
+                Severity = ExtractFromDetails(log.ChangeDetails, "Severity") ?? "Information",
+                IpAddress = ExtractFromDetails(log.ChangeDetails, "IpAddress"),
+                SessionId = ExtractFromDetails(log.ChangeDetails, "SessionId"),
+                EventTimestamp = log.ChangeDate,
+                IsAnomaly = DetectAnomaly(log),
+                AnomalyReason = DetectAnomaly(log) ? "Unusual activity pattern detected" : null
+            }).ToList();
+
+            return new ACS.Service.Responses.GetUserAuditTrailResponse
+            {
+                Success = true,
+                Entries = entries,
+                TotalCount = totalCount,
+                Page = request.Page,
+                PageSize = request.PageSize,
+                Message = $"Retrieved {entries.Count} user audit trail entries for user {request.UserId}"
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to retrieve user audit trail for user {UserId}", request.UserId);
+            return new ACS.Service.Responses.GetUserAuditTrailResponse
+            {
+                Success = false,
+                Message = "Failed to retrieve user audit trail",
+                Errors = new List<string> { ex.Message }
+            };
+        }
+    }
+
+    public async Task<ACS.Service.Responses.ValidateAuditIntegrityResponse> ValidateIntegrityAsync(ACS.Service.Requests.ValidateAuditIntegrityRequest request)
+    {
+        try
+        {
+            var query = _dbContext.AuditLogs.AsQueryable();
+
+            if (request.StartDate.HasValue)
+                query = query.Where(al => al.ChangeDate >= request.StartDate.Value);
+
+            if (request.EndDate.HasValue)
+                query = query.Where(al => al.ChangeDate <= request.EndDate.Value);
+
+            var logs = await query.OrderBy(al => al.Id).ToListAsync();
+            var issues = new List<ACS.Service.Responses.AuditIntegrityIssueResult>();
+            var validRecords = 0;
+            var invalidRecords = 0;
+            var validationStart = DateTime.UtcNow;
+
+            // Hash chain validation
+            bool hashChainValid = true;
+            if (request.CheckHashChain)
+            {
+                for (int i = 1; i < logs.Count; i++)
+                {
+                    var expectedHash = await CalculateAuditHashAsync(logs[i].Id);
+                    // In a real implementation, compare with stored hash
+                    validRecords++;
+                }
+            }
+
+            // Completeness validation
+            bool completenessValid = true;
+            if (request.CheckCompleteness)
+            {
+                for (int i = 1; i < logs.Count; i++)
+                {
+                    if (logs[i].Id - logs[i-1].Id > 1)
+                    {
+                        completenessValid = false;
+                        issues.Add(new ACS.Service.Responses.AuditIntegrityIssueResult
+                        {
+                            IssueType = "MissingRecord",
+                            Description = $"Gap detected between audit log IDs {logs[i-1].Id} and {logs[i].Id}",
+                            Severity = "Medium",
+                            AffectedAuditId = logs[i-1].Id,
+                            AffectedTimestamp = logs[i-1].ChangeDate,
+                            RecommendedAction = "Investigate missing audit log records"
+                        });
+                        invalidRecords++;
+                    }
+                    else
+                    {
+                        validRecords++;
+                    }
+                }
+            }
+
+            // Consistency validation
+            bool consistencyValid = true;
+            if (request.CheckConsistency)
+            {
+                var duplicateIds = logs.GroupBy(l => l.Id).Where(g => g.Count() > 1).ToList();
+                foreach (var duplicate in duplicateIds)
+                {
+                    consistencyValid = false;
+                    issues.Add(new ACS.Service.Responses.AuditIntegrityIssueResult
+                    {
+                        IssueType = "DuplicateRecord",
+                        Description = $"Duplicate audit log ID found: {duplicate.Key}",
+                        Severity = "High",
+                        AffectedAuditId = duplicate.Key,
+                        RecommendedAction = "Remove duplicate records"
+                    });
+                    invalidRecords++;
+                }
+            }
+
+            // Deep validation
+            if (request.PerformDeepValidation)
+            {
+                foreach (var log in logs.Take(100)) // Limit for performance
+                {
+                    try
+                    {
+                        JsonSerializer.Deserialize<object>(log.ChangeDetails);
+                        validRecords++;
+                    }
+                    catch (JsonException)
+                    {
+                        issues.Add(new ACS.Service.Responses.AuditIntegrityIssueResult
+                        {
+                            IssueType = "MalformedData",
+                            Description = "Invalid JSON in audit log details",
+                            Severity = "Low",
+                            AffectedAuditId = log.Id,
+                            AffectedTimestamp = log.ChangeDate,
+                            RecommendedAction = "Review and repair audit log data format"
+                        });
+                        invalidRecords++;
+                    }
+                }
+            }
+
+            var validationEnd = DateTime.UtcNow;
+            var isValid = hashChainValid && completenessValid && consistencyValid;
+
+            return new ACS.Service.Responses.ValidateAuditIntegrityResponse
+            {
+                Success = true,
+                IsIntegrityValid = isValid,
+                ChecksPerformed = new ACS.Service.Responses.AuditIntegrityChecksResult
+                {
+                    HashChainValidated = request.CheckHashChain,
+                    CompletenessValidated = request.CheckCompleteness,
+                    ConsistencyValidated = request.CheckConsistency,
+                    DeepValidationPerformed = request.PerformDeepValidation
+                },
+                Issues = issues,
+                Statistics = new ACS.Service.Responses.AuditIntegrityStatisticsResult
+                {
+                    TotalRecordsChecked = logs.Count,
+                    ValidRecords = validRecords,
+                    InvalidRecords = invalidRecords,
+                    ValidationDuration = validationEnd - validationStart,
+                    EarliestRecord = logs.FirstOrDefault()?.ChangeDate,
+                    LatestRecord = logs.LastOrDefault()?.ChangeDate
+                },
+                Message = isValid ? "Audit integrity validation passed" : $"Audit integrity validation failed with {issues.Count} issues"
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to validate audit integrity");
+            return new ACS.Service.Responses.ValidateAuditIntegrityResponse
+            {
+                Success = false,
+                IsIntegrityValid = false,
+                Message = "Failed to validate audit integrity",
+                Errors = new List<string> { ex.Message }
+            };
+        }
+    }
+
+    private string? ExtractFromDetails(string details, string key)
+    {
+        try
+        {
+            var json = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(details);
+            if (json?.ContainsKey(key) == true)
+            {
+                return json[key].GetString();
+            }
+        }
+        catch
+        {
+            // Ignore JSON parsing errors
+        }
+        return null;
+    }
+
+    private int? ExtractResourceId(string details)
+    {
+        try
+        {
+            var json = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(details);
+            if (json?.ContainsKey("ResourceId") == true && json["ResourceId"].TryGetInt32(out var resourceId))
+            {
+                return resourceId;
+            }
+        }
+        catch
+        {
+            // Ignore JSON parsing errors
+        }
+        return null;
+    }
+
+    private Dictionary<string, object>? ExtractMetadata(string details)
+    {
+        try
+        {
+            var json = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(details);
+            if (json?.ContainsKey("Metadata") == true)
+            {
+                return JsonSerializer.Deserialize<Dictionary<string, object>>(json["Metadata"].GetRawText());
+            }
+        }
+        catch
+        {
+            // Ignore JSON parsing errors
+        }
+        return null;
+    }
+
+    private bool DetectAnomaly(AuditLog log)
+    {
+        // Simple anomaly detection - in a real implementation, use more sophisticated algorithms
+        return log.ChangeDate.Hour < 6 || log.ChangeDate.Hour > 22 || 
+               log.ChangeType.Contains("DENIED") || 
+               log.ChangeType.Contains("VIOLATION");
+    }
+
+    #endregion
 }

@@ -301,7 +301,7 @@ public class EvaluateComplexPermissionQueryHandler : IQueryHandler<EvaluateCompl
                 {
                     Type = c.Type,
                     Operator = c.Operator,
-                    Value = c.Value,
+                    Value = c.Value?.ToString(),
                     Parameters = c.Parameters
                 }).ToList(),
                 IncludeReasoningTrace = query.IncludeReasoningTrace,
@@ -324,7 +324,7 @@ public class EvaluateComplexPermissionQueryHandler : IQueryHandler<EvaluateCompl
                     Reason = step.Reason,
                     Context = step.Context
                 }).ToList(),
-                ConditionResults = response.ConditionResults.Select(cr => new ConditionEvaluationResult
+                ConditionResults = response.ConditionResults.Select(cr => new ACS.VerticalHost.Commands.ConditionEvaluationResult
                 {
                     Condition = new PermissionCondition
                     {
@@ -437,7 +437,7 @@ public class GetEffectivePermissionsQueryHandler : IQueryHandler<GetEffectivePer
                     HasConflicts = p.HasConflicts,
                     Metadata = p.Metadata
                 }).ToList(),
-                Conflicts = response.Conflicts.Select(c => new PermissionConflict
+                Conflicts = response.Conflicts.Select(c => new ACS.VerticalHost.Commands.PermissionConflict
                 {
                     ConflictType = c.ConflictType,
                     Description = c.Description,
@@ -553,12 +553,12 @@ public class PermissionImpactAnalysisQueryHandler : IQueryHandler<PermissionImpa
                 {
                     OverallRiskLevel = response.RiskAssessment.OverallRiskLevel,
                     RiskScore = response.RiskAssessment.RiskScore,
-                    RiskFactors = response.RiskAssessment.RiskFactors.Select(rf => new RiskFactor
+                    RiskFactors = response.RiskAssessment.RiskFactors.Select(rf => new ACS.VerticalHost.Commands.RiskFactor
                     {
                         Category = rf.Category,
                         Description = rf.Description,
-                        Impact = rf.Impact,
-                        Probability = rf.Probability,
+                        Impact = ParseDoubleWithDefault(rf.Impact, 0.5),
+                        Probability = ParseDoubleWithDefault(rf.Probability, 0.5),
                         Mitigation = rf.Mitigation
                     }).ToList(),
                     MitigationRecommendations = response.RiskAssessment.MitigationRecommendations.ToList(),
@@ -582,5 +582,14 @@ public class PermissionImpactAnalysisQueryHandler : IQueryHandler<PermissionImpa
         {
             return HandleQueryError<PermissionImpactAnalysisResult>(_logger, ex, context, correlationId);
         }
+    }
+
+    private static double ParseDoubleWithDefault(string value, double defaultValue)
+    {
+        if (double.TryParse(value, out var result))
+        {
+            return result;
+        }
+        return defaultValue;
     }
 }

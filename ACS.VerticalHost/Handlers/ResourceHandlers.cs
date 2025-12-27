@@ -42,8 +42,6 @@ public class CreateResourceCommandHandler : ICommandHandler<CreateResourceComman
                 Name = command.Name,
                 Description = command.Description,
                 UriPattern = command.UriPattern,
-                HttpVerbs = command.HttpVerbs,
-                IsActive = command.IsActive,
                 CreatedBy = command.CreatedBy ?? "system"
             };
             
@@ -93,8 +91,6 @@ public class UpdateResourceCommandHandler : ICommandHandler<UpdateResourceComman
                 Name = command.Name,
                 Description = command.Description,
                 UriPattern = command.UriPattern,
-                HttpVerbs = command.HttpVerbs,
-                IsActive = command.IsActive,
                 UpdatedBy = command.UpdatedBy ?? "system"
             };
             
@@ -149,14 +145,18 @@ public class DeleteResourceCommandHandler : ICommandHandler<DeleteResourceComman
             var dependencyCheck = await _resourceService.CheckDependenciesAsync(command.ResourceId);
             var dependenciesRemoved = new List<string>();
 
-            if (dependencyCheck.HasDependencies && !command.ForceDelete)
+            if (dependencyCheck.Dependencies.Any() && !command.ForceDelete)
             {
-                throw new InvalidOperationException($"Resource has dependencies: {string.Join(", ", dependencyCheck.Dependencies)}. Use ForceDelete to override.");
+                var dependencyDescriptions = dependencyCheck.Dependencies
+                    .Select(d => $"{d.EntityType} '{d.EntityName}' ({d.DependencyType})");
+                throw new InvalidOperationException($"Resource has dependencies: {string.Join(", ", dependencyDescriptions)}. Use ForceDelete to override.");
             }
 
-            if (command.ForceDelete && dependencyCheck.HasDependencies)
+            if (command.ForceDelete && dependencyCheck.Dependencies.Any())
             {
-                dependenciesRemoved = dependencyCheck.Dependencies;
+                dependenciesRemoved = dependencyCheck.Dependencies
+                    .Select(d => $"{d.EntityType} '{d.EntityName}' ({d.DependencyType})")
+                    .ToList();
             }
 
             // Call resource service to delete

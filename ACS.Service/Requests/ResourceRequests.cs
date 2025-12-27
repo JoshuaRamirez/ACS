@@ -9,6 +9,8 @@ public record GetResourceRequest
 {
     public int ResourceId { get; init; }
     public string RequestedBy { get; init; } = string.Empty;
+    public bool IncludePermissions { get; init; }
+    public bool IncludeUsage { get; init; }
 }
 
 /// <summary>
@@ -23,6 +25,10 @@ public record GetResourcesRequest
     public bool SortDescending { get; init; }
     public string? ResourceType { get; init; }
     public string RequestedBy { get; init; } = string.Empty;
+    public string? UriPatternFilter { get; init; }
+    public List<string>? HttpVerbFilter { get; init; }
+    public bool? ActiveOnly { get; init; } = true;
+    public bool IncludePermissions { get; init; }
 }
 
 /// <summary>
@@ -56,6 +62,7 @@ public record DeleteResourceRequest
 {
     public int ResourceId { get; init; }
     public string DeletedBy { get; init; } = string.Empty;
+    public bool ForceDelete { get; init; }
 }
 
 /// <summary>
@@ -107,4 +114,3 @@ public record PagedRequest
     public string? SortBy { get; init; }
     public string? SortDirection { get; init; }
 }
-

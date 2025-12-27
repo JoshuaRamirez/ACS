@@ -27,4 +27,17 @@ public class Permission
     public string Resource { get; set; } = string.Empty;
     public string Action { get; set; } = string.Empty;
     public string Scope { get; set; } = string.Empty;
+
+    // Extended properties for handler compatibility
+    public int PermissionId => Id;
+    public string PermissionName => $"{HttpVerb}:{Uri}";
+    public string? PermissionDescription => $"Permission to {HttpVerb} {Uri}";
+    public int? ResourceId { get; set; }
+    public string? ResourceName { get; set; }
+    public bool IsInherited { get; set; }
+    public string? InheritedFrom { get; set; }
+    public DateTime GrantedAt { get; set; } = DateTime.UtcNow;
+    public string? GrantedBy { get; set; }
+    public DateTime? ExpiresAt { get; set; }
+    public bool IsExpired => ExpiresAt.HasValue && ExpiresAt.Value < DateTime.UtcNow;
 }

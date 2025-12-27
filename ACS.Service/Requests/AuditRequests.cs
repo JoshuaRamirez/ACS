@@ -7,14 +7,21 @@ namespace ACS.Service.Requests;
 /// </summary>
 public record GetAuditLogRequest
 {
-    public DateTime StartDate { get; init; }
-    public DateTime EndDate { get; init; }
-    public string? EntityType { get; init; }
-    public string? EventType { get; init; }
-    public string? Action { get; init; }
-    public string? UserId { get; init; }
     public int Page { get; init; } = 1;
     public int PageSize { get; init; } = 50;
+    public DateTime? StartDate { get; init; }
+    public DateTime? EndDate { get; init; }
+    public List<string>? EventTypes { get; init; }
+    public List<string>? EventCategories { get; init; }
+    public int? UserId { get; init; }
+    public int? EntityId { get; init; }
+    public string? EntityType { get; init; }
+    public int? ResourceId { get; init; }
+    public List<string>? SeverityLevels { get; init; }
+    public string? SearchText { get; init; }
+    public string? IpAddress { get; init; }
+    public string SortBy { get; init; } = "EventTimestamp";
+    public bool SortDescending { get; init; } = true;
     public string RequestedBy { get; init; } = string.Empty;
 }
 

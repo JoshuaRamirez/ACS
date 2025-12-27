@@ -66,8 +66,10 @@ public record GrantPermissionRequest
     public int EntityId { get; init; }
     public string EntityType { get; init; } = string.Empty; // "User", "Group", "Role"
     public int PermissionId { get; init; }
+    public int? ResourceId { get; init; }
     public string GrantedBy { get; init; } = string.Empty;
     public DateTime? ExpiresAt { get; init; }
+    public string? Reason { get; init; }
 }
 
 /// <summary>
@@ -78,7 +80,10 @@ public record RevokePermissionRequest
     public int EntityId { get; init; }
     public string EntityType { get; init; } = string.Empty;
     public int PermissionId { get; init; }
+    public int? ResourceId { get; init; }
+    public bool CascadeToChildren { get; init; }
     public string RevokedBy { get; init; } = string.Empty;
+    public string? Reason { get; init; }
 }
 
 /// <summary>
@@ -88,9 +93,11 @@ public record CheckPermissionRequest
 {
     public int EntityId { get; init; }
     public string EntityType { get; init; } = string.Empty;
-    public string Resource { get; init; } = string.Empty;
-    public string Action { get; init; } = string.Empty;
-    public string? Scope { get; init; }
+    public int PermissionId { get; init; }
+    public int? ResourceId { get; init; }
+    public bool IncludeInheritance { get; init; } = true;
+    public bool IncludeExpired { get; init; } = false;
+    public DateTime? CheckAt { get; init; }
     public string RequestedBy { get; init; } = string.Empty;
 }
 
@@ -102,6 +109,9 @@ public record GetEntityPermissionsRequest
     public int EntityId { get; init; }
     public string EntityType { get; init; } = string.Empty;
     public bool IncludeInherited { get; init; } = true;
+    public bool IncludeExpired { get; init; } = false;
+    public int? ResourceId { get; init; }
+    public string? PermissionFilter { get; init; }
     public int Page { get; init; } = 1;
     public int PageSize { get; init; } = 20;
     public string RequestedBy { get; init; } = string.Empty;
@@ -134,8 +144,12 @@ public record GetEffectivePermissionsRequest
 {
     public int EntityId { get; init; }
     public string EntityType { get; init; } = string.Empty;
-    public bool IncludeInherited { get; init; } = true;
-    public bool IncludeDirect { get; init; } = true;
+    public List<int>? ResourceIds { get; init; }
+    public bool IncludeInheritanceChain { get; init; } = false;
+    public bool IncludeExpiredPermissions { get; init; } = false;
+    public bool ResolveConflicts { get; init; } = true;
+    public DateTime? EffectiveAt { get; init; }
+    public string? PermissionScope { get; init; }
     public string RequestedBy { get; init; } = string.Empty;
 }
 
@@ -144,11 +158,13 @@ public record GetEffectivePermissionsRequest
 /// </summary>
 public record EvaluateComplexPermissionRequest
 {
-    public int EntityId { get; init; }
-    public string EntityType { get; init; } = string.Empty;
-    public string Resource { get; init; } = string.Empty;
+    public int UserId { get; init; }
+    public int ResourceId { get; init; }
     public string Action { get; init; } = string.Empty;
     public Dictionary<string, object> Context { get; init; } = new Dictionary<string, object>();
+    public List<PermissionConditionRequest> Conditions { get; init; } = new List<PermissionConditionRequest>();
+    public bool IncludeReasoningTrace { get; init; } = false;
+    public DateTime? EvaluateAt { get; init; }
     public string RequestedBy { get; init; } = string.Empty;
 }
 
@@ -171,6 +187,8 @@ public record GetResourcePermissionsRequest
     public int ResourceId { get; init; }
     public int? EntityId { get; init; }
     public string? EntityType { get; init; }
+    public bool IncludeInherited { get; init; } = true;
+    public bool IncludeEffective { get; init; } = false;
     public string RequestedBy { get; init; } = string.Empty;
 }
 
@@ -183,6 +201,8 @@ public record ValidatePermissionStructureRequest
     public string? EntityType { get; init; }
     public bool CheckForConflicts { get; init; } = true;
     public bool CheckForRedundancies { get; init; } = true;
+    public bool FixInconsistencies { get; init; } = false;
+    public string ValidatedBy { get; init; } = string.Empty;
     public string RequestedBy { get; init; } = string.Empty;
 }
 
@@ -192,6 +212,11 @@ public record ValidatePermissionStructureRequest
 public record GetPermissionUsageRequest
 {
     public int PermissionId { get; init; }
+    public int? ResourceId { get; init; }
+    public bool IncludeIndirect { get; init; } = true;
+    public string? EntityTypeFilter { get; init; }
+    public int Page { get; init; } = 1;
+    public int PageSize { get; init; } = 20;
     public DateTime? StartDate { get; init; }
     public DateTime? EndDate { get; init; }
     public string RequestedBy { get; init; } = string.Empty;
@@ -242,9 +267,24 @@ public record PermissionUpdate
 /// </summary>
 public record PermissionImpactAnalysisRequest
 {
-    public int PermissionId { get; init; }
-    public string Operation { get; init; } = string.Empty; // "Grant", "Revoke", "Update", "Delete"
-    public ICollection<int> TargetEntityIds { get; init; } = new List<int>();
+    public int? PermissionId { get; init; }
+    public int? ResourceId { get; init; }
+    public int? EntityId { get; init; }
+    public string? EntityType { get; init; }
+    public string AnalysisType { get; init; } = string.Empty;
     public bool IncludeDownstreamEffects { get; init; } = true;
+    public bool IncludeRiskAssessment { get; init; } = true;
+    public int MaxDepth { get; init; } = 5;
     public string RequestedBy { get; init; } = string.Empty;
+}
+
+/// <summary>
+/// Permission condition for complex permission evaluation
+/// </summary>
+public record PermissionConditionRequest
+{
+    public string Type { get; init; } = string.Empty;
+    public string Operator { get; init; } = string.Empty;
+    public string Value { get; init; } = string.Empty;
+    public Dictionary<string, object>? Parameters { get; init; }
 }
