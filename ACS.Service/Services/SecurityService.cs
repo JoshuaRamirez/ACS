@@ -25,12 +25,12 @@ public class SecurityService : ISecurityService
         _logger = logger;
     }
 
-    public Task<DateTime> BlockUserAsync(int userId, string reason, string blockedBy)
+    public Task<DateTime> BlockUserAsync(int userId, string severity, string violationId)
     {
         try
         {
-            _logger.LogWarning("Blocking user {UserId} due to: {Reason} (blocked by: {BlockedBy})", 
-                userId, reason, blockedBy);
+            _logger.LogWarning("Blocking user {UserId} - Severity: {Severity}, ViolationId: {ViolationId}",
+                userId, severity, violationId);
 
             // TODO: Implement actual user blocking logic
             // - Update user status in database
@@ -38,16 +38,26 @@ public class SecurityService : ISecurityService
             // - Invalidate active sessions
             // - Send notifications if required
 
-            var blockExpiresAt = DateTime.UtcNow.AddHours(24); // Default 24-hour block
-            
-            _logger.LogWarning("User {UserId} blocked until {ExpiresAt} (placeholder implementation)", 
-                userId, blockExpiresAt);
+            // Determine block duration based on severity
+            var blockHours = severity?.ToLowerInvariant() switch
+            {
+                "critical" => 168,  // 1 week
+                "high" => 72,       // 3 days
+                "medium" => 24,     // 1 day
+                "low" => 4,         // 4 hours
+                _ => 24             // Default 24-hour block
+            };
+
+            var blockExpiresAt = DateTime.UtcNow.AddHours(blockHours);
+
+            _logger.LogWarning("User {UserId} blocked until {ExpiresAt} for violation {ViolationId} (placeholder implementation)",
+                userId, blockExpiresAt, violationId);
 
             return Task.FromResult(blockExpiresAt);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error blocking user {UserId}", userId);
+            _logger.LogError(ex, "Error blocking user {UserId} for violation {ViolationId}", userId, violationId);
             throw;
         }
     }
