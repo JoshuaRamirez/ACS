@@ -223,44 +223,76 @@ public class CommandBuffer : ICommandBuffer, IDisposable
         using var activity = ActivitySource.StartActivity("CommandBuffer.ProcessCommand");
         activity?.SetTag("command.type", bufferedCommand.Command.GetType().Name);
         activity?.SetTag("command.correlation_id", bufferedCommand.CorrelationId);
-        
+
         var stopwatch = Stopwatch.StartNew();
         var queueTime = DateTime.UtcNow - bufferedCommand.EnqueuedAt;
-        
+
         try
         {
             using var scope = _serviceProvider.CreateScope();
-            
+
             // Find appropriate handler for the command
             var commandType = bufferedCommand.Command.GetType();
-            var handlerType = typeof(ICommandHandler<>).MakeGenericType(commandType);
+
+            // Determine if this is a command with response (ICommand<TResponse>) or void command (ICommand)
+            var commandWithResponseInterface = commandType.GetInterfaces()
+                .FirstOrDefault(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(ICommand<>));
+
+            Type handlerType;
+            if (commandWithResponseInterface != null)
+            {
+                // Command with response - use ICommandHandler<TCommand, TResponse>
+                var responseType = commandWithResponseInterface.GetGenericArguments()[0];
+                handlerType = typeof(ICommandHandler<,>).MakeGenericType(commandType, responseType);
+            }
+            else
+            {
+                // Void command - use ICommandHandler<TCommand>
+                handlerType = typeof(ICommandHandler<>).MakeGenericType(commandType);
+            }
+
             var handler = scope.ServiceProvider.GetService(handlerType);
-            
+
             if (handler == null)
             {
                 throw new InvalidOperationException($"No command handler found for {commandType.Name}");
             }
-            
+
             // Execute command via handler
             var handleMethod = handlerType.GetMethod("HandleAsync");
             if (handleMethod == null)
             {
                 throw new InvalidOperationException($"HandleAsync method not found on handler for {commandType.Name}");
             }
-            
-            var result = await (Task<object?>)handleMethod.Invoke(handler, new object[] { bufferedCommand.Command, CancellationToken.None })!;
-            
+
+            // Invoke the handler - the result is Task (for void) or Task<TResult>
+            var task = (Task)handleMethod.Invoke(handler, new object[] { bufferedCommand.Command, CancellationToken.None })!;
+            await task;
+
+            // For void commands, the task doesn't have a result; for commands with response, extract it
+            object? result = null;
+            var taskType = task.GetType();
+            if (taskType.IsGenericType)
+            {
+                // Task<TResult> - get the Result property
+                var resultProperty = taskType.GetProperty("Result");
+                if (resultProperty != null)
+                {
+                    result = resultProperty.GetValue(task);
+                }
+            }
+
             // Complete the command
             bufferedCommand.CompletionSource.SetResult(result);
-            
+
             Interlocked.Increment(ref _commandsProcessed);
             Interlocked.Decrement(ref _commandsInFlight);
-            
+
             activity?.SetTag("command.success", true);
             activity?.SetTag("command.duration_ms", stopwatch.ElapsedMilliseconds);
             activity?.SetTag("command.queue_time_ms", queueTime.TotalMilliseconds);
-            
-            _logger.LogDebug("Command {CommandType} processed in {Duration}ms (queued for {QueueTime}ms)", 
+
+            _logger.LogDebug("Command {CommandType} processed in {Duration}ms (queued for {QueueTime}ms)",
                 commandType.Name, stopwatch.ElapsedMilliseconds, queueTime.TotalMilliseconds);
         }
         catch (Exception ex)
@@ -273,21 +305,21 @@ public class CommandBuffer : ICommandBuffer, IDisposable
                 Error = ex.Message,
                 OccurredAt = DateTime.UtcNow
             });
-            
+
             // Limit error queue size
             while (_recentErrors.Count > MaxRecentErrors)
             {
                 _recentErrors.TryDequeue(out _);
             }
-            
+
             bufferedCommand.CompletionSource.SetException(ex);
-            
+
             Interlocked.Decrement(ref _commandsInFlight);
-            
+
             activity?.SetTag("command.success", false);
             activity?.SetTag("command.error", ex.Message);
-            
-            _logger.LogError(ex, "Error processing command {CommandType} (correlation: {CorrelationId})", 
+
+            _logger.LogError(ex, "Error processing command {CommandType} (correlation: {CorrelationId})",
                 bufferedCommand.Command.GetType().Name, bufferedCommand.CorrelationId);
         }
     }

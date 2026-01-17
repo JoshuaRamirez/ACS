@@ -27,16 +27,37 @@ public class CommandBufferTests
         _mockServiceScope = new Mock<IServiceScope>();
         _mockServiceScopeFactory = new Mock<IServiceScopeFactory>();
 
+        // CreateScope() is an extension method on IServiceProvider that internally calls
+        // GetService(typeof(IServiceScopeFactory)). Extension methods cannot be mocked directly.
+        // Instead, we mock the IServiceScopeFactory that the extension method retrieves.
+        _mockServiceScopeFactory.Setup(x => x.CreateScope()).Returns(_mockServiceScope.Object);
         _mockServiceScope.Setup(x => x.ServiceProvider).Returns(_mockServiceProvider.Object);
-        _mockServiceProvider.Setup(x => x.CreateScope()).Returns(_mockServiceScope.Object);
+        _mockServiceProvider.Setup(x => x.GetService(typeof(IServiceScopeFactory))).Returns(_mockServiceScopeFactory.Object);
 
         _commandBuffer = new CommandBuffer(_mockLogger.Object, _mockServiceProvider.Object);
     }
 
     [TestCleanup]
-    public void Cleanup()
+    public async Task Cleanup()
     {
-        _commandBuffer?.Dispose();
+        try
+        {
+            // First try to stop gracefully
+            await _commandBuffer.StopAsync();
+        }
+        catch (Exception)
+        {
+            // Ignore errors during stop - buffer might not have been started
+        }
+
+        try
+        {
+            _commandBuffer?.Dispose();
+        }
+        catch (Exception)
+        {
+            // Ignore disposal exceptions
+        }
     }
 
     #region Startup and Shutdown Tests
@@ -424,8 +445,20 @@ public class CommandBufferTests
     [TestMethod]
     public void CommandBuffer_Dispose_CompletesWithoutException()
     {
+        // Create a fresh buffer for this test to avoid interference with TestCleanup
+        var mockLogger = new Mock<ILogger<CommandBuffer>>();
+        var mockServiceProvider = new Mock<IServiceProvider>();
+        var mockServiceScope = new Mock<IServiceScope>();
+        var mockServiceScopeFactory = new Mock<IServiceScopeFactory>();
+
+        mockServiceScopeFactory.Setup(x => x.CreateScope()).Returns(mockServiceScope.Object);
+        mockServiceScope.Setup(x => x.ServiceProvider).Returns(mockServiceProvider.Object);
+        mockServiceProvider.Setup(x => x.GetService(typeof(IServiceScopeFactory))).Returns(mockServiceScopeFactory.Object);
+
+        var buffer = new CommandBuffer(mockLogger.Object, mockServiceProvider.Object);
+
         // Act & Assert
-        _commandBuffer.Dispose(); // Should not throw
+        buffer.Dispose(); // Should not throw
         Assert.IsTrue(true);
     }
 
