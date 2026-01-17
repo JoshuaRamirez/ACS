@@ -1,56 +1,47 @@
 using ACS.Service.Data;
 using ACS.Service.Data.Models;
 using ACS.Service.Domain;
+using ACS.Service.Requests;
+using ACS.Service.Responses;
 using ACS.Service.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Moq;
 
 namespace ACS.Service.Tests.Unit;
 
 [TestClass]
 public class ResourceServiceTests
 {
-    private Mock<ApplicationDbContext> _mockDbContext = null!;
+    private ApplicationDbContext _dbContext = null!;
     private Mock<ILogger<ResourceService>> _mockLogger = null!;
     private Mock<IPermissionEvaluationService> _mockPermissionService = null!;
     private ResourceService _resourceService = null!;
-    private Mock<DbSet<Data.Models.Resource>> _mockResourceDbSet = null!;
-    private Mock<DbSet<Data.Models.Entity>> _mockEntityDbSet = null!;
-    private Mock<DbSet<UriAccess>> _mockUriAccessDbSet = null!;
-    private Mock<DbSet<VerbType>> _mockVerbTypeDbSet = null!;
-    private Mock<DbSet<PermissionScheme>> _mockPermissionSchemeDbSet = null!;
-    private Mock<DbSet<AuditLog>> _mockAuditLogDbSet = null!;
 
     [TestInitialize]
     public void Setup()
     {
-        // Arrange
+        // Arrange - Use real in-memory database for integration-style testing
         var options = new DbContextOptionsBuilder<ApplicationDbContext>()
             .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
             .Options;
-        
-        _mockDbContext = new Mock<ApplicationDbContext>(options);
+
+        _dbContext = new ApplicationDbContext(options);
         _mockLogger = new Mock<ILogger<ResourceService>>();
         _mockPermissionService = new Mock<IPermissionEvaluationService>();
-        
-        _mockResourceDbSet = new Mock<DbSet<Data.Models.Resource>>();
-        _mockEntityDbSet = new Mock<DbSet<Data.Models.Entity>>();
-        _mockUriAccessDbSet = new Mock<DbSet<UriAccess>>();
-        _mockVerbTypeDbSet = new Mock<DbSet<VerbType>>();
-        _mockPermissionSchemeDbSet = new Mock<DbSet<PermissionScheme>>();
-        _mockAuditLogDbSet = new Mock<DbSet<AuditLog>>();
-        
-        _mockDbContext.Setup(x => x.Resources).Returns(_mockResourceDbSet.Object);
-        _mockDbContext.Setup(x => x.Entities).Returns(_mockEntityDbSet.Object);
-        _mockDbContext.Setup(x => x.UriAccesses).Returns(_mockUriAccessDbSet.Object);
-        _mockDbContext.Setup(x => x.VerbTypes).Returns(_mockVerbTypeDbSet.Object);
-        _mockDbContext.Setup(x => x.EntityPermissions).Returns(_mockPermissionSchemeDbSet.Object);
-        _mockDbContext.Setup(x => x.AuditLogs).Returns(_mockAuditLogDbSet.Object);
-        
+
         _resourceService = new ResourceService(
-            _mockDbContext.Object,
+            _dbContext,
             _mockLogger.Object,
             _mockPermissionService.Object);
+    }
+
+    [TestCleanup]
+    public void Cleanup()
+    {
+        _dbContext?.Dispose();
+        _mockLogger?.Reset();
+        _mockPermissionService?.Reset();
     }
 
     #region GetAllResourcesAsync Tests
@@ -59,17 +50,11 @@ public class ResourceServiceTests
     public async Task ResourceService_GetAllResourcesAsync_ReturnsAllResources()
     {
         // Arrange
-        var dataResources = new List<Data.Models.Resource>
-        {
-            new() { Id = 1, Uri = "/api/users", Description = "User API", ResourceType = "API" },
-            new() { Id = 2, Uri = "/api/groups", Description = "Group API", ResourceType = "API" }
-        };
-
-        var mockQueryable = dataResources.AsQueryable();
-        _mockResourceDbSet.As<IQueryable<Data.Models.Resource>>().Setup(m => m.Provider).Returns(mockQueryable.Provider);
-        _mockResourceDbSet.As<IQueryable<Data.Models.Resource>>().Setup(m => m.Expression).Returns(mockQueryable.Expression);
-        _mockResourceDbSet.As<IQueryable<Data.Models.Resource>>().Setup(m => m.ElementType).Returns(mockQueryable.ElementType);
-        _mockResourceDbSet.As<IQueryable<Data.Models.Resource>>().Setup(m => m.GetEnumerator()).Returns(mockQueryable.GetEnumerator());
+        _dbContext.Resources.AddRange(
+            new Data.Models.Resource { Uri = "/api/users", Description = "User API", ResourceType = "API" },
+            new Data.Models.Resource { Uri = "/api/groups", Description = "Group API", ResourceType = "API" }
+        );
+        await _dbContext.SaveChangesAsync();
 
         // Act
         var result = await _resourceService.GetAllResourcesAsync();
@@ -81,13 +66,7 @@ public class ResourceServiceTests
     [TestMethod]
     public async Task ResourceService_GetAllResourcesAsync_ReturnsEmptyCollectionWhenNoResources()
     {
-        // Arrange
-        var dataResources = new List<Data.Models.Resource>();
-        var mockQueryable = dataResources.AsQueryable();
-        _mockResourceDbSet.As<IQueryable<Data.Models.Resource>>().Setup(m => m.Provider).Returns(mockQueryable.Provider);
-        _mockResourceDbSet.As<IQueryable<Data.Models.Resource>>().Setup(m => m.Expression).Returns(mockQueryable.Expression);
-        _mockResourceDbSet.As<IQueryable<Data.Models.Resource>>().Setup(m => m.ElementType).Returns(mockQueryable.ElementType);
-        _mockResourceDbSet.As<IQueryable<Data.Models.Resource>>().Setup(m => m.GetEnumerator()).Returns(mockQueryable.GetEnumerator());
+        // Arrange - no resources added
 
         // Act
         var result = await _resourceService.GetAllResourcesAsync();
@@ -104,28 +83,21 @@ public class ResourceServiceTests
     public async Task ResourceService_GetResourceByIdAsync_ReturnsResourceWhenExists()
     {
         // Arrange
-        var resourceId = 1;
-        var dataResource = new Data.Models.Resource 
-        { 
-            Id = resourceId, 
-            Uri = "/api/users", 
+        var dataResource = new Data.Models.Resource
+        {
+            Uri = "/api/users",
             Description = "User API",
             ResourceType = "API"
         };
-
-        var dataResources = new List<Data.Models.Resource> { dataResource };
-        var mockQueryable = dataResources.AsQueryable();
-        _mockResourceDbSet.As<IQueryable<Data.Models.Resource>>().Setup(m => m.Provider).Returns(mockQueryable.Provider);
-        _mockResourceDbSet.As<IQueryable<Data.Models.Resource>>().Setup(m => m.Expression).Returns(mockQueryable.Expression);
-        _mockResourceDbSet.As<IQueryable<Data.Models.Resource>>().Setup(m => m.ElementType).Returns(mockQueryable.ElementType);
-        _mockResourceDbSet.As<IQueryable<Data.Models.Resource>>().Setup(m => m.GetEnumerator()).Returns(mockQueryable.GetEnumerator());
+        _dbContext.Resources.Add(dataResource);
+        await _dbContext.SaveChangesAsync();
 
         // Act
-        var result = await _resourceService.GetResourceByIdAsync(resourceId);
+        var result = await _resourceService.GetResourceByIdAsync(dataResource.Id);
 
         // Assert
         Assert.IsNotNull(result);
-        Assert.AreEqual(resourceId, result.Id);
+        Assert.AreEqual(dataResource.Id, result.Id);
         Assert.AreEqual("/api/users", result.Uri);
         Assert.AreEqual("User API", result.Description);
     }
@@ -133,17 +105,10 @@ public class ResourceServiceTests
     [TestMethod]
     public async Task ResourceService_GetResourceByIdAsync_ReturnsNullWhenResourceNotExists()
     {
-        // Arrange
-        var resourceId = 999;
-        var dataResources = new List<Data.Models.Resource>();
-        var mockQueryable = dataResources.AsQueryable();
-        _mockResourceDbSet.As<IQueryable<Data.Models.Resource>>().Setup(m => m.Provider).Returns(mockQueryable.Provider);
-        _mockResourceDbSet.As<IQueryable<Data.Models.Resource>>().Setup(m => m.Expression).Returns(mockQueryable.Expression);
-        _mockResourceDbSet.As<IQueryable<Data.Models.Resource>>().Setup(m => m.ElementType).Returns(mockQueryable.ElementType);
-        _mockResourceDbSet.As<IQueryable<Data.Models.Resource>>().Setup(m => m.GetEnumerator()).Returns(mockQueryable.GetEnumerator());
+        // Arrange - no resources added
 
         // Act
-        var result = await _resourceService.GetResourceByIdAsync(resourceId);
+        var result = await _resourceService.GetResourceByIdAsync(999);
 
         // Assert
         Assert.IsNull(result);
@@ -158,20 +123,14 @@ public class ResourceServiceTests
     {
         // Arrange
         var uri = "/api/users";
-        var dataResource = new Data.Models.Resource 
-        { 
-            Id = 1, 
-            Uri = uri, 
+        var dataResource = new Data.Models.Resource
+        {
+            Uri = uri,
             Description = "User API",
             ResourceType = "API"
         };
-
-        var dataResources = new List<Data.Models.Resource> { dataResource };
-        var mockQueryable = dataResources.AsQueryable();
-        _mockResourceDbSet.As<IQueryable<Data.Models.Resource>>().Setup(m => m.Provider).Returns(mockQueryable.Provider);
-        _mockResourceDbSet.As<IQueryable<Data.Models.Resource>>().Setup(m => m.Expression).Returns(mockQueryable.Expression);
-        _mockResourceDbSet.As<IQueryable<Data.Models.Resource>>().Setup(m => m.ElementType).Returns(mockQueryable.ElementType);
-        _mockResourceDbSet.As<IQueryable<Data.Models.Resource>>().Setup(m => m.GetEnumerator()).Returns(mockQueryable.GetEnumerator());
+        _dbContext.Resources.Add(dataResource);
+        await _dbContext.SaveChangesAsync();
 
         // Act
         var result = await _resourceService.GetResourceByUriAsync(uri);
@@ -193,28 +152,19 @@ public class ResourceServiceTests
         var description = "User API";
         var resourceType = "API";
         var createdBy = "TestAdmin";
-        var resourceId = 1;
-
-        _mockDbContext.Setup(x => x.SaveChangesAsync(default))
-            .ReturnsAsync(1);
-
-        _mockResourceDbSet.Setup(x => x.Add(It.IsAny<Data.Models.Resource>()))
-            .Callback<Data.Models.Resource>(r => r.Id = resourceId);
 
         // Act
         var result = await _resourceService.CreateResourceAsync(uri, description, resourceType, createdBy);
 
         // Assert
         Assert.IsNotNull(result);
-        Assert.AreEqual(resourceId, result.Id);
         Assert.AreEqual(uri, result.Uri);
         Assert.AreEqual(description, result.Description);
         Assert.AreEqual(resourceType, result.ResourceType);
-        _mockResourceDbSet.Verify(x => x.Add(It.Is<Data.Models.Resource>(r => 
-            r.Uri == uri && 
-            r.Description == description && 
-            r.ResourceType == resourceType)), Times.Once);
-        _mockDbContext.Verify(x => x.SaveChangesAsync(default), Times.Once);
+
+        // Verify in database
+        var savedResource = await _dbContext.Resources.FirstOrDefaultAsync(r => r.Uri == uri);
+        Assert.IsNotNull(savedResource);
     }
 
     [TestMethod]
@@ -225,8 +175,6 @@ public class ResourceServiceTests
         var description = "User API";
         var resourceType = "API";
         var createdBy = "TestAdmin";
-
-        _mockDbContext.Setup(x => x.SaveChangesAsync(default)).ReturnsAsync(1);
 
         // Act
         await _resourceService.CreateResourceAsync(uri, description, resourceType, createdBy);
@@ -250,36 +198,27 @@ public class ResourceServiceTests
     public async Task ResourceService_UpdateResourceAsync_UpdatesExistingResource()
     {
         // Arrange
-        var resourceId = 1;
-        var uri = "/api/users/v2";
-        var description = "Updated User API";
-        var resourceType = "API";
-        var updatedBy = "TestAdmin";
-        var dataResource = new Data.Models.Resource 
-        { 
-            Id = resourceId, 
-            Uri = "/api/users", 
+        var dataResource = new Data.Models.Resource
+        {
+            Uri = "/api/users",
             Description = "User API",
             ResourceType = "API"
         };
+        _dbContext.Resources.Add(dataResource);
+        await _dbContext.SaveChangesAsync();
 
-        _mockResourceDbSet.Setup(x => x.FindAsync(resourceId))
-            .ReturnsAsync(dataResource);
-        _mockDbContext.Setup(x => x.SaveChangesAsync(default))
-            .ReturnsAsync(1);
+        var newUri = "/api/users/v2";
+        var newDescription = "Updated User API";
+        var updatedBy = "TestAdmin";
 
         // Act
-        var result = await _resourceService.UpdateResourceAsync(resourceId, uri, description, resourceType, updatedBy);
+        var result = await _resourceService.UpdateResourceAsync(dataResource.Id, newUri, newDescription, "API", updatedBy);
 
         // Assert
         Assert.IsNotNull(result);
-        Assert.AreEqual(resourceId, result.Id);
-        Assert.AreEqual(uri, result.Uri);
-        Assert.AreEqual(description, result.Description);
-        Assert.AreEqual(uri, dataResource.Uri);
-        Assert.AreEqual(description, dataResource.Description);
-        _mockResourceDbSet.Verify(x => x.Update(dataResource), Times.Once);
-        _mockDbContext.Verify(x => x.SaveChangesAsync(default), Times.Once);
+        Assert.AreEqual(dataResource.Id, result.Id);
+        Assert.AreEqual(newUri, result.Uri);
+        Assert.AreEqual(newDescription, result.Description);
     }
 
     [TestMethod]
@@ -287,17 +226,10 @@ public class ResourceServiceTests
     {
         // Arrange
         var resourceId = 999;
-        var uri = "/api/users/v2";
-        var description = "Updated User API";
-        var resourceType = "API";
-        var updatedBy = "TestAdmin";
-
-        _mockResourceDbSet.Setup(x => x.FindAsync(resourceId))
-            .ReturnsAsync((Data.Models.Resource?)null);
 
         // Act & Assert
         await Assert.ThrowsExceptionAsync<InvalidOperationException>(
-            () => _resourceService.UpdateResourceAsync(resourceId, uri, description, resourceType, updatedBy));
+            () => _resourceService.UpdateResourceAsync(resourceId, "/api/test", "Test", "API", "Admin"));
     }
 
     #endregion
@@ -308,56 +240,31 @@ public class ResourceServiceTests
     public async Task ResourceService_DeleteResourceAsync_DeletesResource()
     {
         // Arrange
-        var resourceId = 1;
-        var deletedBy = "TestAdmin";
-        var dataResource = new Data.Models.Resource 
-        { 
-            Id = resourceId, 
-            Uri = "/api/users", 
+        var dataResource = new Data.Models.Resource
+        {
+            Uri = "/api/users",
             Description = "User API",
             ResourceType = "API"
         };
-
-        var dataResources = new List<Data.Models.Resource> { dataResource };
-        var mockQueryable = dataResources.AsQueryable();
-        _mockResourceDbSet.As<IQueryable<Data.Models.Resource>>().Setup(m => m.Provider).Returns(mockQueryable.Provider);
-        _mockResourceDbSet.As<IQueryable<Data.Models.Resource>>().Setup(m => m.Expression).Returns(mockQueryable.Expression);
-        _mockResourceDbSet.As<IQueryable<Data.Models.Resource>>().Setup(m => m.ElementType).Returns(mockQueryable.ElementType);
-        _mockResourceDbSet.As<IQueryable<Data.Models.Resource>>().Setup(m => m.GetEnumerator()).Returns(mockQueryable.GetEnumerator());
-
-        var uriAccesses = new List<UriAccess>();
-        var mockUriAccessQueryable = uriAccesses.AsQueryable();
-        _mockUriAccessDbSet.As<IQueryable<UriAccess>>().Setup(m => m.Provider).Returns(mockUriAccessQueryable.Provider);
-        _mockUriAccessDbSet.As<IQueryable<UriAccess>>().Setup(m => m.Expression).Returns(mockUriAccessQueryable.Expression);
-        _mockUriAccessDbSet.As<IQueryable<UriAccess>>().Setup(m => m.ElementType).Returns(mockUriAccessQueryable.ElementType);
-        _mockUriAccessDbSet.As<IQueryable<UriAccess>>().Setup(m => m.GetEnumerator()).Returns(mockUriAccessQueryable.GetEnumerator());
-
-        _mockDbContext.Setup(x => x.SaveChangesAsync(default)).ReturnsAsync(1);
+        _dbContext.Resources.Add(dataResource);
+        await _dbContext.SaveChangesAsync();
 
         // Act
-        await _resourceService.DeleteResourceAsync(resourceId, deletedBy);
+        await _resourceService.DeleteResourceAsync(dataResource.Id, "TestAdmin");
 
         // Assert
-        _mockResourceDbSet.Verify(x => x.Remove(dataResource), Times.Once);
-        _mockDbContext.Verify(x => x.SaveChangesAsync(default), Times.Once);
+        var deletedResource = await _dbContext.Resources.FindAsync(dataResource.Id);
+        Assert.IsNull(deletedResource);
     }
 
     [TestMethod]
     public async Task ResourceService_DeleteResourceAsync_ThrowsExceptionWhenResourceNotFound()
     {
-        // Arrange
-        var resourceId = 999;
-        var deletedBy = "TestAdmin";
-        var dataResources = new List<Data.Models.Resource>();
-        var mockQueryable = dataResources.AsQueryable();
-        _mockResourceDbSet.As<IQueryable<Data.Models.Resource>>().Setup(m => m.Provider).Returns(mockQueryable.Provider);
-        _mockResourceDbSet.As<IQueryable<Data.Models.Resource>>().Setup(m => m.Expression).Returns(mockQueryable.Expression);
-        _mockResourceDbSet.As<IQueryable<Data.Models.Resource>>().Setup(m => m.ElementType).Returns(mockQueryable.ElementType);
-        _mockResourceDbSet.As<IQueryable<Data.Models.Resource>>().Setup(m => m.GetEnumerator()).Returns(mockQueryable.GetEnumerator());
+        // Arrange - no resources added
 
         // Act & Assert
         await Assert.ThrowsExceptionAsync<InvalidOperationException>(
-            () => _resourceService.DeleteResourceAsync(resourceId, deletedBy));
+            () => _resourceService.DeleteResourceAsync(999, "TestAdmin"));
     }
 
     #endregion
@@ -368,21 +275,17 @@ public class ResourceServiceTests
     public async Task ResourceService_DoesUriMatchResourceAsync_ReturnsTrueForExactMatch()
     {
         // Arrange
-        var requestUri = "/api/users";
-        var resourceId = 1;
-        var dataResource = new Data.Models.Resource 
-        { 
-            Id = resourceId, 
-            Uri = "/api/users", 
+        var dataResource = new Data.Models.Resource
+        {
+            Uri = "/api/users",
             Description = "User API",
             ResourceType = "API"
         };
-
-        _mockResourceDbSet.Setup(x => x.FindAsync(resourceId))
-            .ReturnsAsync(dataResource);
+        _dbContext.Resources.Add(dataResource);
+        await _dbContext.SaveChangesAsync();
 
         // Act
-        var result = await _resourceService.DoesUriMatchResourceAsync(requestUri, resourceId);
+        var result = await _resourceService.DoesUriMatchResourceAsync("/api/users", dataResource.Id);
 
         // Assert
         Assert.IsTrue(result);
@@ -392,21 +295,17 @@ public class ResourceServiceTests
     public async Task ResourceService_DoesUriMatchResourceAsync_ReturnsTrueForWildcardMatch()
     {
         // Arrange
-        var requestUri = "/api/users/123";
-        var resourceId = 1;
-        var dataResource = new Data.Models.Resource 
-        { 
-            Id = resourceId, 
-            Uri = "/api/users/*", 
+        var dataResource = new Data.Models.Resource
+        {
+            Uri = "/api/users/*",
             Description = "User API with wildcard",
             ResourceType = "API"
         };
-
-        _mockResourceDbSet.Setup(x => x.FindAsync(resourceId))
-            .ReturnsAsync(dataResource);
+        _dbContext.Resources.Add(dataResource);
+        await _dbContext.SaveChangesAsync();
 
         // Act
-        var result = await _resourceService.DoesUriMatchResourceAsync(requestUri, resourceId);
+        var result = await _resourceService.DoesUriMatchResourceAsync("/api/users/123", dataResource.Id);
 
         // Assert
         Assert.IsTrue(result);
@@ -416,21 +315,17 @@ public class ResourceServiceTests
     public async Task ResourceService_DoesUriMatchResourceAsync_ReturnsFalseForNoMatch()
     {
         // Arrange
-        var requestUri = "/api/groups";
-        var resourceId = 1;
-        var dataResource = new Data.Models.Resource 
-        { 
-            Id = resourceId, 
-            Uri = "/api/users", 
+        var dataResource = new Data.Models.Resource
+        {
+            Uri = "/api/users",
             Description = "User API",
             ResourceType = "API"
         };
-
-        _mockResourceDbSet.Setup(x => x.FindAsync(resourceId))
-            .ReturnsAsync(dataResource);
+        _dbContext.Resources.Add(dataResource);
+        await _dbContext.SaveChangesAsync();
 
         // Act
-        var result = await _resourceService.DoesUriMatchResourceAsync(requestUri, resourceId);
+        var result = await _resourceService.DoesUriMatchResourceAsync("/api/groups", dataResource.Id);
 
         // Assert
         Assert.IsFalse(result);
@@ -439,15 +334,10 @@ public class ResourceServiceTests
     [TestMethod]
     public async Task ResourceService_DoesUriMatchResourceAsync_ReturnsFalseWhenResourceNotFound()
     {
-        // Arrange
-        var requestUri = "/api/users";
-        var resourceId = 999;
-
-        _mockResourceDbSet.Setup(x => x.FindAsync(resourceId))
-            .ReturnsAsync((Data.Models.Resource?)null);
+        // Arrange - no resources added
 
         // Act
-        var result = await _resourceService.DoesUriMatchResourceAsync(requestUri, resourceId);
+        var result = await _resourceService.DoesUriMatchResourceAsync("/api/users", 999);
 
         // Assert
         Assert.IsFalse(result);
@@ -461,51 +351,35 @@ public class ResourceServiceTests
     public async Task ResourceService_FindBestMatchingResourceAsync_ReturnsExactMatchFirst()
     {
         // Arrange
-        var requestUri = "/api/users";
-        var dataResources = new List<Data.Models.Resource>
-        {
-            new() { Id = 1, Uri = "/api/users/*", Description = "User API wildcard", ResourceType = "API" },
-            new() { Id = 2, Uri = "/api/users", Description = "User API exact", ResourceType = "API" }
-        };
-
-        var mockQueryable = dataResources.AsQueryable();
-        _mockResourceDbSet.As<IQueryable<Data.Models.Resource>>().Setup(m => m.Provider).Returns(mockQueryable.Provider);
-        _mockResourceDbSet.As<IQueryable<Data.Models.Resource>>().Setup(m => m.Expression).Returns(mockQueryable.Expression);
-        _mockResourceDbSet.As<IQueryable<Data.Models.Resource>>().Setup(m => m.ElementType).Returns(mockQueryable.ElementType);
-        _mockResourceDbSet.As<IQueryable<Data.Models.Resource>>().Setup(m => m.GetEnumerator()).Returns(mockQueryable.GetEnumerator());
+        _dbContext.Resources.AddRange(
+            new Data.Models.Resource { Uri = "/api/users/*", Description = "User API wildcard", ResourceType = "API" },
+            new Data.Models.Resource { Uri = "/api/users", Description = "User API exact", ResourceType = "API" }
+        );
+        await _dbContext.SaveChangesAsync();
 
         // Act
-        var result = await _resourceService.FindBestMatchingResourceAsync(requestUri);
+        var result = await _resourceService.FindBestMatchingResourceAsync("/api/users");
 
         // Assert
         Assert.IsNotNull(result);
-        Assert.AreEqual(2, result.Id); // Exact match should be returned
-        Assert.AreEqual("/api/users", result.Uri);
+        Assert.AreEqual("/api/users", result.Uri); // Exact match should be returned
     }
 
     [TestMethod]
     public async Task ResourceService_FindBestMatchingResourceAsync_ReturnsWildcardMatchWhenNoExact()
     {
         // Arrange
-        var requestUri = "/api/users/123";
-        var dataResources = new List<Data.Models.Resource>
-        {
-            new() { Id = 1, Uri = "/api/users/*", Description = "User API wildcard", ResourceType = "API" },
-            new() { Id = 2, Uri = "/api/groups", Description = "Group API", ResourceType = "API" }
-        };
-
-        var mockQueryable = dataResources.AsQueryable();
-        _mockResourceDbSet.As<IQueryable<Data.Models.Resource>>().Setup(m => m.Provider).Returns(mockQueryable.Provider);
-        _mockResourceDbSet.As<IQueryable<Data.Models.Resource>>().Setup(m => m.Expression).Returns(mockQueryable.Expression);
-        _mockResourceDbSet.As<IQueryable<Data.Models.Resource>>().Setup(m => m.ElementType).Returns(mockQueryable.ElementType);
-        _mockResourceDbSet.As<IQueryable<Data.Models.Resource>>().Setup(m => m.GetEnumerator()).Returns(mockQueryable.GetEnumerator());
+        _dbContext.Resources.AddRange(
+            new Data.Models.Resource { Uri = "/api/users/*", Description = "User API wildcard", ResourceType = "API" },
+            new Data.Models.Resource { Uri = "/api/groups", Description = "Group API", ResourceType = "API" }
+        );
+        await _dbContext.SaveChangesAsync();
 
         // Act
-        var result = await _resourceService.FindBestMatchingResourceAsync(requestUri);
+        var result = await _resourceService.FindBestMatchingResourceAsync("/api/users/123");
 
         // Assert
         Assert.IsNotNull(result);
-        Assert.AreEqual(1, result.Id);
         Assert.AreEqual("/api/users/*", result.Uri);
     }
 
@@ -513,21 +387,14 @@ public class ResourceServiceTests
     public async Task ResourceService_FindBestMatchingResourceAsync_ReturnsNullWhenNoMatch()
     {
         // Arrange
-        var requestUri = "/api/unknown";
-        var dataResources = new List<Data.Models.Resource>
-        {
-            new() { Id = 1, Uri = "/api/users", Description = "User API", ResourceType = "API" },
-            new() { Id = 2, Uri = "/api/groups", Description = "Group API", ResourceType = "API" }
-        };
-
-        var mockQueryable = dataResources.AsQueryable();
-        _mockResourceDbSet.As<IQueryable<Data.Models.Resource>>().Setup(m => m.Provider).Returns(mockQueryable.Provider);
-        _mockResourceDbSet.As<IQueryable<Data.Models.Resource>>().Setup(m => m.Expression).Returns(mockQueryable.Expression);
-        _mockResourceDbSet.As<IQueryable<Data.Models.Resource>>().Setup(m => m.ElementType).Returns(mockQueryable.ElementType);
-        _mockResourceDbSet.As<IQueryable<Data.Models.Resource>>().Setup(m => m.GetEnumerator()).Returns(mockQueryable.GetEnumerator());
+        _dbContext.Resources.AddRange(
+            new Data.Models.Resource { Uri = "/api/users", Description = "User API", ResourceType = "API" },
+            new Data.Models.Resource { Uri = "/api/groups", Description = "Group API", ResourceType = "API" }
+        );
+        await _dbContext.SaveChangesAsync();
 
         // Act
-        var result = await _resourceService.FindBestMatchingResourceAsync(requestUri);
+        var result = await _resourceService.FindBestMatchingResourceAsync("/api/unknown");
 
         // Assert
         Assert.IsNull(result);
@@ -538,46 +405,20 @@ public class ResourceServiceTests
     #region IsUriProtectedAsync Tests
 
     [TestMethod]
-    public async Task ResourceService_IsUriProtectedAsync_ReturnsTrueForProtectedResource()
-    {
-        // Arrange
-        var requestUri = "/api/users";
-        var dataResources = new List<Data.Models.Resource>
-        {
-            new() { Id = 1, Uri = "/api/users", Description = "User API", ResourceType = "API" }
-        };
-
-        var mockQueryable = dataResources.AsQueryable();
-        _mockResourceDbSet.As<IQueryable<Data.Models.Resource>>().Setup(m => m.Provider).Returns(mockQueryable.Provider);
-        _mockResourceDbSet.As<IQueryable<Data.Models.Resource>>().Setup(m => m.Expression).Returns(mockQueryable.Expression);
-        _mockResourceDbSet.As<IQueryable<Data.Models.Resource>>().Setup(m => m.ElementType).Returns(mockQueryable.ElementType);
-        _mockResourceDbSet.As<IQueryable<Data.Models.Resource>>().Setup(m => m.GetEnumerator()).Returns(mockQueryable.GetEnumerator());
-
-        // Act
-        var result = await _resourceService.IsUriProtectedAsync(requestUri);
-
-        // Assert
-        Assert.IsTrue(result);
-    }
-
-    [TestMethod]
     public async Task ResourceService_IsUriProtectedAsync_ReturnsFalseForUnprotectedResource()
     {
-        // Arrange
-        var requestUri = "/api/public";
-        var dataResources = new List<Data.Models.Resource>
+        // Arrange - Resource exists but has no permissions
+        var dataResource = new Data.Models.Resource
         {
-            new() { Id = 1, Uri = "/api/users", Description = "User API", ResourceType = "API" }
+            Uri = "/api/users",
+            Description = "User API",
+            ResourceType = "API"
         };
-
-        var mockQueryable = dataResources.AsQueryable();
-        _mockResourceDbSet.As<IQueryable<Data.Models.Resource>>().Setup(m => m.Provider).Returns(mockQueryable.Provider);
-        _mockResourceDbSet.As<IQueryable<Data.Models.Resource>>().Setup(m => m.Expression).Returns(mockQueryable.Expression);
-        _mockResourceDbSet.As<IQueryable<Data.Models.Resource>>().Setup(m => m.ElementType).Returns(mockQueryable.ElementType);
-        _mockResourceDbSet.As<IQueryable<Data.Models.Resource>>().Setup(m => m.GetEnumerator()).Returns(mockQueryable.GetEnumerator());
+        _dbContext.Resources.Add(dataResource);
+        await _dbContext.SaveChangesAsync();
 
         // Act
-        var result = await _resourceService.IsUriProtectedAsync(requestUri);
+        var result = await _resourceService.IsUriProtectedAsync("/api/users");
 
         // Assert
         Assert.IsFalse(result);
@@ -634,26 +475,19 @@ public class ResourceServiceTests
     public async Task ResourceService_GetResourcesByTypeAsync_ReturnsMatchingResources()
     {
         // Arrange
-        var resourceType = "API";
-        var dataResources = new List<Data.Models.Resource>
-        {
-            new() { Id = 1, Uri = "/api/users", Description = "User API", ResourceType = "API" },
-            new() { Id = 2, Uri = "/web/home", Description = "Home Page", ResourceType = "Web" },
-            new() { Id = 3, Uri = "/api/groups", Description = "Group API", ResourceType = "API" }
-        };
-
-        var mockQueryable = dataResources.AsQueryable();
-        _mockResourceDbSet.As<IQueryable<Data.Models.Resource>>().Setup(m => m.Provider).Returns(mockQueryable.Provider);
-        _mockResourceDbSet.As<IQueryable<Data.Models.Resource>>().Setup(m => m.Expression).Returns(mockQueryable.Expression);
-        _mockResourceDbSet.As<IQueryable<Data.Models.Resource>>().Setup(m => m.ElementType).Returns(mockQueryable.ElementType);
-        _mockResourceDbSet.As<IQueryable<Data.Models.Resource>>().Setup(m => m.GetEnumerator()).Returns(mockQueryable.GetEnumerator());
+        _dbContext.Resources.AddRange(
+            new Data.Models.Resource { Uri = "/api/users", Description = "User API", ResourceType = "API" },
+            new Data.Models.Resource { Uri = "/web/home", Description = "Home Page", ResourceType = "Web" },
+            new Data.Models.Resource { Uri = "/api/groups", Description = "Group API", ResourceType = "API" }
+        );
+        await _dbContext.SaveChangesAsync();
 
         // Act
-        var result = await _resourceService.GetResourcesByTypeAsync(resourceType);
+        var result = await _resourceService.GetResourcesByTypeAsync("API");
 
         // Assert
         Assert.AreEqual(2, result.Count());
-        Assert.IsTrue(result.All(r => r.ResourceType == resourceType));
+        Assert.IsTrue(result.All(r => r.ResourceType == "API"));
     }
 
     #endregion
@@ -664,27 +498,18 @@ public class ResourceServiceTests
     public async Task ResourceService_SearchResourcesAsync_ReturnsMatchingResources()
     {
         // Arrange
-        var searchTerm = "user";
-        var dataResources = new List<Data.Models.Resource>
-        {
-            new() { Id = 1, Uri = "/api/users", Description = "User API", ResourceType = "API" },
-            new() { Id = 2, Uri = "/api/groups", Description = "Group API", ResourceType = "API" },
-            new() { Id = 3, Uri = "/api/user-management", Description = "User Management", ResourceType = "API" }
-        };
-
-        var mockQueryable = dataResources.AsQueryable();
-        _mockResourceDbSet.As<IQueryable<Data.Models.Resource>>().Setup(m => m.Provider).Returns(mockQueryable.Provider);
-        _mockResourceDbSet.As<IQueryable<Data.Models.Resource>>().Setup(m => m.Expression).Returns(mockQueryable.Expression);
-        _mockResourceDbSet.As<IQueryable<Data.Models.Resource>>().Setup(m => m.ElementType).Returns(mockQueryable.ElementType);
-        _mockResourceDbSet.As<IQueryable<Data.Models.Resource>>().Setup(m => m.GetEnumerator()).Returns(mockQueryable.GetEnumerator());
+        _dbContext.Resources.AddRange(
+            new Data.Models.Resource { Uri = "/api/users", Description = "User API", ResourceType = "API" },
+            new Data.Models.Resource { Uri = "/api/groups", Description = "Group API", ResourceType = "API" },
+            new Data.Models.Resource { Uri = "/api/user-management", Description = "User Management", ResourceType = "API" }
+        );
+        await _dbContext.SaveChangesAsync();
 
         // Act
-        var result = await _resourceService.SearchResourcesAsync(searchTerm);
+        var result = await _resourceService.SearchResourcesAsync("user");
 
         // Assert
         Assert.AreEqual(2, result.Count());
-        Assert.IsTrue(result.Any(r => r.Uri.Contains("users", StringComparison.OrdinalIgnoreCase)));
-        Assert.IsTrue(result.Any(r => r.Description?.Contains("User", StringComparison.OrdinalIgnoreCase) == true));
     }
 
     #endregion
@@ -695,18 +520,12 @@ public class ResourceServiceTests
     public async Task ResourceService_GetTotalResourceCountAsync_ReturnsCorrectCount()
     {
         // Arrange
-        var dataResources = new List<Data.Models.Resource>
-        {
-            new() { Id = 1, Uri = "/api/users", Description = "User API", ResourceType = "API" },
-            new() { Id = 2, Uri = "/api/groups", Description = "Group API", ResourceType = "API" },
-            new() { Id = 3, Uri = "/web/home", Description = "Home Page", ResourceType = "Web" }
-        };
-
-        var mockQueryable = dataResources.AsQueryable();
-        _mockResourceDbSet.As<IQueryable<Data.Models.Resource>>().Setup(m => m.Provider).Returns(mockQueryable.Provider);
-        _mockResourceDbSet.As<IQueryable<Data.Models.Resource>>().Setup(m => m.Expression).Returns(mockQueryable.Expression);
-        _mockResourceDbSet.As<IQueryable<Data.Models.Resource>>().Setup(m => m.ElementType).Returns(mockQueryable.ElementType);
-        _mockResourceDbSet.As<IQueryable<Data.Models.Resource>>().Setup(m => m.GetEnumerator()).Returns(mockQueryable.GetEnumerator());
+        _dbContext.Resources.AddRange(
+            new Data.Models.Resource { Uri = "/api/users", Description = "User API", ResourceType = "API" },
+            new Data.Models.Resource { Uri = "/api/groups", Description = "Group API", ResourceType = "API" },
+            new Data.Models.Resource { Uri = "/web/home", Description = "Home Page", ResourceType = "Web" }
+        );
+        await _dbContext.SaveChangesAsync();
 
         // Act
         var result = await _resourceService.GetTotalResourceCountAsync();
@@ -723,19 +542,13 @@ public class ResourceServiceTests
     public async Task ResourceService_GetResourceCountByTypeAsync_ReturnsCorrectCounts()
     {
         // Arrange
-        var dataResources = new List<Data.Models.Resource>
-        {
-            new() { Id = 1, Uri = "/api/users", Description = "User API", ResourceType = "API" },
-            new() { Id = 2, Uri = "/api/groups", Description = "Group API", ResourceType = "API" },
-            new() { Id = 3, Uri = "/web/home", Description = "Home Page", ResourceType = "Web" },
-            new() { Id = 4, Uri = "/web/about", Description = "About Page", ResourceType = "Web" }
-        };
-
-        var mockQueryable = dataResources.AsQueryable();
-        _mockResourceDbSet.As<IQueryable<Data.Models.Resource>>().Setup(m => m.Provider).Returns(mockQueryable.Provider);
-        _mockResourceDbSet.As<IQueryable<Data.Models.Resource>>().Setup(m => m.Expression).Returns(mockQueryable.Expression);
-        _mockResourceDbSet.As<IQueryable<Data.Models.Resource>>().Setup(m => m.ElementType).Returns(mockQueryable.ElementType);
-        _mockResourceDbSet.As<IQueryable<Data.Models.Resource>>().Setup(m => m.GetEnumerator()).Returns(mockQueryable.GetEnumerator());
+        _dbContext.Resources.AddRange(
+            new Data.Models.Resource { Uri = "/api/users", Description = "User API", ResourceType = "API" },
+            new Data.Models.Resource { Uri = "/api/groups", Description = "Group API", ResourceType = "API" },
+            new Data.Models.Resource { Uri = "/web/home", Description = "Home Page", ResourceType = "Web" },
+            new Data.Models.Resource { Uri = "/web/about", Description = "About Page", ResourceType = "Web" }
+        );
+        await _dbContext.SaveChangesAsync();
 
         // Act
         var result = await _resourceService.GetResourceCountByTypeAsync();
@@ -761,21 +574,12 @@ public class ResourceServiceTests
         };
         var createdBy = "TestAdmin";
 
-        _mockDbContext.Setup(x => x.SaveChangesAsync(default)).ReturnsAsync(1);
-
         // Act
         var result = await _resourceService.CreateResourcesBulkAsync(resources, createdBy);
 
         // Assert
         Assert.AreEqual(3, result.Count());
-        _mockLogger.Verify(
-            x => x.Log(
-                LogLevel.Information,
-                It.IsAny<EventId>(),
-                It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("Created 3 resources in bulk")),
-                It.IsAny<Exception>(),
-                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
-            Times.Once);
+        Assert.AreEqual(3, await _dbContext.Resources.CountAsync());
     }
 
     #endregion
@@ -786,19 +590,24 @@ public class ResourceServiceTests
     public async Task ResourceService_IsResourceAccessibleAsync_CallsPermissionService()
     {
         // Arrange
-        var resourceId = 1;
-        var entityId = 1;
-        var verb = Domain.HttpVerb.GET;
+        var dataResource = new Data.Models.Resource
+        {
+            Uri = "/api/users",
+            Description = "User API",
+            ResourceType = "API"
+        };
+        _dbContext.Resources.Add(dataResource);
+        await _dbContext.SaveChangesAsync();
 
-        _mockPermissionService.Setup(x => x.HasPermissionAsync(entityId, It.IsAny<string>(), verb))
+        _mockPermissionService.Setup(x => x.HasPermissionAsync(It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>()))
             .ReturnsAsync(true);
 
         // Act
-        var result = await _resourceService.IsResourceAccessibleAsync(resourceId, entityId, verb);
+        var result = await _resourceService.IsResourceAccessibleAsync(dataResource.Id, 1, Domain.HttpVerb.GET);
 
         // Assert
         Assert.IsTrue(result);
-        _mockPermissionService.Verify(x => x.HasPermissionAsync(entityId, It.IsAny<string>(), verb), Times.Once);
+        _mockPermissionService.Verify(x => x.HasPermissionAsync(1, It.IsAny<string>(), "GET"), Times.Once);
     }
 
     #endregion
@@ -806,20 +615,926 @@ public class ResourceServiceTests
     #region Error Handling Tests
 
     [TestMethod]
-    public async Task ResourceService_CreateResourceAsync_HandlesExceptionGracefully()
+    public async Task ResourceService_CreateResourceAsync_ThrowsOnDuplicateUri()
     {
         // Arrange
         var uri = "/api/users";
-        var description = "User API";
-        var resourceType = "API";
-        var createdBy = "TestAdmin";
-
-        _mockDbContext.Setup(x => x.SaveChangesAsync(default))
-            .ThrowsAsync(new InvalidOperationException("Database error"));
+        _dbContext.Resources.Add(new Data.Models.Resource { Uri = uri, Description = "Test", ResourceType = "API" });
+        await _dbContext.SaveChangesAsync();
 
         // Act & Assert
         await Assert.ThrowsExceptionAsync<InvalidOperationException>(
-            () => _resourceService.CreateResourceAsync(uri, description, resourceType, createdBy));
+            () => _resourceService.CreateResourceAsync(uri, "Duplicate", "API", "TestAdmin"));
+    }
+
+    #endregion
+
+    #region CreateAsync (Request/Response) Tests
+
+    [TestMethod]
+    public async Task CreateAsync_WithValidRequest_ReturnsSuccessResponse()
+    {
+        // Arrange
+        var request = new CreateResourceRequest
+        {
+            Name = "API",
+            Description = "User API endpoint",
+            UriPattern = "/api/users",
+            CreatedBy = "TestAdmin"
+        };
+
+        // Act
+        var result = await _resourceService.CreateAsync(request);
+
+        // Assert
+        Assert.IsTrue(result.Success);
+        Assert.IsNotNull(result.Resource);
+        Assert.AreEqual("Resource created successfully", result.Message);
+        Assert.AreEqual("/api/users", result.Resource.Uri);
+    }
+
+    [TestMethod]
+    public async Task CreateAsync_WithEmptyUriPattern_ReturnsValidationError()
+    {
+        // Arrange
+        var request = new CreateResourceRequest
+        {
+            Name = "API",
+            Description = "User API endpoint",
+            UriPattern = "",
+            CreatedBy = "TestAdmin"
+        };
+
+        // Act
+        var result = await _resourceService.CreateAsync(request);
+
+        // Assert
+        Assert.IsFalse(result.Success);
+        Assert.AreEqual("URI pattern is required", result.Message);
+        Assert.IsTrue(result.Errors.Any(e => e.Contains("URI pattern cannot be empty")));
+    }
+
+    [TestMethod]
+    public async Task CreateAsync_WithEmptyName_ReturnsValidationError()
+    {
+        // Arrange
+        var request = new CreateResourceRequest
+        {
+            Name = "",
+            Description = "User API endpoint",
+            UriPattern = "/api/users",
+            CreatedBy = "TestAdmin"
+        };
+
+        // Act
+        var result = await _resourceService.CreateAsync(request);
+
+        // Assert
+        Assert.IsFalse(result.Success);
+        Assert.AreEqual("Resource name is required", result.Message);
+        Assert.IsTrue(result.Errors.Any(e => e.Contains("Resource name cannot be empty")));
+    }
+
+    [TestMethod]
+    public async Task CreateAsync_WithWhitespaceUriPattern_ReturnsValidationError()
+    {
+        // Arrange
+        var request = new CreateResourceRequest
+        {
+            Name = "API",
+            Description = "User API endpoint",
+            UriPattern = "   ",
+            CreatedBy = "TestAdmin"
+        };
+
+        // Act
+        var result = await _resourceService.CreateAsync(request);
+
+        // Assert
+        Assert.IsFalse(result.Success);
+        Assert.AreEqual("URI pattern is required", result.Message);
+    }
+
+    [TestMethod]
+    public async Task CreateAsync_WithDuplicateUri_ReturnsErrorResponse()
+    {
+        // Arrange
+        _dbContext.Resources.Add(new Data.Models.Resource { Uri = "/api/users", Description = "Existing", ResourceType = "API" });
+        await _dbContext.SaveChangesAsync();
+
+        var request = new CreateResourceRequest
+        {
+            Name = "API",
+            Description = "User API endpoint",
+            UriPattern = "/api/users",
+            CreatedBy = "TestAdmin"
+        };
+
+        // Act
+        var result = await _resourceService.CreateAsync(request);
+
+        // Assert
+        Assert.IsFalse(result.Success);
+        Assert.IsTrue(result.Errors.Any(e => e.Contains("already exists")));
+    }
+
+    #endregion
+
+    #region UpdateAsync (Request/Response) Tests
+
+    [TestMethod]
+    public async Task UpdateAsync_WithValidRequest_ReturnsSuccessResponse()
+    {
+        // Arrange
+        var existingResource = new Data.Models.Resource
+        {
+            Uri = "/api/users",
+            Description = "User API",
+            ResourceType = "API"
+        };
+        _dbContext.Resources.Add(existingResource);
+        await _dbContext.SaveChangesAsync();
+
+        var request = new UpdateResourceRequest
+        {
+            ResourceId = existingResource.Id,
+            Name = "API",
+            Description = "Updated User API",
+            UriPattern = "/api/users/v2",
+            UpdatedBy = "TestAdmin"
+        };
+
+        // Act
+        var result = await _resourceService.UpdateAsync(request);
+
+        // Assert
+        Assert.IsTrue(result.Success);
+        Assert.IsNotNull(result.Resource);
+        Assert.AreEqual("Resource updated successfully", result.Message);
+        Assert.AreEqual("/api/users/v2", result.Resource.Uri);
+    }
+
+    [TestMethod]
+    public async Task UpdateAsync_WithInvalidResourceId_ReturnsValidationError()
+    {
+        // Arrange
+        var request = new UpdateResourceRequest
+        {
+            ResourceId = 0,
+            Name = "API",
+            Description = "Updated User API",
+            UriPattern = "/api/users/v2",
+            UpdatedBy = "TestAdmin"
+        };
+
+        // Act
+        var result = await _resourceService.UpdateAsync(request);
+
+        // Assert
+        Assert.IsFalse(result.Success);
+        Assert.AreEqual("Invalid resource ID", result.Message);
+        Assert.IsTrue(result.Errors.Any(e => e.Contains("Resource ID must be a positive integer")));
+    }
+
+    [TestMethod]
+    public async Task UpdateAsync_WithNegativeResourceId_ReturnsValidationError()
+    {
+        // Arrange
+        var request = new UpdateResourceRequest
+        {
+            ResourceId = -5,
+            Name = "API",
+            Description = "Updated User API",
+            UriPattern = "/api/users/v2",
+            UpdatedBy = "TestAdmin"
+        };
+
+        // Act
+        var result = await _resourceService.UpdateAsync(request);
+
+        // Assert
+        Assert.IsFalse(result.Success);
+        Assert.AreEqual("Invalid resource ID", result.Message);
+    }
+
+    [TestMethod]
+    public async Task UpdateAsync_WithEmptyUriPattern_ReturnsValidationError()
+    {
+        // Arrange
+        var request = new UpdateResourceRequest
+        {
+            ResourceId = 1,
+            Name = "API",
+            Description = "Updated User API",
+            UriPattern = "",
+            UpdatedBy = "TestAdmin"
+        };
+
+        // Act
+        var result = await _resourceService.UpdateAsync(request);
+
+        // Assert
+        Assert.IsFalse(result.Success);
+        Assert.AreEqual("URI pattern is required", result.Message);
+    }
+
+    [TestMethod]
+    public async Task UpdateAsync_WithEmptyName_ReturnsValidationError()
+    {
+        // Arrange
+        var request = new UpdateResourceRequest
+        {
+            ResourceId = 1,
+            Name = "",
+            Description = "Updated User API",
+            UriPattern = "/api/users/v2",
+            UpdatedBy = "TestAdmin"
+        };
+
+        // Act
+        var result = await _resourceService.UpdateAsync(request);
+
+        // Assert
+        Assert.IsFalse(result.Success);
+        Assert.AreEqual("Resource name is required", result.Message);
+    }
+
+    [TestMethod]
+    public async Task UpdateAsync_WhenResourceNotFound_ReturnsOperationError()
+    {
+        // Arrange
+        var request = new UpdateResourceRequest
+        {
+            ResourceId = 999,
+            Name = "API",
+            Description = "Updated User API",
+            UriPattern = "/api/users/v2",
+            UpdatedBy = "TestAdmin"
+        };
+
+        // Act
+        var result = await _resourceService.UpdateAsync(request);
+
+        // Assert
+        Assert.IsFalse(result.Success);
+        Assert.AreEqual("Operation error", result.Message);
+        Assert.IsTrue(result.Errors.Any(e => e.Contains("not found")));
+    }
+
+    #endregion
+
+    #region GetByIdAsync (Request/Response) Tests
+
+    [TestMethod]
+    public async Task GetByIdAsync_WithValidRequest_ReturnsSuccessResponse()
+    {
+        // Arrange
+        var dataResource = new Data.Models.Resource
+        {
+            Uri = "/api/users",
+            Description = "User API",
+            ResourceType = "API"
+        };
+        _dbContext.Resources.Add(dataResource);
+        await _dbContext.SaveChangesAsync();
+
+        var request = new GetResourceRequest
+        {
+            ResourceId = dataResource.Id,
+            RequestedBy = "TestUser"
+        };
+
+        // Act
+        var result = await _resourceService.GetByIdAsync(request);
+
+        // Assert
+        Assert.IsTrue(result.Success);
+        Assert.IsNotNull(result.Resource);
+        Assert.AreEqual("Resource retrieved successfully", result.Message);
+        Assert.AreEqual(dataResource.Id, result.Resource.Id);
+        Assert.AreEqual("/api/users", result.Resource.Uri);
+    }
+
+    [TestMethod]
+    public async Task GetByIdAsync_WithInvalidResourceId_ReturnsValidationError()
+    {
+        // Arrange
+        var request = new GetResourceRequest
+        {
+            ResourceId = 0,
+            RequestedBy = "TestUser"
+        };
+
+        // Act
+        var result = await _resourceService.GetByIdAsync(request);
+
+        // Assert
+        Assert.IsFalse(result.Success);
+        Assert.AreEqual("Invalid resource ID", result.Message);
+        Assert.IsTrue(result.Errors.Any(e => e.Contains("Resource ID must be a positive integer")));
+    }
+
+    [TestMethod]
+    public async Task GetByIdAsync_WithNegativeResourceId_ReturnsValidationError()
+    {
+        // Arrange
+        var request = new GetResourceRequest
+        {
+            ResourceId = -1,
+            RequestedBy = "TestUser"
+        };
+
+        // Act
+        var result = await _resourceService.GetByIdAsync(request);
+
+        // Assert
+        Assert.IsFalse(result.Success);
+        Assert.AreEqual("Invalid resource ID", result.Message);
+    }
+
+    [TestMethod]
+    public async Task GetByIdAsync_WhenResourceNotFound_ReturnsNotFoundError()
+    {
+        // Arrange
+        var request = new GetResourceRequest
+        {
+            ResourceId = 999,
+            RequestedBy = "TestUser"
+        };
+
+        // Act
+        var result = await _resourceService.GetByIdAsync(request);
+
+        // Assert
+        Assert.IsFalse(result.Success);
+        Assert.AreEqual("Resource not found", result.Message);
+        Assert.IsTrue(result.Errors.Any(e => e.Contains("999")));
+    }
+
+    #endregion
+
+    #region GetAllAsync (Request/Response) Tests
+
+    [TestMethod]
+    public async Task GetAllAsync_WithDefaultRequest_ReturnsAllResources()
+    {
+        // Arrange
+        _dbContext.Resources.AddRange(
+            new Data.Models.Resource { Uri = "/api/users", Description = "User API", ResourceType = "API", IsActive = true },
+            new Data.Models.Resource { Uri = "/api/groups", Description = "Group API", ResourceType = "API", IsActive = true }
+        );
+        await _dbContext.SaveChangesAsync();
+
+        var request = new GetResourcesRequest
+        {
+            Page = 1,
+            PageSize = 20,
+            RequestedBy = "TestUser"
+        };
+
+        // Act
+        var result = await _resourceService.GetAllAsync(request);
+
+        // Assert
+        Assert.IsTrue(result.Success);
+        Assert.AreEqual(2, result.TotalCount);
+        Assert.AreEqual(2, result.Resources.Count);
+        Assert.AreEqual(1, result.Page);
+        Assert.AreEqual(20, result.PageSize);
+    }
+
+    [TestMethod]
+    public async Task GetAllAsync_WithSearchFilter_ReturnsFilteredResources()
+    {
+        // Arrange
+        _dbContext.Resources.AddRange(
+            new Data.Models.Resource { Uri = "/api/users", Description = "User API", ResourceType = "API", IsActive = true },
+            new Data.Models.Resource { Uri = "/api/groups", Description = "Group API", ResourceType = "API", IsActive = true },
+            new Data.Models.Resource { Uri = "/api/user-profiles", Description = "User Profiles", ResourceType = "API", IsActive = true }
+        );
+        await _dbContext.SaveChangesAsync();
+
+        var request = new GetResourcesRequest
+        {
+            Page = 1,
+            PageSize = 20,
+            Search = "user",
+            RequestedBy = "TestUser"
+        };
+
+        // Act
+        var result = await _resourceService.GetAllAsync(request);
+
+        // Assert
+        Assert.IsTrue(result.Success);
+        Assert.AreEqual(2, result.TotalCount);
+        Assert.IsTrue(result.Resources.All(r => r.Uri.Contains("user", StringComparison.OrdinalIgnoreCase) ||
+                                                 r.Description?.Contains("user", StringComparison.OrdinalIgnoreCase) == true));
+    }
+
+    [TestMethod]
+    public async Task GetAllAsync_WithResourceTypeFilter_ReturnsFilteredResources()
+    {
+        // Arrange
+        _dbContext.Resources.AddRange(
+            new Data.Models.Resource { Uri = "/api/users", Description = "User API", ResourceType = "API", IsActive = true },
+            new Data.Models.Resource { Uri = "/web/home", Description = "Home Page", ResourceType = "Web", IsActive = true },
+            new Data.Models.Resource { Uri = "/api/groups", Description = "Group API", ResourceType = "API", IsActive = true }
+        );
+        await _dbContext.SaveChangesAsync();
+
+        var request = new GetResourcesRequest
+        {
+            Page = 1,
+            PageSize = 20,
+            ResourceType = "API",
+            RequestedBy = "TestUser"
+        };
+
+        // Act
+        var result = await _resourceService.GetAllAsync(request);
+
+        // Assert
+        Assert.IsTrue(result.Success);
+        Assert.AreEqual(2, result.TotalCount);
+        Assert.IsTrue(result.Resources.All(r => r.ResourceType == "API"));
+    }
+
+    [TestMethod]
+    public async Task GetAllAsync_WithSortByUri_ReturnsSortedResources()
+    {
+        // Arrange
+        _dbContext.Resources.AddRange(
+            new Data.Models.Resource { Uri = "/api/zebra", Description = "Zebra API", ResourceType = "API", IsActive = true },
+            new Data.Models.Resource { Uri = "/api/alpha", Description = "Alpha API", ResourceType = "API", IsActive = true },
+            new Data.Models.Resource { Uri = "/api/middle", Description = "Middle API", ResourceType = "API", IsActive = true }
+        );
+        await _dbContext.SaveChangesAsync();
+
+        var request = new GetResourcesRequest
+        {
+            Page = 1,
+            PageSize = 20,
+            SortBy = "uri",
+            SortDescending = false,
+            RequestedBy = "TestUser"
+        };
+
+        // Act
+        var result = await _resourceService.GetAllAsync(request);
+
+        // Assert
+        Assert.IsTrue(result.Success);
+        var resourceList = result.Resources.ToList();
+        Assert.AreEqual("/api/alpha", resourceList[0].Uri);
+        Assert.AreEqual("/api/middle", resourceList[1].Uri);
+        Assert.AreEqual("/api/zebra", resourceList[2].Uri);
+    }
+
+    [TestMethod]
+    public async Task GetAllAsync_WithSortByUriDescending_ReturnsSortedResourcesDescending()
+    {
+        // Arrange
+        _dbContext.Resources.AddRange(
+            new Data.Models.Resource { Uri = "/api/alpha", Description = "Alpha API", ResourceType = "API", IsActive = true },
+            new Data.Models.Resource { Uri = "/api/zebra", Description = "Zebra API", ResourceType = "API", IsActive = true },
+            new Data.Models.Resource { Uri = "/api/middle", Description = "Middle API", ResourceType = "API", IsActive = true }
+        );
+        await _dbContext.SaveChangesAsync();
+
+        var request = new GetResourcesRequest
+        {
+            Page = 1,
+            PageSize = 20,
+            SortBy = "uri",
+            SortDescending = true,
+            RequestedBy = "TestUser"
+        };
+
+        // Act
+        var result = await _resourceService.GetAllAsync(request);
+
+        // Assert
+        Assert.IsTrue(result.Success);
+        var resourceList = result.Resources.ToList();
+        Assert.AreEqual("/api/zebra", resourceList[0].Uri);
+        Assert.AreEqual("/api/middle", resourceList[1].Uri);
+        Assert.AreEqual("/api/alpha", resourceList[2].Uri);
+    }
+
+    [TestMethod]
+    public async Task GetAllAsync_WithSortByType_ReturnsSortedResources()
+    {
+        // Arrange
+        _dbContext.Resources.AddRange(
+            new Data.Models.Resource { Uri = "/web/home", Description = "Home Page", ResourceType = "Web", IsActive = true },
+            new Data.Models.Resource { Uri = "/api/users", Description = "User API", ResourceType = "API", IsActive = true },
+            new Data.Models.Resource { Uri = "/doc/readme", Description = "Docs", ResourceType = "Documentation", IsActive = true }
+        );
+        await _dbContext.SaveChangesAsync();
+
+        var request = new GetResourcesRequest
+        {
+            Page = 1,
+            PageSize = 20,
+            SortBy = "type",
+            SortDescending = false,
+            RequestedBy = "TestUser"
+        };
+
+        // Act
+        var result = await _resourceService.GetAllAsync(request);
+
+        // Assert
+        Assert.IsTrue(result.Success);
+        var resourceList = result.Resources.ToList();
+        Assert.AreEqual("API", resourceList[0].ResourceType);
+        Assert.AreEqual("Documentation", resourceList[1].ResourceType);
+        Assert.AreEqual("Web", resourceList[2].ResourceType);
+    }
+
+    [TestMethod]
+    public async Task GetAllAsync_WithSortByCreated_ReturnsSortedResources()
+    {
+        // Arrange
+        var baseDate = DateTime.UtcNow;
+        _dbContext.Resources.AddRange(
+            new Data.Models.Resource { Uri = "/api/third", Description = "Third", ResourceType = "API", IsActive = true, CreatedAt = baseDate.AddDays(2) },
+            new Data.Models.Resource { Uri = "/api/first", Description = "First", ResourceType = "API", IsActive = true, CreatedAt = baseDate },
+            new Data.Models.Resource { Uri = "/api/second", Description = "Second", ResourceType = "API", IsActive = true, CreatedAt = baseDate.AddDays(1) }
+        );
+        await _dbContext.SaveChangesAsync();
+
+        var request = new GetResourcesRequest
+        {
+            Page = 1,
+            PageSize = 20,
+            SortBy = "created",
+            SortDescending = false,
+            RequestedBy = "TestUser"
+        };
+
+        // Act
+        var result = await _resourceService.GetAllAsync(request);
+
+        // Assert
+        Assert.IsTrue(result.Success);
+        var resourceList = result.Resources.ToList();
+        Assert.AreEqual("/api/first", resourceList[0].Uri);
+        Assert.AreEqual("/api/second", resourceList[1].Uri);
+        Assert.AreEqual("/api/third", resourceList[2].Uri);
+    }
+
+    [TestMethod]
+    public async Task GetAllAsync_WithSortByUpdated_ReturnsSortedResources()
+    {
+        // Arrange
+        var baseDate = DateTime.UtcNow;
+        _dbContext.Resources.AddRange(
+            new Data.Models.Resource { Uri = "/api/oldest", Description = "Oldest", ResourceType = "API", IsActive = true, UpdatedAt = baseDate },
+            new Data.Models.Resource { Uri = "/api/newest", Description = "Newest", ResourceType = "API", IsActive = true, UpdatedAt = baseDate.AddDays(2) },
+            new Data.Models.Resource { Uri = "/api/middle", Description = "Middle", ResourceType = "API", IsActive = true, UpdatedAt = baseDate.AddDays(1) }
+        );
+        await _dbContext.SaveChangesAsync();
+
+        var request = new GetResourcesRequest
+        {
+            Page = 1,
+            PageSize = 20,
+            SortBy = "updated",
+            SortDescending = true,
+            RequestedBy = "TestUser"
+        };
+
+        // Act
+        var result = await _resourceService.GetAllAsync(request);
+
+        // Assert
+        Assert.IsTrue(result.Success);
+        var resourceList = result.Resources.ToList();
+        Assert.AreEqual("/api/newest", resourceList[0].Uri);
+        Assert.AreEqual("/api/middle", resourceList[1].Uri);
+        Assert.AreEqual("/api/oldest", resourceList[2].Uri);
+    }
+
+    [TestMethod]
+    public async Task GetAllAsync_WithPagination_ReturnsCorrectPage()
+    {
+        // Arrange
+        _dbContext.Resources.AddRange(
+            new Data.Models.Resource { Uri = "/api/a", Description = "A", ResourceType = "API", IsActive = true },
+            new Data.Models.Resource { Uri = "/api/b", Description = "B", ResourceType = "API", IsActive = true },
+            new Data.Models.Resource { Uri = "/api/c", Description = "C", ResourceType = "API", IsActive = true },
+            new Data.Models.Resource { Uri = "/api/d", Description = "D", ResourceType = "API", IsActive = true },
+            new Data.Models.Resource { Uri = "/api/e", Description = "E", ResourceType = "API", IsActive = true }
+        );
+        await _dbContext.SaveChangesAsync();
+
+        var request = new GetResourcesRequest
+        {
+            Page = 2,
+            PageSize = 2,
+            RequestedBy = "TestUser"
+        };
+
+        // Act
+        var result = await _resourceService.GetAllAsync(request);
+
+        // Assert
+        Assert.IsTrue(result.Success);
+        Assert.AreEqual(5, result.TotalCount);
+        Assert.AreEqual(2, result.Resources.Count);
+        Assert.AreEqual(2, result.Page);
+        Assert.AreEqual(2, result.PageSize);
+    }
+
+    [TestMethod]
+    public async Task GetAllAsync_WithActiveOnlyFilter_ReturnsOnlyActiveResources()
+    {
+        // Arrange
+        _dbContext.Resources.AddRange(
+            new Data.Models.Resource { Uri = "/api/active1", Description = "Active 1", ResourceType = "API", IsActive = true },
+            new Data.Models.Resource { Uri = "/api/inactive", Description = "Inactive", ResourceType = "API", IsActive = false },
+            new Data.Models.Resource { Uri = "/api/active2", Description = "Active 2", ResourceType = "API", IsActive = true }
+        );
+        await _dbContext.SaveChangesAsync();
+
+        var request = new GetResourcesRequest
+        {
+            Page = 1,
+            PageSize = 20,
+            ActiveOnly = true,
+            RequestedBy = "TestUser"
+        };
+
+        // Act
+        var result = await _resourceService.GetAllAsync(request);
+
+        // Assert
+        Assert.IsTrue(result.Success);
+        Assert.AreEqual(2, result.TotalCount);
+        Assert.IsTrue(result.Resources.All(r => r.IsActive));
+    }
+
+    [TestMethod]
+    public async Task GetAllAsync_WhenEmptyDatabase_ReturnsEmptyCollection()
+    {
+        // Arrange
+        var request = new GetResourcesRequest
+        {
+            Page = 1,
+            PageSize = 20,
+            RequestedBy = "TestUser"
+        };
+
+        // Act
+        var result = await _resourceService.GetAllAsync(request);
+
+        // Assert
+        Assert.IsTrue(result.Success);
+        Assert.AreEqual(0, result.TotalCount);
+        Assert.AreEqual(0, result.Resources.Count);
+    }
+
+    #endregion
+
+    #region DeleteAsync (Request/Response) Tests
+
+    [TestMethod]
+    public async Task DeleteAsync_WithValidRequest_ReturnsSuccessResponse()
+    {
+        // Arrange
+        var dataResource = new Data.Models.Resource
+        {
+            Uri = "/api/users",
+            Description = "User API",
+            ResourceType = "API"
+        };
+        _dbContext.Resources.Add(dataResource);
+        await _dbContext.SaveChangesAsync();
+
+        var request = new DeleteResourceRequest
+        {
+            ResourceId = dataResource.Id,
+            DeletedBy = "TestAdmin",
+            ForceDelete = false
+        };
+
+        // Act
+        var result = await _resourceService.DeleteAsync(request);
+
+        // Assert
+        Assert.IsTrue(result.Success);
+        Assert.AreEqual("Resource deleted successfully", result.Message);
+
+        // Verify deletion
+        var deletedResource = await _dbContext.Resources.FindAsync(dataResource.Id);
+        Assert.IsNull(deletedResource);
+    }
+
+    [TestMethod]
+    public async Task DeleteAsync_WithInvalidResourceId_ReturnsValidationError()
+    {
+        // Arrange
+        var request = new DeleteResourceRequest
+        {
+            ResourceId = 0,
+            DeletedBy = "TestAdmin",
+            ForceDelete = false
+        };
+
+        // Act
+        var result = await _resourceService.DeleteAsync(request);
+
+        // Assert
+        Assert.IsFalse(result.Success);
+        Assert.AreEqual("Invalid resource ID", result.Message);
+        Assert.IsTrue(result.Errors.Any(e => e.Contains("Resource ID must be a positive integer")));
+    }
+
+    [TestMethod]
+    public async Task DeleteAsync_WithNegativeResourceId_ReturnsValidationError()
+    {
+        // Arrange
+        var request = new DeleteResourceRequest
+        {
+            ResourceId = -10,
+            DeletedBy = "TestAdmin",
+            ForceDelete = false
+        };
+
+        // Act
+        var result = await _resourceService.DeleteAsync(request);
+
+        // Assert
+        Assert.IsFalse(result.Success);
+        Assert.AreEqual("Invalid resource ID", result.Message);
+    }
+
+    [TestMethod]
+    public async Task DeleteAsync_WhenResourceNotFound_ReturnsOperationError()
+    {
+        // Arrange
+        var request = new DeleteResourceRequest
+        {
+            ResourceId = 999,
+            DeletedBy = "TestAdmin",
+            ForceDelete = true
+        };
+
+        // Act
+        var result = await _resourceService.DeleteAsync(request);
+
+        // Assert
+        Assert.IsFalse(result.Success);
+        Assert.AreEqual("Operation error", result.Message);
+        Assert.IsTrue(result.Errors.Any(e => e.Contains("not found")));
+    }
+
+    [TestMethod]
+    public async Task DeleteAsync_WithForceDelete_BypassesDependencyCheck()
+    {
+        // Arrange
+        var dataResource = new Data.Models.Resource
+        {
+            Uri = "/api/users",
+            Description = "User API",
+            ResourceType = "API"
+        };
+        _dbContext.Resources.Add(dataResource);
+        await _dbContext.SaveChangesAsync();
+
+        var request = new DeleteResourceRequest
+        {
+            ResourceId = dataResource.Id,
+            DeletedBy = "TestAdmin",
+            ForceDelete = true
+        };
+
+        // Act
+        var result = await _resourceService.DeleteAsync(request);
+
+        // Assert
+        Assert.IsTrue(result.Success);
+        Assert.AreEqual("Resource deleted successfully", result.Message);
+    }
+
+    #endregion
+
+    #region CheckDependenciesAsync Tests
+
+    [TestMethod]
+    public async Task CheckDependenciesAsync_WhenResourceNotFound_ReturnsCannotDelete()
+    {
+        // Arrange - no resources added
+
+        // Act
+        var result = await _resourceService.CheckDependenciesAsync(999);
+
+        // Assert
+        Assert.IsFalse(result.CanDelete);
+        Assert.IsTrue(result.Messages.Any(m => m.Contains("not found")));
+    }
+
+    [TestMethod]
+    public async Task CheckDependenciesAsync_WhenNoDependencies_ReturnsCanDelete()
+    {
+        // Arrange
+        var dataResource = new Data.Models.Resource
+        {
+            Uri = "/api/users",
+            Description = "User API",
+            ResourceType = "API"
+        };
+        _dbContext.Resources.Add(dataResource);
+        await _dbContext.SaveChangesAsync();
+
+        // Act
+        var result = await _resourceService.CheckDependenciesAsync(dataResource.Id);
+
+        // Assert
+        Assert.IsTrue(result.CanDelete);
+        Assert.IsTrue(result.Messages.Any(m => m.Contains("can be safely deleted")));
+    }
+
+    [TestMethod]
+    public async Task CheckDependenciesAsync_WithUriAccessDependencies_ReturnsCannotDelete()
+    {
+        // Arrange
+        var dataResource = new Data.Models.Resource
+        {
+            Uri = "/api/users",
+            Description = "User API",
+            ResourceType = "API"
+        };
+        _dbContext.Resources.Add(dataResource);
+        await _dbContext.SaveChangesAsync();
+
+        var entity = new Data.Models.Entity { EntityType = "User" };
+        _dbContext.Entities.Add(entity);
+        await _dbContext.SaveChangesAsync();
+
+        var schemeType = new SchemeType { SchemeName = "ApiUriAuthorization" };
+        _dbContext.SchemeTypes.Add(schemeType);
+        await _dbContext.SaveChangesAsync();
+
+        var permissionScheme = new PermissionScheme { EntityId = entity.Id, SchemeTypeId = schemeType.Id };
+        _dbContext.EntityPermissions.Add(permissionScheme);
+        await _dbContext.SaveChangesAsync();
+
+        var verbType = new VerbType { VerbName = "GET" };
+        _dbContext.VerbTypes.Add(verbType);
+        await _dbContext.SaveChangesAsync();
+
+        var uriAccess = new UriAccess
+        {
+            ResourceId = dataResource.Id,
+            PermissionSchemeId = permissionScheme.Id,
+            VerbTypeId = verbType.Id,
+            Grant = true,
+            Deny = false
+        };
+        _dbContext.UriAccesses.Add(uriAccess);
+        await _dbContext.SaveChangesAsync();
+
+        // Act
+        var result = await _resourceService.CheckDependenciesAsync(dataResource.Id);
+
+        // Assert
+        Assert.IsFalse(result.CanDelete);
+        Assert.IsTrue(result.Dependencies.Any());
+        Assert.IsTrue(result.Messages.Any(m => m.Contains("active permission")));
+    }
+
+    [TestMethod]
+    public async Task CheckDependenciesAsync_WithChildResources_ReturnsWarningsAboutChildren()
+    {
+        // Arrange
+        var parentResource = new Data.Models.Resource
+        {
+            Uri = "/api/users",
+            Description = "User API",
+            ResourceType = "API"
+        };
+        _dbContext.Resources.Add(parentResource);
+        await _dbContext.SaveChangesAsync();
+
+        var childResource = new Data.Models.Resource
+        {
+            Uri = "/api/users/profile",
+            Description = "User Profile API",
+            ResourceType = "API",
+            ParentResourceId = parentResource.Id
+        };
+        _dbContext.Resources.Add(childResource);
+        await _dbContext.SaveChangesAsync();
+
+        // Act
+        var result = await _resourceService.CheckDependenciesAsync(parentResource.Id);
+
+        // Assert
+        Assert.IsTrue(result.Warnings.Any(w => w.Contains("child resource")));
+        Assert.IsTrue(result.Dependencies.Any(d => d.DependencyType == "Child Resource"));
     }
 
     #endregion

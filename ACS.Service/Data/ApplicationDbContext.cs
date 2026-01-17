@@ -68,6 +68,9 @@ namespace ACS.Service.Data
                 // Ignore computed navigation properties
                 entity.Ignore(u => u.Groups);
                 entity.Ignore(u => u.Roles);
+
+                // Ignore complex GDPR-related properties for EF Core compatibility
+                entity.Ignore(u => u.Metadata);
             });
 
             // Group configuration
