@@ -120,6 +120,11 @@ ipch/
 
 # Visual Studio Trace Files
 *.e2e
+# But not the E2E test project directory (only source files, not bin/obj)
+!ACS.WebApi.Tests.E2E/
+!ACS.WebApi.Tests.E2E/*.csproj
+!ACS.WebApi.Tests.E2E/*.md
+!ACS.WebApi.Tests.E2E/**/*.cs
 
 # TFS 2012 Local Workspace
 $tf/
