@@ -16,9 +16,10 @@ namespace ACS.Service.Tests.Unit;
 [TestClass]
 public class SystemMetricsServiceTests
 {
-    private Mock<InMemoryEntityGraph> _mockEntityGraph = null!;
+    private InMemoryEntityGraph _entityGraph = null!;
     private ApplicationDbContext _dbContext = null!;
     private Mock<ILogger<SystemMetricsService>> _mockLogger = null!;
+    private Mock<ILogger<InMemoryEntityGraph>> _mockEntityGraphLogger = null!;
     private SystemMetricsService _systemMetricsService = null!;
 
     [TestInitialize]
@@ -30,11 +31,12 @@ public class SystemMetricsServiceTests
             .Options;
 
         _dbContext = new ApplicationDbContext(options);
-        _mockEntityGraph = new Mock<InMemoryEntityGraph>();
+        _mockEntityGraphLogger = new Mock<ILogger<InMemoryEntityGraph>>();
+        _entityGraph = new InMemoryEntityGraph(_dbContext, _mockEntityGraphLogger.Object);
         _mockLogger = new Mock<ILogger<SystemMetricsService>>();
 
         _systemMetricsService = new SystemMetricsService(
-            _mockEntityGraph.Object,
+            _entityGraph,
             _dbContext,
             _mockLogger.Object);
     }
@@ -138,7 +140,7 @@ public class SystemMetricsServiceTests
     #region GetMigrationHistoryAsync Tests
 
     [TestMethod]
-    public async Task SystemMetricsService_GetMigrationHistoryAsync_ReturnsSuccessfulResponse()
+    public async Task SystemMetricsService_GetMigrationHistoryAsync_ReturnsFailureForInMemoryDb()
     {
         // Arrange
         var request = new MigrationHistoryRequest { TenantId = "test-tenant" };
@@ -147,25 +149,33 @@ public class SystemMetricsServiceTests
         var result = await _systemMetricsService.GetMigrationHistoryAsync(request);
 
         // Assert
-        Assert.IsTrue(result.Success);
-        Assert.IsTrue(result.Message!.Contains("Retrieved"));
-        Assert.IsTrue(result.Message.Contains("migrations"));
+        // In-memory database does not support GetAppliedMigrationsAsync, so the service
+        // catches the exception and returns a failure response
+        Assert.IsFalse(result.Success);
+        Assert.AreEqual("Failed to retrieve migration history", result.Message);
+        Assert.IsNotNull(result.Errors);
+        Assert.IsTrue(result.Errors.Count > 0);
     }
 
     [TestMethod]
-    public async Task SystemMetricsService_GetMigrationHistoryAsync_ReturnsEmptyListForInMemoryDb()
+    public async Task SystemMetricsService_GetMigrationHistoryAsync_LogsErrorForInMemoryDb()
     {
         // Arrange
         var request = new MigrationHistoryRequest { TenantId = "test-tenant" };
 
         // Act
-        var result = await _systemMetricsService.GetMigrationHistoryAsync(request);
+        await _systemMetricsService.GetMigrationHistoryAsync(request);
 
         // Assert
-        Assert.IsTrue(result.Success);
-        Assert.IsNotNull(result.Migrations);
-        // In-memory database typically has no applied migrations
-        Assert.AreEqual("Retrieved 0 applied migrations", result.Message);
+        // Verify that an error was logged when the migration API fails
+        _mockLogger.Verify(
+            x => x.Log(
+                LogLevel.Error,
+                It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("Error getting migration history")),
+                It.IsAny<Exception>(),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Once);
     }
 
     #endregion
@@ -305,19 +315,20 @@ public class SystemMetricsServiceTests
     public void SystemMetricsService_Constructor_WithValidDependencies_CreatesInstance()
     {
         // Arrange
-        var mockEntityGraph = new Mock<InMemoryEntityGraph>();
         var options = new DbContextOptionsBuilder<ApplicationDbContext>()
             .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
             .Options;
         var dbContext = new ApplicationDbContext(options);
+        var entityGraphLogger = new Mock<ILogger<InMemoryEntityGraph>>();
+        var entityGraph = new InMemoryEntityGraph(dbContext, entityGraphLogger.Object);
         var mockLogger = new Mock<ILogger<SystemMetricsService>>();
 
         // Act
-        var service = new SystemMetricsService(mockEntityGraph.Object, dbContext, mockLogger.Object);
+        var service = new SystemMetricsService(entityGraph, dbContext, mockLogger.Object);
 
         // Assert
         Assert.IsNotNull(service);
-        
+
         // Cleanup
         dbContext.Dispose();
     }
