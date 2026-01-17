@@ -81,7 +81,7 @@ public class AuditServiceTests
             x => x.Log(
                 LogLevel.Information,
                 It.IsAny<EventId>(),
-                It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("Audit log created")),
+                It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("AUDIT LOG CREATED")),
                 It.IsAny<Exception>(),
                 It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
             Times.Once);
@@ -391,13 +391,13 @@ public class AuditServiceTests
     {
         // Arrange
         var retentionDays = 30;
-        
+
         var oldLog = new AuditLog { ChangeType = "CREATE", EntityType = "User", EntityId = 1, ChangedBy = "user1", ChangeDate = DateTime.UtcNow.AddDays(-40), ChangeDetails = "Old log" };
         var recentLog = new AuditLog { ChangeType = "UPDATE", EntityType = "User", EntityId = 2, ChangedBy = "user2", ChangeDate = DateTime.UtcNow.AddDays(-10), ChangeDetails = "Recent log" };
-        
+
         _dbContext.AuditLogs.AddRange(oldLog, recentLog);
         await _dbContext.SaveChangesAsync();
-        
+
         var initialCount = await _dbContext.AuditLogs.CountAsync();
         Assert.AreEqual(2, initialCount);
 
@@ -405,12 +405,16 @@ public class AuditServiceTests
         var result = await _auditService.PurgeOldAuditLogsAsync(retentionDays);
 
         // Assert
-        Assert.AreEqual(1, result);
+        Assert.AreEqual(1, result); // 1 old log was deleted
+
+        // After purge: the recent log remains + a new SYSTEM:PURGE audit log is created
         var remainingCount = await _dbContext.AuditLogs.CountAsync();
-        Assert.AreEqual(1, remainingCount);
-        
-        var remainingLog = await _dbContext.AuditLogs.FirstAsync();
-        Assert.AreEqual("UPDATE", remainingLog.ChangeType);
+        Assert.AreEqual(2, remainingCount); // Recent log + PURGE system event log
+
+        // Verify the original recent log still exists
+        var updateLog = await _dbContext.AuditLogs.FirstOrDefaultAsync(l => l.ChangeType == "UPDATE");
+        Assert.IsNotNull(updateLog);
+        Assert.AreEqual("UPDATE", updateLog.ChangeType);
     }
 
     #endregion
@@ -694,7 +698,7 @@ public class AuditServiceTests
     public async Task AuditService_GenerateGDPRReportAsync_GeneratesReport()
     {
         // Arrange
-        var userId = "user123";
+        var userId = "123"; // Must be a valid integer string since GenerateGDPRReportAsync calls int.Parse(userId)
         var startDate = DateTime.UtcNow.AddDays(-30);
         var endDate = DateTime.UtcNow;
 

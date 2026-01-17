@@ -88,8 +88,9 @@ public class AuditService : IAuditService
         await LogAsync($"SECURITY:{eventType}", "SecurityEvent", 0, userId ?? "SYSTEM",
             JsonSerializer.Serialize(securityEvent));
 
-        // Notify security team for critical events
-        if (severity == "Critical" || severity == "High")
+        // Notify security team for critical events, but avoid infinite recursion
+        // by not re-notifying for SECURITY_ALERT events (which are already notifications)
+        if ((severity == "Critical" || severity == "High") && eventType != "SECURITY_ALERT")
         {
             await NotifySecurityTeamAsync($"Security Event: {eventType}", severity,
                 new Dictionary<string, object>
