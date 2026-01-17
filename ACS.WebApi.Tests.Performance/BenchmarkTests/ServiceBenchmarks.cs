@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using ACS.Service.Data;
 using ACS.Service.Services;
 using ACS.Service.Domain;
+using ACS.Service.Infrastructure;
 using ACS.Service.Requests;
 using ACS.Service.Responses;
 using Microsoft.Extensions.Logging;
@@ -39,6 +40,9 @@ public class ServiceBenchmarks
 
         // Add logging
         services.AddLogging(builder => builder.AddConsole().SetMinimumLevel(LogLevel.Warning));
+
+        // Add infrastructure services required by services
+        services.AddScoped<InMemoryEntityGraph>();
 
         // Add services
         services.AddScoped<IUserService, UserService>();

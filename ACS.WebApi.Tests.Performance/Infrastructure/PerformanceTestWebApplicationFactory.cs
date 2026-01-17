@@ -1,15 +1,25 @@
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using ACS.Service.Data;
+using ACS.Infrastructure;
+using ACS.Infrastructure.Services;
+using ACS.WebApi.Security.Validation;
 using Microsoft.AspNetCore.Routing;
+using Grpc.Net.Client;
 
 namespace ACS.WebApi.Tests.Performance.Infrastructure;
 
 /// <summary>
-/// Custom WebApplicationFactory for performance testing with optimized configuration
+/// Custom WebApplicationFactory for performance testing with optimized configuration.
+/// Registers mock implementations of infrastructure services to allow the WebAPI
+/// to start without actual gRPC backends or tenant processes.
 /// </summary>
 public class PerformanceTestWebApplicationFactory : WebApplicationFactory<Program>
 {
@@ -26,6 +36,27 @@ public class PerformanceTestWebApplicationFactory : WebApplicationFactory<Progra
     {
         builder.ConfigureServices(services =>
         {
+            // Register mock infrastructure services BEFORE the app builds
+            // These are required by TenantProcessResolutionMiddleware
+
+            // Remove any existing registrations for these services
+            services.RemoveAll<TenantProcessDiscoveryService>();
+            services.RemoveAll<ITenantContextService>();
+            services.RemoveAll<IUserContextService>();
+
+            // Add mock implementations
+            // Use a factory to provide the mock that returns values without starting processes
+            services.AddSingleton<TenantProcessDiscoveryService>(provider =>
+                new MockTenantProcessDiscoveryService(
+                    provider.GetRequiredService<ILogger<TenantProcessDiscoveryService>>()));
+            services.AddScoped<ITenantContextService, MockTenantContextService>();
+            services.AddScoped<IUserContextService, MockUserContextService>();
+
+            // Register IInputValidator if not already registered
+            services.TryAddScoped<IInputValidator, InputValidator>();
+            services.TryAddSingleton<IOptions<InputValidationOptions>>(
+                Options.Create(new InputValidationOptions()));
+
             // Remove existing database context
             var dbContextDescriptor = services.SingleOrDefault(
                 d => d.ServiceType == typeof(DbContextOptions<ApplicationDbContext>));
@@ -86,7 +117,28 @@ public class PerformanceTestWebApplicationFactory : WebApplicationFactory<Progra
             }
         });
 
+        // Set testing environment - middleware will check for this
         builder.UseEnvironment("Testing");
+
+        // Set configuration to skip tenant process resolution in tests
+        builder.ConfigureAppConfiguration((context, config) =>
+        {
+            config.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Testing:SkipTenantProcessResolution"] = "true"
+            });
+        });
+    }
+
+    /// <summary>
+    /// Creates an HttpClient that automatically adds the X-Tenant-ID header
+    /// required by the TenantProcessResolutionMiddleware.
+    /// </summary>
+    public HttpClient CreateClientWithTenantHeader(string tenantId = "test-tenant")
+    {
+        var client = CreateClient();
+        client.DefaultRequestHeaders.Add("X-Tenant-ID", tenantId);
+        return client;
     }
 
     public async Task SeedTestDataAsync(int userCount = 1000, int groupCount = 100, int roleCount = 50)
@@ -157,4 +209,93 @@ public class PerformanceTestWebApplicationFactory : WebApplicationFactory<Progra
 
         Console.WriteLine($"Seeded {userCount} users, {groupCount} groups, and {roleCount} roles for performance testing");
     }
+}
+
+/// <summary>
+/// Mock TenantProcessDiscoveryService for testing.
+/// Returns fake tenant process info without starting actual processes.
+/// </summary>
+internal class MockTenantProcessDiscoveryService : TenantProcessDiscoveryService
+{
+    public MockTenantProcessDiscoveryService(ILogger<TenantProcessDiscoveryService> logger) : base(logger)
+    {
+    }
+
+    public new Task<TenantProcessInfo> GetOrStartTenantProcessAsync(string tenantId)
+    {
+        // Return a mock tenant process without actually starting anything
+        return Task.FromResult(new TenantProcessInfo
+        {
+            TenantId = tenantId,
+            ProcessId = 12345, // Fake process ID
+            GrpcEndpoint = "http://localhost:50000",
+            StartTime = DateTime.UtcNow,
+            IsHealthy = true,
+            LastHealthCheck = DateTime.UtcNow
+        });
+    }
+}
+
+/// <summary>
+/// Mock TenantContextService for testing.
+/// Provides tenant context without requiring actual infrastructure.
+/// </summary>
+internal class MockTenantContextService : ITenantContextService
+{
+    private string _tenantId = "test-tenant";
+    private TenantProcessInfo? _processInfo;
+
+    public string? GetTenantId() => _tenantId;
+
+    public string GetRequiredTenantId() => _tenantId;
+
+    public TenantProcessInfo? GetTenantProcessInfo() => _processInfo;
+
+    public GrpcChannel? GetGrpcChannel() => null;
+
+    public void SetTenantContext(string tenantId, TenantProcessInfo? processInfo = null, GrpcChannel? grpcChannel = null)
+    {
+        _tenantId = tenantId;
+        _processInfo = processInfo;
+    }
+
+    public void ClearTenantContext()
+    {
+        _tenantId = "test-tenant";
+        _processInfo = null;
+    }
+
+    public Task<bool> ValidateTenantAccessAsync(CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(true); // Always allow access in tests
+    }
+}
+
+/// <summary>
+/// Mock UserContextService for testing.
+/// Provides user context without requiring actual authentication.
+/// </summary>
+internal class MockUserContextService : IUserContextService
+{
+    public string GetCurrentUserId() => "test-user-id";
+    public string GetCurrentUserName() => "Test User";
+    public string GetTenantId() => "test-tenant";
+    public bool IsAuthenticated() => true;
+    public IEnumerable<string> GetUserRoles() => new[] { "Admin", "User" };
+    public bool HasRole(string role) => role == "Admin" || role == "User";
+    public string? GetUserEmail() => "test@example.com";
+    public string? GetClaim(string claimType) => claimType switch
+    {
+        "sub" => "test-user-id",
+        "name" => "Test User",
+        "email" => "test@example.com",
+        _ => null
+    };
+    public IEnumerable<(string Type, string Value)> GetAllClaims() => new[]
+    {
+        ("sub", "test-user-id"),
+        ("name", "Test User"),
+        ("email", "test@example.com"),
+        ("role", "Admin")
+    };
 }

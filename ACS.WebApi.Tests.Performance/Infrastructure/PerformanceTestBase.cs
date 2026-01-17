@@ -18,7 +18,9 @@ public abstract class PerformanceTestBase
     protected virtual async Task InitializeAsync(bool enableDetailedLogging = false, bool useInMemoryDatabase = true)
     {
         Factory = new PerformanceTestWebApplicationFactory(enableDetailedLogging, useInMemoryDatabase);
-        HttpClient = Factory.CreateClient();
+
+        // Use client with tenant header to satisfy middleware requirements
+        HttpClient = Factory.CreateClientWithTenantHeader("test-tenant");
 
         // Seed test data
         await Factory.SeedTestDataAsync();
@@ -84,11 +86,14 @@ public abstract class PerformanceTestBase
     {
         var request = new HttpRequestMessage(method, requestUri);
         var token = useAdminToken ? AdminToken : UserToken;
-        
+
         if (!string.IsNullOrEmpty(token))
         {
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
         }
+
+        // Add tenant header required by middleware
+        request.Headers.Add("X-Tenant-ID", "test-tenant");
 
         return request;
     }

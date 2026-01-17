@@ -11,25 +11,43 @@ public class TenantProcessResolutionMiddleware
     private readonly TenantProcessDiscoveryService _processDiscovery;
     private readonly ITenantContextService _tenantContextService;
     private readonly ILogger<TenantProcessResolutionMiddleware> _logger;
+    private readonly IConfiguration _configuration;
     private readonly ConcurrentDictionary<string, GrpcChannel> _grpcChannels = new();
 
     public TenantProcessResolutionMiddleware(
-        RequestDelegate next, 
+        RequestDelegate next,
         TenantProcessDiscoveryService processDiscovery,
         ITenantContextService tenantContextService,
+        IConfiguration configuration,
         ILogger<TenantProcessResolutionMiddleware> logger)
     {
         _next = next;
         _processDiscovery = processDiscovery;
         _tenantContextService = tenantContextService;
+        _configuration = configuration;
         _logger = logger;
     }
 
     public async Task InvokeAsync(HttpContext context)
     {
-        var tenantId = ExtractTenantId(context);
-        
-        if (string.IsNullOrEmpty(tenantId))
+        // Skip tenant process resolution in test environment if configured
+        var skipResolution = _configuration.GetValue<bool>("Testing:SkipTenantProcessResolution");
+        if (skipResolution)
+        {
+            _logger.LogDebug("Skipping tenant process resolution in test mode");
+            var tenantId = ExtractTenantId(context);
+            if (!string.IsNullOrEmpty(tenantId))
+            {
+                // Set a minimal tenant context for testing
+                _tenantContextService.SetTenantContext(tenantId);
+            }
+            await _next(context);
+            return;
+        }
+
+        var requestTenantId = ExtractTenantId(context);
+
+        if (string.IsNullOrEmpty(requestTenantId))
         {
             _logger.LogWarning("No tenant ID found in request {RequestPath}", context.Request.Path);
             context.Response.StatusCode = 400;
@@ -40,50 +58,50 @@ public class TenantProcessResolutionMiddleware
         try
         {
             // Set initial tenant context for downstream services
-            _tenantContextService.SetTenantContext(tenantId);
-            
+            _tenantContextService.SetTenantContext(requestTenantId);
+
             // Validate tenant access if user is authenticated
             if (context.User?.Identity?.IsAuthenticated == true)
             {
                 var hasAccess = await _tenantContextService.ValidateTenantAccessAsync();
                 if (!hasAccess)
                 {
-                    _logger.LogWarning("User denied access to tenant {TenantId} for request {RequestPath}", 
-                        tenantId, context.Request.Path);
+                    _logger.LogWarning("User denied access to tenant {TenantId} for request {RequestPath}",
+                        requestTenantId, context.Request.Path);
                     context.Response.StatusCode = 403;
                     await context.Response.WriteAsync("Access denied to tenant");
                     return;
                 }
             }
-            
+
             // Get or start the tenant process
-            var tenantProcess = await _processDiscovery.GetOrStartTenantProcessAsync(tenantId);
-            
+            var tenantProcess = await _processDiscovery.GetOrStartTenantProcessAsync(requestTenantId);
+
             // Convert to Infrastructure.Services.TenantProcessInfo
             var tenantProcessInfo = new TenantProcessInfo
             {
-                TenantId = tenantId,
+                TenantId = requestTenantId,
                 ProcessId = tenantProcess.ProcessId,
                 GrpcEndpoint = tenantProcess.GrpcEndpoint,
                 IsHealthy = tenantProcess.IsHealthy,
                 StartTime = tenantProcess.StartTime,
                 LastHealthCheck = tenantProcess.LastHealthCheck
             };
-            
+
             // Get or create gRPC channel for the tenant process
             var grpcChannel = GetOrCreateGrpcChannel(tenantProcess.GrpcEndpoint);
-            
+
             // Update tenant context with process information
-            _tenantContextService.SetTenantContext(tenantId, tenantProcessInfo, grpcChannel);
-            
-            _logger.LogDebug("Resolved tenant {TenantId} to process {ProcessId} at {Endpoint} for request {RequestPath}", 
-                tenantId, tenantProcess.ProcessId, tenantProcess.GrpcEndpoint, context.Request.Path);
-            
+            _tenantContextService.SetTenantContext(requestTenantId, tenantProcessInfo, grpcChannel);
+
+            _logger.LogDebug("Resolved tenant {TenantId} to process {ProcessId} at {Endpoint} for request {RequestPath}",
+                requestTenantId, tenantProcess.ProcessId, tenantProcess.GrpcEndpoint, context.Request.Path);
+
             await _next(context);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error resolving tenant process for {TenantId}", tenantId);
+            _logger.LogError(ex, "Error resolving tenant process for {TenantId}", requestTenantId);
             context.Response.StatusCode = 500;
             await context.Response.WriteAsync("Error resolving tenant process");
         }
